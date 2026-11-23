@@ -10,6 +10,15 @@ export type LlmLoadResult = {
   failures: string[];
 };
 
+export type GenerateOptions = {
+  /** Stop after this many tokens. */
+  maxTokens?: number;
+  /** Continue the previous conversation instead of starting fresh. */
+  keepHistory?: boolean;
+  /** System instruction for a fresh conversation. */
+  system?: string;
+};
+
 export type LlmStats = {
   ttftMs: number;
   prefillTokens: number;
@@ -30,7 +39,23 @@ export type DeviceInfo = {
 
 export type SidekickNativeModuleEvents = {
   onLlmText: (event: { requestId: string; text: string }) => void;
+  onWake: (event: Record<string, never>) => void;
+  onTranscript: (event: { kind: 'speech' | 'question'; text: string; at: number }) => void;
+  onQuestion: (event: { text: string }) => void;
+  onListenError: (event: { message: string }) => void;
 };
+
+/** One line of the native journal (see Journal in MicLoop.kt). */
+export type JournalEntry =
+  | {
+      kind: 'speech' | 'question';
+      at: number;
+      durationMs: number;
+      text: string;
+      owner: boolean;
+      voice: number[] | null;
+    }
+  | { kind: 'answer'; at: number; text: string; question: string };
 
 export type DownloadStatus = {
   status: 'pending' | 'running' | 'paused' | 'done' | 'failed';

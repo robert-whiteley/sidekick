@@ -3,11 +3,17 @@
   "version": "1.0.0",
   "main": "expo-router/entry",
   "dependencies": {
+    "@op-engineering/op-sqlite": "^19.0.5",
     "expo": "~58.0.26",
     "expo-build-properties": "~58.0.12",
+    "expo-camera": "~58.0.14",
     "expo-constants": "~58.0.16",
+    "expo-crypto": "~58.0.8",
     "expo-linking": "~58.0.17",
     "expo-router": "~58.0.32",
+    "expo-secure-store": "~58.0.3",
+    "expo-sharing": "~58.0.23",
+    "expo-speech": "~58.0.4",
     "expo-status-bar": "~58.0.5",
     "expo-updates": "~58.0.22",
     "react": "19.3.0",
@@ -43,5 +49,11 @@
   "jest": {
     "preset": "jest-expo"
   },
-  "license": "Apache-2.0"
+  "license": "Apache-2.0",
+  "op-sqlite": {
+    "sqlcipher": true,
+    "sqliteVec": true,
+    "fts5": true,
+    "performanceMode": true
+  }
 }

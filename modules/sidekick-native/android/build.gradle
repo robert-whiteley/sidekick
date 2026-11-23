@@ -21,4 +21,10 @@ android {
 dependencies {
   // Google LiteRT-LM (Apache-2.0): on-device Gemma with CPU / GPU / NPU backends.
   implementation "com.google.ai.edge.litertlm:litertlm-android:0.19.1"
+  // sherpa-onnx (Apache-2.0): VAD, wake word, speech-to-text, speaker embeddings. JitPack re-hosts
+  // the official release AAR (v2.0.3's JitPack build failed, so v2.0.2).
+  implementation "com.github.k2-fsa.sherpa-onnx:sherpa-onnx:v2.0.2"
+  // Apache Commons Compress (Apache-2.0): unpacks the speech model archives.
+  implementation "org.apache.commons:commons-compress:1.28.0"
+  implementation "androidx.core:core-ktx:1.13.1"
 }

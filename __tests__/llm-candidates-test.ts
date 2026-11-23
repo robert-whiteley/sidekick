@@ -1,4 +1,4 @@
-import { llmCandidates, tensorGeneration } from '@/engine/llm-candidates';
+import { llmCandidates, requiredModelFiles, tensorGeneration } from '@/engine/llm-candidates';
 
 describe('tensorGeneration', () => {
   test.each([
@@ -25,4 +25,11 @@ describe('llmCandidates', () => {
   test('older Tensor without a published build skips the Tensor path', () => {
     expect(llmCandidates('Google Tensor G4', '/m').map((c) => c.backend)).toEqual(['gpu', 'cpu']);
   });
+});
+
+test('required model files', () => {
+  expect(requiredModelFiles('Qualcomm SM7250').map((f) => f.name)).toEqual([
+    'gemma-4-E2B-it.litertlm',
+  ]);
+  expect(requiredModelFiles('Google Tensor G5')).toHaveLength(2);
 });

@@ -1,5 +1,6 @@
 package dev.sidekick.engine
 
+import android.content.Context
 import android.util.Log
 import com.google.ai.edge.litertlm.Backend
 import com.google.ai.edge.litertlm.Content
@@ -18,6 +19,8 @@ import java.io.File
 data class LlmCandidate(val modelPath: String, val backend: String)
 
 data class LlmLoadResult(val modelPath: String, val backend: String, val initMs: Long, val failures: List<String>)
+
+data class GenerateOptions(val maxTokens: Int? = null, val keepHistory: Boolean = false, val system: String? = null)
 
 data class LlmStats(
   val ttftMs: Double,
@@ -81,51 +84,60 @@ class LlmEngine(private val cacheDir: String, private val nativeLibDir: String) 
   }
 
   /**
-   * Streams the answer to [prompt] (optionally about [imagePath]) through [onText]. Each call starts
-   * a fresh conversation so measurements are independent; chat history comes later.
+   * Streams the answer to [prompt] (optionally about [imagePath]) through [onText]. With
+   * [keepHistory] the previous turns stay in context (chat); otherwise a fresh conversation starts.
    */
   fun generate(
     prompt: String,
     imagePath: String?,
+    opts: GenerateOptions,
     onText: (String) -> Unit,
     onFinish: (LlmStats) -> Unit,
     onFail: (Throwable) -> Unit,
   ) {
     val e = engine ?: return onFail(IllegalStateException("Model not loaded"))
-    conversation?.close()
-    val conv = e.createConversation(ConversationConfig())
-    conversation = conv
+    val conv =
+      conversation?.takeIf { opts.keepHistory }
+        ?: run {
+          conversation?.close()
+          val system = opts.system?.let { Contents.of(listOf(Content.Text(it))) }
+          e.createConversation(ConversationConfig(systemInstruction = system)).also { conversation = it }
+        }
     val parts = buildList {
       if (imagePath != null) add(Content.ImageFile(imagePath))
       add(Content.Text(prompt))
     }
     val start = System.nanoTime()
-    conv.sendMessageAsync(
-      Message.of(parts),
-      object : MessageCallback {
-        override fun onMessage(message: Message) {
-          val text = message.toString()
-          Log.d(TAG, "chunk: ${text.length} chars")
-          if (text.isNotEmpty()) onText(text)
-        }
+    try {
+      conv.sendMessageAsync(
+        Message.of(parts),
+        object : MessageCallback {
+          override fun onMessage(message: Message) {
+            val text = message.toString()
+            if (text.isNotEmpty()) onText(text)
+          }
 
-        override fun onDone() {
-          val b = conv.getBenchmarkInfo()
-          onFinish(
-            LlmStats(
-              ttftMs = b.timeToFirstTokenInSecond * 1000,
-              prefillTokens = b.lastPrefillTokenCount,
-              prefillTokensPerSec = b.lastPrefillTokensPerSecond,
-              decodeTokens = b.lastDecodeTokenCount,
-              decodeTokensPerSec = b.lastDecodeTokensPerSecond,
-              totalMs = (System.nanoTime() - start) / 1_000_000,
+          override fun onDone() {
+            val b = conv.getBenchmarkInfo()
+            onFinish(
+              LlmStats(
+                ttftMs = b.timeToFirstTokenInSecond * 1000,
+                prefillTokens = b.lastPrefillTokenCount,
+                prefillTokensPerSec = b.lastPrefillTokensPerSecond,
+                decodeTokens = b.lastDecodeTokenCount,
+                decodeTokensPerSec = b.lastDecodeTokensPerSecond,
+                totalMs = (System.nanoTime() - start) / 1_000_000,
+              )
             )
-          )
-        }
+          }
 
-        override fun onError(throwable: Throwable) = onFail(throwable)
-      },
-    )
+          override fun onError(throwable: Throwable) = onFail(throwable)
+        },
+        maxOutputToken = opts.maxTokens,
+      )
+    } catch (t: Throwable) {
+      onFail(t)
+    }
   }
 
   fun cancel() {
@@ -155,4 +167,36 @@ class LlmEngine(private val cacheDir: String, private val nativeLibDir: String) 
   companion object {
     private const val TAG = "SidekickLlm"
   }
+}
+
+/** Process-wide engines, shared by the JS module and the background listen service. */
+object Engines {
+  @Volatile private var llm: LlmEngine? = null
+
+  @Synchronized
+  fun llm(ctx: Context): LlmEngine =
+    llm ?: LlmEngine(ctx.cacheDir.absolutePath, ctx.applicationInfo.nativeLibraryDir).also { llm = it }
+}
+
+private const val LAST_CANDIDATES = "llm.lastCandidates"
+
+/** Remembers what loaded, so the background service can load the same way without JS. */
+fun LlmEngine.rememberLoad(ctx: Context, candidates: List<LlmCandidate>, used: LlmLoadResult) {
+  val ordered = candidates.sortedBy { if (it.backend == used.backend && it.modelPath == used.modelPath) 0 else 1 }
+  ctx
+    .getSharedPreferences("sidekick", Context.MODE_PRIVATE)
+    .edit()
+    .putString(LAST_CANDIDATES, ordered.joinToString("\n") { "${it.backend}|${it.modelPath}" })
+    .apply()
+}
+
+/** Loads the model the way the app last did; false if it never has. */
+fun LlmEngine.ensureLoadedFromLastRun(ctx: Context): Boolean {
+  if (loaded != null) return true
+  val saved =
+    ctx.getSharedPreferences("sidekick", Context.MODE_PRIVATE).getString(LAST_CANDIDATES, null)
+      ?: return false
+  val cands =
+    saved.lines().mapNotNull { l -> l.split("|", limit = 2).takeIf { it.size == 2 }?.let { LlmCandidate(it[1], it[0]) } }
+  return runCatching { load(cands) }.isSuccess
 }

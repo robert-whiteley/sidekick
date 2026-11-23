@@ -1,20 +1,29 @@
-import { Link } from 'expo-router';
-import { StyleSheet, Text, View } from 'react-native';
+import { useState } from 'react';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
-export default function HomeScreen() {
-  return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Sidekick</Text>
-      <Text>Your on-device assistant.</Text>
-      <Link href="/bench" style={styles.link}>
-        Engine benchmark
-      </Link>
-    </View>
-  );
+import SidekickNative from '../../modules/sidekick-native';
+import { isDownloaded } from '@/engine/downloads';
+import { allRequiredFiles } from '@/engine/llm-candidates';
+import { OBSOLETE_MODEL_PATHS } from '@/engine/models';
+import { modelsDir } from '@/engine/paths';
+import { AskScreen } from '@/features/ask/AskScreen';
+import { ModelSetup } from '@/features/ask/ModelSetup';
+
+function modelsReady() {
+  const ready = allRequiredFiles(SidekickNative.getDeviceInfo().soc).every(isDownloaded);
+  // Once the current models are in place, free the space used by ones earlier versions fetched.
+  if (ready) {
+    for (const p of OBSOLETE_MODEL_PATHS) SidekickNative.deleteFile(`${modelsDir()}/${p}`);
+  }
+  return ready;
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 8 },
-  title: { fontSize: 28, fontWeight: '600' },
-  link: { marginTop: 24, color: '#2563eb', fontSize: 16 },
-});
+export default function HomeScreen() {
+  const [ready, setReady] = useState(modelsReady);
+  if (ready) return <AskScreen />;
+  return (
+    <SafeAreaView style={{ flex: 1 }}>
+      <ModelSetup onReady={() => setReady(true)} />
+    </SafeAreaView>
+  );
+}

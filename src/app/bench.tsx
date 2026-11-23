@@ -2,8 +2,15 @@ import { useEffect, useRef, useState } from 'react';
 import { Button, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import SidekickNative, { type LlmBackend, type LlmStats } from '../../modules/sidekick-native';
-import { GEMMA_GENERIC, llmCandidates } from '@/engine/llm-candidates';
-import { formatProgress, MODEL_FILES, type ModelFile } from '@/engine/models';
+import { GEMMA_GENERIC } from '@/engine/llm-candidates';
+import { ensureLlm, resetBackendChoice, unloadLlm } from '@/engine/llm';
+import { dataDir, modelsDir as modelsDirFn } from '@/engine/paths';
+import { downloadFile } from '@/engine/downloads';
+import { MODEL_FILES, type ModelFile } from '@/engine/models';
+import { cosine } from '@/memory/voices';
+
+const MOONSHINE_WAVS = 'sherpa-onnx-moonshine-base-en-quantized-2026-02-27/test_wavs';
+const KWS_WAVS = 'sherpa-onnx-kws-zipformer-gigaspeech-3.3M-2024-01-01/test_wavs';
 
 const TEXT_PROMPT = 'In three sentences, explain why the sky is blue.';
 const PHOTO_PROMPT = 'What is in this photo? Answer in two sentences.';
@@ -11,7 +18,7 @@ const PHOTO_PROMPT = 'What is in this photo? Answer in two sentences.';
 /** Developer screen: loads Gemma on each backend and reports real speeds on this phone. */
 export default function BenchScreen() {
   const device = SidekickNative.getDeviceInfo();
-  const modelsDir = `${device.externalFilesDir ?? device.filesDir}/models`;
+  const modelsDir = modelsDirFn();
   const [log, setLog] = useState<string[]>([]);
   const [answer, setAnswer] = useState('');
   const [busy, setBusy] = useState(false);
@@ -47,36 +54,116 @@ export default function BenchScreen() {
   const download = (files: ModelFile[]) =>
     run('download', async () => {
       for (const f of files) {
-        const dest = `${modelsDir}/${f.name}`;
-        if (SidekickNative.fileExists(dest)) {
-          add(`${f.name}: already downloaded`);
-          continue;
-        }
-        const id = SidekickNative.downloadStart(f.url, dest, `Sidekick: ${f.name}`, false);
-        for (;;) {
-          await new Promise((r) => setTimeout(r, 1000));
-          const st = SidekickNative.downloadStatus(id);
-          setProgress(`${f.name}: ${st.status} ${formatProgress(st.bytes, st.total)}`);
-          if (st.status === 'failed')
-            throw new Error(`${f.name} download failed (reason ${st.reason})`);
-          if (st.status === 'done') break;
-        }
-        setProgress(`${f.name}: checking SHA-256…`);
-        if (!(await SidekickNative.downloadFinish(dest, f.sha256))) {
-          throw new Error(`${f.name} failed its SHA-256 check and was deleted`);
-        }
+        await downloadFile(f, (t) => setProgress(`${f.name}: ${t}`));
         setProgress('');
         add(`${f.name}: downloaded and verified`);
       }
     });
 
+  // Speech checks: transcribe the models' own sample recordings, then play one out of the speaker
+  // while holding the mic open (tests the real microphone path).
+  const speechTest = () =>
+    run('speech', async () => {
+      for (const dir of [MOONSHINE_WAVS, KWS_WAVS]) {
+        for (const n of [0, 1, 2]) {
+          const wav = `${modelsDir}/${dir}/${n}.wav`;
+          if (!SidekickNative.fileExists(wav)) continue;
+          const t0 = Date.now();
+          const r = await SidekickNative.debugTranscribe(wav);
+          add(`${dir.split('-')[2]} ${n}.wav (${Date.now() - t0} ms, wake ${r.wake}): ${r.text}`);
+        }
+      }
+    });
+
+  // Makes a "Hey Sidekick …" recording with the phone's voice, checks it offline, then (Play)
+  // sends it out of the speaker so the live listener hears it like a person.
+  const wakeWav = () => `${dataDir()}/wake-test.wav`;
+  const wakeTest = () =>
+    run('wake', async () => {
+      await SidekickNative.debugSay('Hey Sidekick, what is my locker code?', wakeWav());
+      const r = await SidekickNative.debugTranscribe(wakeWav());
+      add(`wake test (wake ${r.wake}): ${r.text}`);
+    });
+  const playWake = () =>
+    run('play', async () => {
+      await SidekickNative.debugPlay(wakeWav());
+      add('played wake phrase');
+    });
+
+  // Plays the wake phrase after 10 s, so there is time to leave the app (background answer test).
+  const playWakeLater = () => {
+    SidekickNative.debugPlay(wakeWav(), 10_000).then(
+      () => console.log('[bench] played wake phrase (delayed)'),
+      (e) => console.log(`[bench] delayed play failed: ${String(e)}`),
+    );
+    add('wake phrase plays in 10 s');
+  };
+
+  // A short conversation with different phone voices: the owner asks for consent, a second voice
+  // agrees and says something; a third voice never agreed, so consent mode must drop it.
+  const conversationTest = () =>
+    run('conversation', async () => {
+      const lines: [string, number | null][] = [
+        ['Is it okay if I record this conversation?', null],
+        ['Sure, that is fine.', 3],
+        ['My train to Leeds leaves at half past four.', 3],
+        ['The secret password for the shed is banana.', 7],
+      ];
+      for (let i = 0; i < lines.length; i++) {
+        const [text, voice] = lines[i];
+        const wav = `${dataDir()}/talk-${i}.wav`;
+        await SidekickNative.debugSay(text, wav, voice);
+        await SidekickNative.debugPlay(wav);
+        await new Promise((r) => setTimeout(r, 2500));
+      }
+      add('conversation played');
+    });
+
+  // How far apart the phone's voices are to the voiceprint model, on clean audio: same voice
+  // short vs long line, and long lines across voices.
+  const voiceTest = () =>
+    run('voices', async () => {
+      const names = await SidekickNative.debugVoices();
+      add(`${names.length} voices: ${names.slice(0, 10).join(', ')}`);
+      const picks = [null, 3, 7, 1];
+      const prints: { v: string; kind: string; p: number[] }[] = [];
+      for (const v of picks) {
+        for (const [kind, text] of [
+          ['short', 'Sure, that is fine.'],
+          ['long', 'My train to Leeds leaves at half past four tomorrow afternoon.'],
+        ]) {
+          const wav = `${dataDir()}/voice-${v}-${kind}.wav`;
+          await SidekickNative.debugSay(text, wav, v);
+          const p = await SidekickNative.debugVoiceprint(wav);
+          if (p) prints.push({ v: String(v), kind, p });
+        }
+      }
+      for (let i = 0; i < prints.length; i++) {
+        const row = prints.map((b) => cosine(prints[i].p, b.p).toFixed(2)).join(' ');
+        add(`${prints[i].v}/${prints[i].kind}: ${row}`);
+      }
+    });
+
+  const micTest = () =>
+    run('mic', async () => {
+      const wav = `${modelsDir}/${MOONSHINE_WAVS}/0.wav`;
+      SidekickNative.pttStart();
+      await SidekickNative.debugPlay(wav);
+      await new Promise((r) => setTimeout(r, 1500));
+      const r = await SidekickNative.pttStop();
+      add(`mic heard: ${r.text}`);
+    });
+
   const load = (backend: LlmBackend | 'auto') =>
     run('load', async () => {
-      const candidates =
-        backend === 'auto'
-          ? llmCandidates(device.soc, modelsDir)
-          : [{ modelPath: `${modelsDir}/${GEMMA_GENERIC}`, backend }];
-      const r = await SidekickNative.llmLoad(candidates);
+      await unloadLlm();
+      let r;
+      if (backend === 'auto') {
+        resetBackendChoice();
+        r = await ensureLlm(add);
+      } else {
+        r = await SidekickNative.llmLoad([{ modelPath: `${modelsDir}/${GEMMA_GENERIC}`, backend }]);
+      }
       add(
         `loaded ${r.backend} in ${r.initMs} ms${r.failures.length ? ` (skipped: ${r.failures.join('; ')})` : ''}`,
       );
@@ -119,18 +206,27 @@ export default function BenchScreen() {
       </View>
       {progress !== '' && <Text>{progress}</Text>}
       <View style={styles.row}>
-        <Button title="Load auto" disabled={busy} onPress={() => load('auto')} />
+        <Button title="Measure + pick fastest" disabled={busy} onPress={() => load('auto')} />
         <Button title="GPU" disabled={busy} onPress={() => load('gpu')} />
         <Button title="CPU" disabled={busy} onPress={() => load('cpu')} />
       </View>
       <View style={styles.row}>
         <Button title="Text test" disabled={busy} onPress={() => generate('text')} />
         <Button title="Photo test" disabled={busy} onPress={() => generate('photo')} />
-        <Button
-          title="Unload"
-          disabled={busy}
-          onPress={() => run('unload', () => SidekickNative.llmUnload())}
-        />
+        <Button title="Unload" disabled={busy} onPress={() => run('unload', unloadLlm)} />
+      </View>
+      <View style={styles.row}>
+        <Button title="Speech test" disabled={busy} onPress={speechTest} />
+        <Button title="Mic test" disabled={busy} onPress={micTest} />
+      </View>
+      <View style={styles.row}>
+        <Button title="Wake test" disabled={busy} onPress={wakeTest} />
+        <Button title="Play wake" disabled={busy} onPress={playWake} />
+        <Button title="Wake in 10 s" disabled={busy} onPress={playWakeLater} />
+      </View>
+      <View style={styles.row}>
+        <Button title="Conversation test" disabled={busy} onPress={conversationTest} />
+        <Button title="Voice test" disabled={busy} onPress={voiceTest} />
       </View>
       {busy && <Text>Working…</Text>}
       <Text style={styles.answer}>{answer}</Text>
