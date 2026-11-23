@@ -57,6 +57,10 @@ declare class SidekickNativeModule extends NativeModule<SidekickNativeModuleEven
   debugTranscribe(wavPath: string): Promise<{ text: string; wake: boolean }>;
   /** Developer check: speak text with the system voice into a WAV file. */
   debugSay(text: string, path: string, voice?: number | null): Promise<string>;
+  /** Developer check: voiceprint of a WAV file. */
+  debugVoiceprint(wavPath: string): Promise<number[] | null>;
+  /** Developer check: offline English system voices, in the order debugSay indexes them. */
+  debugVoices(): Promise<string[]>;
   /** Developer check: play a sound file through the speaker; resolves when finished. */
   debugPlay(path: string, delayMs?: number | null): Promise<boolean>;
   /** Normalised text embeddings (EmbeddingGemma 2), [dims] long each. */

@@ -6,7 +6,7 @@ import { getSettings } from '@/engine/settings';
 import { isAgreement, isConsentQuestion, CONSENT_WINDOW_MS, keepOtherSpeech } from './consent';
 import { EMBED_DIMS, getDb, vecParam } from './db';
 import { embedDocument, embedQuery, ftsQuery, fuseRankings, timeWindow } from './search-logic';
-import { addToCentroid, matchSpeaker, type Speaker } from './voices';
+import { addToCentroid, cosine, matchSpeaker, type Speaker } from './voices';
 
 export type Moment = {
   id: number;
@@ -47,6 +47,9 @@ async function assignSpeaker(voice: number[] | null, owner: boolean): Promise<Sp
   if (!voice) return null;
   const db = await getDb();
   const all = await speakers();
+  console.log(
+    `[voice] ${owner ? 'owner clip' : 'clip'} sims: ${all.map((x) => `${x.id}${x.isOwner ? '*' : ''}=${cosine(voice, x.centroid).toFixed(2)}`).join(' ')}`,
+  );
   let s = owner ? (all.find((x) => x.isOwner) ?? null) : matchSpeaker(voice, all);
   if (s) {
     const c = addToCentroid(s, voice);

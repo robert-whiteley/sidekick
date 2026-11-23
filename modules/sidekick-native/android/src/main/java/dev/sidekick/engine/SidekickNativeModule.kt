@@ -227,6 +227,28 @@ class SidekickNativeModule : Module() {
     }
 
     // Plays a sound file out of the speaker (to test the microphone path end to end).
+    // Voiceprint of a WAV file (to measure how well voices separate).
+    AsyncFunction("debugVoiceprint") { wavPath: String ->
+      val audio = Wav.read16kMono(java.io.File(wavPath))
+      Speech.engine(context, MicLoop.wakeKeywords).voiceprint(audio)?.toList()
+    }
+
+    // Names of the offline English voices debugSay picks from, in index order.
+    AsyncFunction("debugVoices") { promise: expo.modules.kotlin.Promise ->
+      var tts: android.speech.tts.TextToSpeech? = null
+      tts =
+        android.speech.tts.TextToSpeech(context) { _ ->
+          val t = tts!!
+          val names =
+            t.voices.orEmpty()
+              .filter { it.locale.language == "en" && !it.isNetworkConnectionRequired }
+              .sortedBy { it.name }
+              .map { it.name }
+          t.shutdown()
+          promise.resolve(names)
+        }
+    }
+
     // Plays a sound file out of the speaker after [delayMs]; resolves when it has finished.
     AsyncFunction("debugPlay") { path: String, delayMs: Int?, promise: expo.modules.kotlin.Promise ->
       android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({

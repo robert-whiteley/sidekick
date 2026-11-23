@@ -7,6 +7,7 @@ import { ensureLlm, resetBackendChoice, unloadLlm } from '@/engine/llm';
 import { dataDir, modelsDir as modelsDirFn } from '@/engine/paths';
 import { downloadFile } from '@/engine/downloads';
 import { MODEL_FILES, type ModelFile } from '@/engine/models';
+import { cosine } from '@/memory/voices';
 
 const MOONSHINE_WAVS = 'sherpa-onnx-moonshine-tiny-en-quantized-2026-02-27/test_wavs';
 const KWS_WAVS = 'sherpa-onnx-kws-zipformer-gigaspeech-3.3M-2024-01-01/test_wavs';
@@ -118,6 +119,31 @@ export default function BenchScreen() {
       add('conversation played');
     });
 
+  // How far apart the phone's voices are to the voiceprint model, on clean audio: same voice
+  // short vs long line, and long lines across voices.
+  const voiceTest = () =>
+    run('voices', async () => {
+      const names = await SidekickNative.debugVoices();
+      add(`${names.length} voices: ${names.slice(0, 10).join(', ')}`);
+      const picks = [null, 3, 7, 1];
+      const prints: { v: string; kind: string; p: number[] }[] = [];
+      for (const v of picks) {
+        for (const [kind, text] of [
+          ['short', 'Sure, that is fine.'],
+          ['long', 'My train to Leeds leaves at half past four tomorrow afternoon.'],
+        ]) {
+          const wav = `${dataDir()}/voice-${v}-${kind}.wav`;
+          await SidekickNative.debugSay(text, wav, v);
+          const p = await SidekickNative.debugVoiceprint(wav);
+          if (p) prints.push({ v: String(v), kind, p });
+        }
+      }
+      for (let i = 0; i < prints.length; i++) {
+        const row = prints.map((b) => cosine(prints[i].p, b.p).toFixed(2)).join(' ');
+        add(`${prints[i].v}/${prints[i].kind}: ${row}`);
+      }
+    });
+
   const micTest = () =>
     run('mic', async () => {
       const wav = `${modelsDir}/${MOONSHINE_WAVS}/0.wav`;
@@ -200,6 +226,7 @@ export default function BenchScreen() {
       </View>
       <View style={styles.row}>
         <Button title="Conversation test" disabled={busy} onPress={conversationTest} />
+        <Button title="Voice test" disabled={busy} onPress={voiceTest} />
       </View>
       {busy && <Text>Working…</Text>}
       <Text style={styles.answer}>{answer}</Text>
