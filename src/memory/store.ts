@@ -213,6 +213,7 @@ export async function searchMemory(question: string, k = 8, now = new Date()): P
     );
     lists.push(r.rows.map((x) => x.id as number));
   }
+  console.log(`[memory] search: vector ${lists[0]?.length ?? 0}, words ${lists[1]?.length ?? 0}`);
   let ids = fuseRankings(lists);
   if (win) {
     const r = await db.execute('SELECT id FROM moments WHERE at >= ? AND at < ? ORDER BY at DESC', [

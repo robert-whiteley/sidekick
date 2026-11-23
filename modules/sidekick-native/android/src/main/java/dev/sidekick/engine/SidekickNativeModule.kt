@@ -174,6 +174,31 @@ class SidekickNativeModule : Module() {
 
     AsyncFunction("embedUnload") { Embedder.unload() }
 
+    // --- Developer checks (speed-test screen) ---
+    // Runs a 16 kHz mono 16-bit WAV through speech-to-text and the wake word spotter.
+    AsyncFunction("debugTranscribe") { wavPath: String ->
+      val audio = Wav.read16kMono(java.io.File(wavPath))
+      val engine = Speech.engine(context, MicLoop.wakeKeywords)
+      val wake = engine.newWakeStream(MicLoop.wakeKeywords)
+      var heard = false
+      for (i in 0 until audio.size step SpeechEngine.VAD_WINDOW) {
+        if (engine.wakeHeard(wake, audio.copyOfRange(i, minOf(i + SpeechEngine.VAD_WINDOW, audio.size)))) heard = true
+      }
+      wake.release()
+      mapOf("text" to engine.transcribe(audio), "wake" to heard)
+    }
+
+    // Plays a sound file out of the speaker (to test the microphone path end to end).
+    AsyncFunction("debugPlay") { path: String ->
+      android.media.MediaPlayer().apply {
+        setDataSource(path)
+        setOnCompletionListener { it.release() }
+        prepare()
+        start()
+      }
+      true
+    }
+
     Function("journalDrain") { Journal.drain(context) }
 
     Function("llmIsLoaded") { llm.loaded != null }

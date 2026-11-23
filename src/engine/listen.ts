@@ -5,6 +5,7 @@ import SidekickNative from '../../modules/sidekick-native';
 import { isDownloaded } from './downloads';
 import { MODEL_FILES, SPEECH_FILES } from './models';
 import { modelsDir } from './paths';
+import { SYSTEM_PROMPT } from './prompts';
 import { getSettings } from './settings';
 import { DEFAULT_WAKE_PHRASE, parseSentencepiece, wakeKeywordLine } from './wake-word';
 
@@ -36,6 +37,8 @@ export function wakeLine(phrase: string): { line: string; phrase: string } {
 export function configureListening() {
   const s = getSettings();
   const { line, phrase } = wakeLine(s.wakePhrase);
+  // The background service answers with the same instructions as the app.
+  SidekickNative.kvSet('assistant.system', SYSTEM_PROMPT);
   SidekickNative.listenConfigure(
     line,
     phrase,

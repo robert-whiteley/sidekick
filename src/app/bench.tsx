@@ -8,6 +8,9 @@ import { modelsDir as modelsDirFn } from '@/engine/paths';
 import { downloadFile } from '@/engine/downloads';
 import { MODEL_FILES, type ModelFile } from '@/engine/models';
 
+const MOONSHINE_WAVS = 'sherpa-onnx-moonshine-tiny-en-quantized-2026-02-27/test_wavs';
+const KWS_WAVS = 'sherpa-onnx-kws-zipformer-gigaspeech-3.3M-2024-01-01-mobile/test_wavs';
+
 const TEXT_PROMPT = 'In three sentences, explain why the sky is blue.';
 const PHOTO_PROMPT = 'What is in this photo? Answer in two sentences.';
 
@@ -54,6 +57,31 @@ export default function BenchScreen() {
         setProgress('');
         add(`${f.name}: downloaded and verified`);
       }
+    });
+
+  // Speech checks: transcribe the models' own sample recordings, then play one out of the speaker
+  // while holding the mic open (tests the real microphone path).
+  const speechTest = () =>
+    run('speech', async () => {
+      for (const dir of [MOONSHINE_WAVS, KWS_WAVS]) {
+        for (const n of [0, 1, 2]) {
+          const wav = `${modelsDir}/${dir}/${n}.wav`;
+          if (!SidekickNative.fileExists(wav)) continue;
+          const t0 = Date.now();
+          const r = await SidekickNative.debugTranscribe(wav);
+          add(`${dir.split('-')[2]} ${n}.wav (${Date.now() - t0} ms, wake ${r.wake}): ${r.text}`);
+        }
+      }
+    });
+
+  const micTest = () =>
+    run('mic', async () => {
+      const wav = `${modelsDir}/${MOONSHINE_WAVS}/0.wav`;
+      SidekickNative.pttStart();
+      await SidekickNative.debugPlay(wav);
+      await new Promise((r) => setTimeout(r, 7000));
+      const r = await SidekickNative.pttStop();
+      add(`mic heard: ${r.text}`);
     });
 
   const load = (backend: LlmBackend | 'auto') =>
@@ -116,6 +144,10 @@ export default function BenchScreen() {
         <Button title="Text test" disabled={busy} onPress={() => generate('text')} />
         <Button title="Photo test" disabled={busy} onPress={() => generate('photo')} />
         <Button title="Unload" disabled={busy} onPress={() => run('unload', unloadLlm)} />
+      </View>
+      <View style={styles.row}>
+        <Button title="Speech test" disabled={busy} onPress={speechTest} />
+        <Button title="Mic test" disabled={busy} onPress={micTest} />
       </View>
       {busy && <Text>Working…</Text>}
       <Text style={styles.answer}>{answer}</Text>
