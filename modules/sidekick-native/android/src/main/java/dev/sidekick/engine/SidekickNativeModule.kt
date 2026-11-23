@@ -29,14 +29,14 @@ class SidekickNativeModule : Module() {
 
   private val downloads by lazy { Downloads(context) }
 
-  private val llm by lazy {
-    LlmEngine(context.cacheDir.absolutePath, context.applicationInfo.nativeLibraryDir)
-  }
+  private val llm get() = Engines.llm(context)
 
   override fun definition() = ModuleDefinition {
     Name("SidekickNative")
 
-    Events("onLlmText")
+    Events("onLlmText", "onWake", "onTranscript", "onQuestion", "onListenError")
+
+    OnCreate { MicLoop.listener = { name, body -> sendEvent(name, body) } }
 
     Function("getDeviceInfo") {
       val mem = ActivityManager.MemoryInfo()
@@ -52,7 +52,9 @@ class SidekickNativeModule : Module() {
     }
 
     AsyncFunction("llmLoad") { candidates: List<LlmCandidateRecord> ->
-      val r = llm.load(candidates.map { LlmCandidate(it.modelPath, it.backend) })
+      val cands = candidates.map { LlmCandidate(it.modelPath, it.backend) }
+      val r = llm.load(cands)
+      llm.rememberLoad(context, cands, r)
       mapOf("modelPath" to r.modelPath, "backend" to r.backend, "initMs" to r.initMs, "failures" to r.failures)
     }
 
@@ -103,10 +105,86 @@ class SidekickNativeModule : Module() {
 
     Function("fileExists") { path: String -> java.io.File(path).isFile }
 
+    Function("readBase64") { path: String ->
+      java.io.File(path).takeIf { it.isFile }?.readBytes()?.let { android.util.Base64.encodeToString(it, android.util.Base64.NO_WRAP) }
+    }
+
+    Function("copyFile") { src: String, dst: String ->
+      java.io.File(dst).parentFile?.mkdirs()
+      java.io.File(src).copyTo(java.io.File(dst), overwrite = true)
+      true
+    }
+
+    Function("deleteFile") { path: String -> java.io.File(path).delete() }
+
+    // Data export: memory.json plus the original photos, in one zip.
+    AsyncFunction("exportZip") { json: String, files: List<String>, destPath: String ->
+      java.io.File(destPath).parentFile?.mkdirs()
+      java.util.zip.ZipOutputStream(java.io.FileOutputStream(destPath)).use { zip ->
+        zip.putNextEntry(java.util.zip.ZipEntry("memory.json"))
+        zip.write(json.toByteArray())
+        zip.closeEntry()
+        for (f in files.map { java.io.File(it) }.filter { it.isFile }) {
+          zip.putNextEntry(java.util.zip.ZipEntry("photos/${f.name}"))
+          f.inputStream().use { it.copyTo(zip) }
+          zip.closeEntry()
+        }
+      }
+      destPath
+    }
+
+    Function("readText") { path: String -> java.io.File(path).takeIf { it.isFile }?.readText() }
+
+    // Speech model archives (.tar.bz2) are unpacked once after their SHA-256 check.
+    AsyncFunction("extractTarBz2") { archive: String, destDir: String -> Archives.extractTarBz2(archive, destDir) }
+
+    // --- Listening ---
+    Function("listenConfigure") { wakeKeywords: String, wakePhrase: String, recordAmbient: Boolean, jsAnswers: Boolean ->
+      MicLoop.wakeKeywords = wakeKeywords
+      MicLoop.wakePhrase = wakePhrase
+      MicLoop.recordAmbient = recordAmbient
+      MicLoop.jsAnswers = jsAnswers
+    }
+
+    Function("listenStart") { ListenService.startListening(context) }
+
+    Function("listenStop") { ListenService.stopListening(context) }
+
+    Function("listenActive") { ListenService.active }
+
+    Function("setMicPaused") { paused: Boolean -> MicLoop.setPaused(paused) }
+
+    Function("pttStart") { MicLoop.startPtt(context) }
+
+    // Transcribes what was said while the button was held, plus a voiceprint of the speaker.
+    AsyncFunction("pttStop") {
+      val audio = MicLoop.stopPtt()
+      if (audio.size < SAMPLE_RATE / 4) return@AsyncFunction mapOf("text" to "", "voice" to null)
+      val engine = Speech.engine(context, MicLoop.wakeKeywords)
+      mapOf("text" to engine.transcribe(audio), "voice" to engine.voiceprint(audio)?.map { it.toDouble() })
+    }
+
+    // Loads the speech models now (so the first push-to-talk isn't slow); throws if any are missing.
+    AsyncFunction("speechWarmUp") { Speech.engine(context, MicLoop.wakeKeywords); true }
+
+    // Memory search vectors. Runs off the JS thread; returns one vector per text.
+    AsyncFunction("embed") { modelPath: String, texts: List<String>, dims: Int ->
+      Embedder.embed(context, modelPath, texts, dims).map { v -> v.map { it.toDouble() } }
+    }
+
+    AsyncFunction("embedUnload") { Embedder.unload() }
+
+    Function("journalDrain") { Journal.drain(context) }
+
+    Function("llmIsLoaded") { llm.loaded != null }
+
     Function("llmCancel") { llm.cancel() }
 
     AsyncFunction("llmUnload") { llm.unload() }
 
-    OnDestroy { llm.unload() }
+    OnDestroy {
+      MicLoop.listener = null
+      if (!ListenService.active) llm.unload()
+    }
   }
 }

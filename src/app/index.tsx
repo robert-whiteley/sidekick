@@ -3,12 +3,12 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import SidekickNative from '../../modules/sidekick-native';
 import { isDownloaded } from '@/engine/downloads';
-import { requiredModelFiles } from '@/engine/llm-candidates';
+import { allRequiredFiles } from '@/engine/llm-candidates';
 import { AskScreen } from '@/features/ask/AskScreen';
 import { ModelSetup } from '@/features/ask/ModelSetup';
 
 function modelsReady() {
-  return requiredModelFiles(SidekickNative.getDeviceInfo().soc).every(isDownloaded);
+  return allRequiredFiles(SidekickNative.getDeviceInfo().soc).every(isDownloaded);
 }
 
 export default function HomeScreen() {

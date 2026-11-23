@@ -51,7 +51,10 @@
           "recordAudioAndroid": true,
           "barcodeScannerEnabled": false
         }
-      ]
+      ],
+      "expo-secure-store",
+      "./plugins/with-third-party-sqlite",
+      "expo-sharing"
     ],
     "scheme": "sidekick",
     "experiments": {

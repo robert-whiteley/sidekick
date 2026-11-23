@@ -7,6 +7,7 @@ export function modelPath(f: ModelFile): string {
 }
 
 export function isDownloaded(f: ModelFile): boolean {
+  if (f.unpackedCheck) return SidekickNative.fileExists(`${modelsDir()}/${f.unpackedCheck}`);
   return SidekickNative.fileExists(modelPath(f));
 }
 
@@ -19,8 +20,8 @@ export async function downloadFile(
   onProgress: (text: string, fraction: number) => void,
   wifiOnly = false,
 ): Promise<void> {
+  if (isDownloaded(f)) return;
   const dest = modelPath(f);
-  if (SidekickNative.fileExists(dest)) return;
   const id = SidekickNative.downloadStart(f.url, dest, `Sidekick: ${f.name}`, wifiOnly);
   for (;;) {
     await new Promise((r) => setTimeout(r, 1000));
@@ -33,5 +34,9 @@ export async function downloadFile(
   onProgress('Checking file…', 1);
   if (!(await SidekickNative.downloadFinish(dest, f.sha256))) {
     throw new Error(`${f.name} was corrupt and has been deleted; please try again`);
+  }
+  if (f.unpackedCheck) {
+    onProgress('Unpacking…', 1);
+    await SidekickNative.extractTarBz2(dest, modelsDir());
   }
 }

@@ -36,7 +36,8 @@ export function resetBackendChoice() {
  * (falling back to the others only if the saved one stops working, e.g. after a driver update).
  */
 export function ensureLlm(onStatus?: (s: string) => void): Promise<LlmLoadResult> {
-  if (loaded) return Promise.resolve(loaded);
+  if (loaded && SidekickNative.llmIsLoaded()) return Promise.resolve(loaded);
+  loaded = null;
   if (!loading) {
     loading = load(onStatus).then(
       (r) => {

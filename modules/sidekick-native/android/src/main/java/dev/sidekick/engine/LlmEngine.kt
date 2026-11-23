@@ -1,5 +1,6 @@
 package dev.sidekick.engine
 
+import android.content.Context
 import android.util.Log
 import com.google.ai.edge.litertlm.Backend
 import com.google.ai.edge.litertlm.Content
@@ -166,4 +167,36 @@ class LlmEngine(private val cacheDir: String, private val nativeLibDir: String) 
   companion object {
     private const val TAG = "SidekickLlm"
   }
+}
+
+/** Process-wide engines, shared by the JS module and the background listen service. */
+object Engines {
+  @Volatile private var llm: LlmEngine? = null
+
+  @Synchronized
+  fun llm(ctx: Context): LlmEngine =
+    llm ?: LlmEngine(ctx.cacheDir.absolutePath, ctx.applicationInfo.nativeLibraryDir).also { llm = it }
+}
+
+private const val LAST_CANDIDATES = "llm.lastCandidates"
+
+/** Remembers what loaded, so the background service can load the same way without JS. */
+fun LlmEngine.rememberLoad(ctx: Context, candidates: List<LlmCandidate>, used: LlmLoadResult) {
+  val ordered = candidates.sortedBy { if (it.backend == used.backend && it.modelPath == used.modelPath) 0 else 1 }
+  ctx
+    .getSharedPreferences("sidekick", Context.MODE_PRIVATE)
+    .edit()
+    .putString(LAST_CANDIDATES, ordered.joinToString("\n") { "${it.backend}|${it.modelPath}" })
+    .apply()
+}
+
+/** Loads the model the way the app last did; false if it never has. */
+fun LlmEngine.ensureLoadedFromLastRun(ctx: Context): Boolean {
+  if (loaded != null) return true
+  val saved =
+    ctx.getSharedPreferences("sidekick", Context.MODE_PRIVATE).getString(LAST_CANDIDATES, null)
+      ?: return false
+  val cands =
+    saved.lines().mapNotNull { l -> l.split("|", limit = 2).takeIf { it.size == 2 }?.let { LlmCandidate(it[1], it[0]) } }
+  return runCatching { load(cands) }.isSuccess
 }

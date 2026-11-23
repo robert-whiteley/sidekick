@@ -2,12 +2,14 @@ import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import SidekickNative from '../../../modules/sidekick-native';
-import { downloadFile } from '@/engine/downloads';
-import { requiredModelFiles } from '@/engine/llm-candidates';
+import { downloadFile, isDownloaded } from '@/engine/downloads';
+import { allRequiredFiles } from '@/engine/llm-candidates';
 
 /** First run: fetch the AI model once. After this Sidekick never needs the internet. */
 export function ModelSetup({ onReady }: { onReady: () => void }) {
-  const files = requiredModelFiles(SidekickNative.getDeviceInfo().soc);
+  const files = allRequiredFiles(SidekickNative.getDeviceInfo().soc).filter(
+    (f) => !isDownloaded(f),
+  );
   const gb = (files.reduce((n, f) => n + f.bytes, 0) / 1e9).toFixed(1);
   const [status, setStatus] = useState('');
   const [fraction, setFraction] = useState(0);
@@ -36,7 +38,7 @@ export function ModelSetup({ onReady }: { onReady: () => void }) {
     <View style={styles.card}>
       <Text style={styles.title}>One-time setup</Text>
       <Text style={styles.body}>
-        Sidekick needs its AI model ({gb} GB). It downloads once over the internet; after that
+        Sidekick needs its AI models ({gb} GB). It downloads once over the internet; after that
         everything runs on this phone and nothing you say or see leaves it. Wi-Fi recommended.
       </Text>
       {busy ? (

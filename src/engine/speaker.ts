@@ -1,5 +1,7 @@
 import * as Speech from 'expo-speech';
 
+import SidekickNative from '../../modules/sidekick-native';
+
 import { forSpeech, takeSentences } from './sentences';
 
 /** Speaks a streamed answer sentence by sentence, so the voice starts after the first sentence. */
@@ -27,11 +29,23 @@ export class StreamingSpeaker {
 
   stop() {
     this.enabled = false;
+    this.pending = 0;
     void Speech.stop();
+    SidekickNative.setMicPaused(false);
   }
 
+  private pending = 0;
+
+  // The microphone ignores audio while Sidekick talks, so it never transcribes itself.
   private say(text: string) {
     const t = forSpeech(text);
-    if (t) Speech.speak(t);
+    if (!t) return;
+    this.pending++;
+    SidekickNative.setMicPaused(true);
+    const done = () => {
+      this.pending = Math.max(0, this.pending - 1);
+      if (this.pending === 0) SidekickNative.setMicPaused(false);
+    };
+    Speech.speak(t, { onDone: done, onStopped: done, onError: done });
   }
 }
