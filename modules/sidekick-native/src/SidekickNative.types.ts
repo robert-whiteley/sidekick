@@ -10,6 +10,15 @@ export type LlmLoadResult = {
   failures: string[];
 };
 
+export type GenerateOptions = {
+  /** Stop after this many tokens. */
+  maxTokens?: number;
+  /** Continue the previous conversation instead of starting fresh. */
+  keepHistory?: boolean;
+  /** System instruction for a fresh conversation. */
+  system?: string;
+};
+
 export type LlmStats = {
   ttftMs: number;
   prefillTokens: number;

@@ -15,9 +15,17 @@ class LlmCandidateRecord : Record {
   @Field val backend: String = "cpu"
 }
 
+class GenerateOptionsRecord : Record {
+  @Field val maxTokens: Int? = null
+  @Field val keepHistory: Boolean = false
+  @Field val system: String? = null
+}
+
 class SidekickNativeModule : Module() {
   private val context: Context
     get() = appContext.reactContext ?: throw IllegalStateException("No React context")
+
+  private val prefs by lazy { context.getSharedPreferences("sidekick", Context.MODE_PRIVATE) }
 
   private val downloads by lazy { Downloads(context) }
 
@@ -48,10 +56,16 @@ class SidekickNativeModule : Module() {
       mapOf("modelPath" to r.modelPath, "backend" to r.backend, "initMs" to r.initMs, "failures" to r.failures)
     }
 
-    AsyncFunction("llmGenerate") { requestId: String, prompt: String, imagePath: String?, promise: Promise ->
+    AsyncFunction("llmGenerate") {
+      requestId: String,
+      prompt: String,
+      imagePath: String?,
+      opts: GenerateOptionsRecord?,
+      promise: Promise ->
       llm.generate(
         prompt,
         imagePath,
+        GenerateOptions(opts?.maxTokens, opts?.keepHistory ?: false, opts?.system),
         onText = { sendEvent("onLlmText", mapOf("requestId" to requestId, "text" to it)) },
         onFinish = { s ->
           promise.resolve(
@@ -67,6 +81,13 @@ class SidekickNativeModule : Module() {
         },
         onFail = { promise.reject(CodedException("ERR_LLM", it.message ?: "Generation failed", it)) },
       )
+    }
+
+    // Small key/value settings (backend choice, toggles). Not for secrets.
+    Function("kvGet") { key: String -> prefs.getString(key, null) }
+
+    Function("kvSet") { key: String, value: String? ->
+      prefs.edit().apply { if (value == null) remove(key) else putString(key, value) }.apply()
     }
 
     Function("downloadStart") { url: String, destPath: String, title: String, wifiOnly: Boolean ->

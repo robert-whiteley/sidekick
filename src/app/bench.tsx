@@ -2,8 +2,11 @@ import { useEffect, useRef, useState } from 'react';
 import { Button, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import SidekickNative, { type LlmBackend, type LlmStats } from '../../modules/sidekick-native';
-import { GEMMA_GENERIC, llmCandidates } from '@/engine/llm-candidates';
-import { formatProgress, MODEL_FILES, type ModelFile } from '@/engine/models';
+import { GEMMA_GENERIC } from '@/engine/llm-candidates';
+import { ensureLlm, resetBackendChoice, unloadLlm } from '@/engine/llm';
+import { modelsDir as modelsDirFn } from '@/engine/paths';
+import { downloadFile } from '@/engine/downloads';
+import { MODEL_FILES, type ModelFile } from '@/engine/models';
 
 const TEXT_PROMPT = 'In three sentences, explain why the sky is blue.';
 const PHOTO_PROMPT = 'What is in this photo? Answer in two sentences.';
@@ -11,7 +14,7 @@ const PHOTO_PROMPT = 'What is in this photo? Answer in two sentences.';
 /** Developer screen: loads Gemma on each backend and reports real speeds on this phone. */
 export default function BenchScreen() {
   const device = SidekickNative.getDeviceInfo();
-  const modelsDir = `${device.externalFilesDir ?? device.filesDir}/models`;
+  const modelsDir = modelsDirFn();
   const [log, setLog] = useState<string[]>([]);
   const [answer, setAnswer] = useState('');
   const [busy, setBusy] = useState(false);
@@ -47,24 +50,7 @@ export default function BenchScreen() {
   const download = (files: ModelFile[]) =>
     run('download', async () => {
       for (const f of files) {
-        const dest = `${modelsDir}/${f.name}`;
-        if (SidekickNative.fileExists(dest)) {
-          add(`${f.name}: already downloaded`);
-          continue;
-        }
-        const id = SidekickNative.downloadStart(f.url, dest, `Sidekick: ${f.name}`, false);
-        for (;;) {
-          await new Promise((r) => setTimeout(r, 1000));
-          const st = SidekickNative.downloadStatus(id);
-          setProgress(`${f.name}: ${st.status} ${formatProgress(st.bytes, st.total)}`);
-          if (st.status === 'failed')
-            throw new Error(`${f.name} download failed (reason ${st.reason})`);
-          if (st.status === 'done') break;
-        }
-        setProgress(`${f.name}: checking SHA-256…`);
-        if (!(await SidekickNative.downloadFinish(dest, f.sha256))) {
-          throw new Error(`${f.name} failed its SHA-256 check and was deleted`);
-        }
+        await downloadFile(f, (t) => setProgress(`${f.name}: ${t}`));
         setProgress('');
         add(`${f.name}: downloaded and verified`);
       }
@@ -72,11 +58,14 @@ export default function BenchScreen() {
 
   const load = (backend: LlmBackend | 'auto') =>
     run('load', async () => {
-      const candidates =
-        backend === 'auto'
-          ? llmCandidates(device.soc, modelsDir)
-          : [{ modelPath: `${modelsDir}/${GEMMA_GENERIC}`, backend }];
-      const r = await SidekickNative.llmLoad(candidates);
+      await unloadLlm();
+      let r;
+      if (backend === 'auto') {
+        resetBackendChoice();
+        r = await ensureLlm(add);
+      } else {
+        r = await SidekickNative.llmLoad([{ modelPath: `${modelsDir}/${GEMMA_GENERIC}`, backend }]);
+      }
       add(
         `loaded ${r.backend} in ${r.initMs} ms${r.failures.length ? ` (skipped: ${r.failures.join('; ')})` : ''}`,
       );
@@ -119,18 +108,14 @@ export default function BenchScreen() {
       </View>
       {progress !== '' && <Text>{progress}</Text>}
       <View style={styles.row}>
-        <Button title="Load auto" disabled={busy} onPress={() => load('auto')} />
+        <Button title="Measure + pick fastest" disabled={busy} onPress={() => load('auto')} />
         <Button title="GPU" disabled={busy} onPress={() => load('gpu')} />
         <Button title="CPU" disabled={busy} onPress={() => load('cpu')} />
       </View>
       <View style={styles.row}>
         <Button title="Text test" disabled={busy} onPress={() => generate('text')} />
         <Button title="Photo test" disabled={busy} onPress={() => generate('photo')} />
-        <Button
-          title="Unload"
-          disabled={busy}
-          onPress={() => run('unload', () => SidekickNative.llmUnload())}
-        />
+        <Button title="Unload" disabled={busy} onPress={() => run('unload', unloadLlm)} />
       </View>
       {busy && <Text>Working…</Text>}
       <Text style={styles.answer}>{answer}</Text>

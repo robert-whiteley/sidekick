@@ -19,6 +19,8 @@ data class LlmCandidate(val modelPath: String, val backend: String)
 
 data class LlmLoadResult(val modelPath: String, val backend: String, val initMs: Long, val failures: List<String>)
 
+data class GenerateOptions(val maxTokens: Int? = null, val keepHistory: Boolean = false, val system: String? = null)
+
 data class LlmStats(
   val ttftMs: Double,
   val prefillTokens: Int,
@@ -81,51 +83,60 @@ class LlmEngine(private val cacheDir: String, private val nativeLibDir: String) 
   }
 
   /**
-   * Streams the answer to [prompt] (optionally about [imagePath]) through [onText]. Each call starts
-   * a fresh conversation so measurements are independent; chat history comes later.
+   * Streams the answer to [prompt] (optionally about [imagePath]) through [onText]. With
+   * [keepHistory] the previous turns stay in context (chat); otherwise a fresh conversation starts.
    */
   fun generate(
     prompt: String,
     imagePath: String?,
+    opts: GenerateOptions,
     onText: (String) -> Unit,
     onFinish: (LlmStats) -> Unit,
     onFail: (Throwable) -> Unit,
   ) {
     val e = engine ?: return onFail(IllegalStateException("Model not loaded"))
-    conversation?.close()
-    val conv = e.createConversation(ConversationConfig())
-    conversation = conv
+    val conv =
+      conversation?.takeIf { opts.keepHistory }
+        ?: run {
+          conversation?.close()
+          val system = opts.system?.let { Contents.of(listOf(Content.Text(it))) }
+          e.createConversation(ConversationConfig(systemInstruction = system)).also { conversation = it }
+        }
     val parts = buildList {
       if (imagePath != null) add(Content.ImageFile(imagePath))
       add(Content.Text(prompt))
     }
     val start = System.nanoTime()
-    conv.sendMessageAsync(
-      Message.of(parts),
-      object : MessageCallback {
-        override fun onMessage(message: Message) {
-          val text = message.toString()
-          Log.d(TAG, "chunk: ${text.length} chars")
-          if (text.isNotEmpty()) onText(text)
-        }
+    try {
+      conv.sendMessageAsync(
+        Message.of(parts),
+        object : MessageCallback {
+          override fun onMessage(message: Message) {
+            val text = message.toString()
+            if (text.isNotEmpty()) onText(text)
+          }
 
-        override fun onDone() {
-          val b = conv.getBenchmarkInfo()
-          onFinish(
-            LlmStats(
-              ttftMs = b.timeToFirstTokenInSecond * 1000,
-              prefillTokens = b.lastPrefillTokenCount,
-              prefillTokensPerSec = b.lastPrefillTokensPerSecond,
-              decodeTokens = b.lastDecodeTokenCount,
-              decodeTokensPerSec = b.lastDecodeTokensPerSecond,
-              totalMs = (System.nanoTime() - start) / 1_000_000,
+          override fun onDone() {
+            val b = conv.getBenchmarkInfo()
+            onFinish(
+              LlmStats(
+                ttftMs = b.timeToFirstTokenInSecond * 1000,
+                prefillTokens = b.lastPrefillTokenCount,
+                prefillTokensPerSec = b.lastPrefillTokensPerSecond,
+                decodeTokens = b.lastDecodeTokenCount,
+                decodeTokensPerSec = b.lastDecodeTokensPerSecond,
+                totalMs = (System.nanoTime() - start) / 1_000_000,
+              )
             )
-          )
-        }
+          }
 
-        override fun onError(throwable: Throwable) = onFail(throwable)
-      },
-    )
+          override fun onError(throwable: Throwable) = onFail(throwable)
+        },
+        maxOutputToken = opts.maxTokens,
+      )
+    } catch (t: Throwable) {
+      onFail(t)
+    }
   }
 
   fun cancel() {

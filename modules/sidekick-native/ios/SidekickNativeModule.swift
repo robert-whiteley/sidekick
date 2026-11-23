@@ -22,8 +22,14 @@ public class SidekickNativeModule: Module {
       throw Exception(name: "ERR_LLM", description: "On-device model not implemented on iOS yet")
     }
 
-    AsyncFunction("llmGenerate") { (_: String, _: String, _: String?) in
+    AsyncFunction("llmGenerate") { (_: String, _: String, _: String?, _: [String: Any]?) in
       throw Exception(name: "ERR_LLM", description: "On-device model not implemented on iOS yet")
+    }
+
+    Function("kvGet") { (key: String) -> String? in UserDefaults.standard.string(forKey: "sidekick." + key) }
+
+    Function("kvSet") { (key: String, value: String?) in
+      UserDefaults.standard.set(value, forKey: "sidekick." + key)
     }
 
     Function("downloadStart") { (_: String, _: String, _: String, _: Bool) -> Double in

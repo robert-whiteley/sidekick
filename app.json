@@ -34,6 +34,15 @@
             "kotlinVersion": "2.3.21"
           }
         }
+      ],
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Sidekick uses the camera to answer questions about what you are looking at. Photos stay on this phone.",
+          "microphonePermission": "Sidekick listens for your questions. Audio stays on this phone.",
+          "recordAudioAndroid": true,
+          "barcodeScannerEnabled": false
+        }
       ]
     ],
     "scheme": "sidekick",

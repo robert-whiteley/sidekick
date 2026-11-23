@@ -3,6 +3,7 @@ import { NativeModule, requireNativeModule } from 'expo';
 import type {
   DeviceInfo,
   DownloadStatus,
+  GenerateOptions,
   LlmCandidate,
   LlmLoadResult,
   LlmStats,
@@ -12,7 +13,15 @@ import type {
 declare class SidekickNativeModule extends NativeModule<SidekickNativeModuleEvents> {
   getDeviceInfo(): DeviceInfo;
   llmLoad(candidates: LlmCandidate[]): Promise<LlmLoadResult>;
-  llmGenerate(requestId: string, prompt: string, imagePath: string | null): Promise<LlmStats>;
+  llmGenerate(
+    requestId: string,
+    prompt: string,
+    imagePath: string | null,
+    opts?: GenerateOptions,
+  ): Promise<LlmStats>;
+  /** Small persistent settings (not for secrets). */
+  kvGet(key: string): string | null;
+  kvSet(key: string, value: string | null): void;
   downloadStart(url: string, destPath: string, title: string, wifiOnly: boolean): number;
   downloadStatus(id: number): DownloadStatus;
   downloadCancel(id: number): void;
