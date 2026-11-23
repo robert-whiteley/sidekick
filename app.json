@@ -8,7 +8,14 @@
     "userInterfaceStyle": "automatic",
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "dev.sidekick.app"
+      "bundleIdentifier": "app.ondevice.sidekick",
+      "entitlements": {
+        "com.apple.developer.kernel.increased-memory-limit": true
+      },
+      "infoPlist": {
+        "UIBackgroundModes": ["audio"],
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -18,7 +25,7 @@
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
       "predictiveBackGestureEnabled": false,
-      "package": "dev.sidekick.app",
+      "package": "app.ondevice.sidekick",
       "allowBackup": false
     },
     "web": {
@@ -31,7 +38,8 @@
         "expo-build-properties",
         {
           "android": {
-            "kotlinVersion": "2.3.21"
+            "kotlinVersion": "2.3.21",
+            "extraMavenRepos": ["https://jitpack.io"]
           }
         }
       ],
