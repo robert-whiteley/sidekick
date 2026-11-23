@@ -2,16 +2,16 @@
 
 ## Layers
 
-| Layer              | Tech                                                                                                                               | Why                                                                                                      |
-| ------------------ | ---------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
-| UI + orchestration | Expo (React Native, new architecture, Expo Router, CNG + config plugins)                                                           | One UI codebase; iOS builds from Linux via EAS; maintained bindings for every engine below               |
-| Always-on audio    | Local Expo module `modules/sidekick-native` (Kotlin, then Swift) running a foreground service with sherpa-onnx; emits events to JS | Wake word, VAD and transcription must keep running with the screen off and without JS overhead           |
-| LLM / vision       | `llama.rn` (llama.cpp) with Gemma 4 E2B + mmproj                                                                                   | Best small open vision model with a commercial-safe licence; streaming, tool calls, speculative decoding |
-| Speech             | sherpa-onnx: Silero VAD, keyword spotter, Moonshine v2 STT, 3D-Speaker embeddings, offline diarization                             | One Apache-2.0 runtime for all speech tasks; open-vocabulary wake word with no training                  |
-| Voice out          | System TTS (`expo-speech`)                                                                                                         | Zero download, fast on old phones. Later: Kitten / Piper via sherpa-onnx                                 |
-| Memory             | `@op-engineering/op-sqlite` with SQLCipher + sqlite-vec; EmbeddingGemma 2 for text embeddings                                      | Encrypted, fast, vector search in the same DB. USearch (HNSW) later for millions of vectors              |
-| Camera             | `react-native-vision-camera` 5                                                                                                     | Frame access for capture and vision                                                                      |
-| Places             | GeoNames cities15000 (offline) + learned places (home/work from dwell time)                                                        | Place names with no network                                                                              |
+| Layer              | Tech                                                                                                                               | Why                                                                                               |
+| ------------------ | ---------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| UI + orchestration | Expo (React Native, new architecture, Expo Router, CNG + config plugins)                                                           | One UI codebase; iOS builds from Linux via EAS; maintained bindings for every engine below        |
+| Always-on audio    | Local Expo module `modules/sidekick-native` (Kotlin, then Swift) running a foreground service with sherpa-onnx; emits events to JS | Wake word, VAD and transcription must keep running with the screen off and without JS overhead    |
+| LLM / vision       | Google LiteRT-LM with Gemma 4 E2B (`.litertlm`) — ADR 4                                                                            | Uses each phone's fastest hardware (Tensor NPU, GPU, CPU fallback); Google-maintained; Apache-2.0 |
+| Speech             | sherpa-onnx: Silero VAD, keyword spotter, Moonshine v2 STT, 3D-Speaker embeddings, offline diarization                             | One Apache-2.0 runtime for all speech tasks; open-vocabulary wake word with no training           |
+| Voice out          | System TTS (`expo-speech`)                                                                                                         | Zero download, fast on old phones. Later: Kitten / Piper via sherpa-onnx                          |
+| Memory             | `@op-engineering/op-sqlite` with SQLCipher + sqlite-vec; EmbeddingGemma 2 for text embeddings                                      | Encrypted, fast, vector search in the same DB. USearch (HNSW) later for millions of vectors       |
+| Camera             | `react-native-vision-camera` 5                                                                                                     | Frame access for capture and vision                                                               |
+| Places             | GeoNames cities15000 (offline) + learned places (home/work from dwell time)                                                        | Place names with no network                                                                       |
 
 ## Memory model
 

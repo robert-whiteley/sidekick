@@ -1,0 +1,9 @@
+{
+  "platforms": ["android", "apple"],
+  "apple": {
+    "modules": ["SidekickNativeModule"]
+  },
+  "android": {
+    "modules": ["dev.sidekick.engine.SidekickNativeModule"]
+  }
+}

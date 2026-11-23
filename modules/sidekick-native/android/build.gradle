@@ -1,0 +1,24 @@
+plugins {
+  id 'com.android.library'
+  id 'expo-module-gradle-plugin'
+}
+
+group = 'dev.sidekick.engine'
+version = '0.1.0'
+
+android {
+  namespace "dev.sidekick.engine"
+  defaultConfig {
+    versionCode 1
+    versionName "0.1.0"
+    consumerProguardFiles "consumer-rules.pro"
+  }
+  lintOptions {
+    abortOnError false
+  }
+}
+
+dependencies {
+  // Google LiteRT-LM (Apache-2.0): on-device Gemma with CPU / GPU / NPU backends.
+  implementation "com.google.ai.edge.litertlm:litertlm-android:0.19.1"
+}

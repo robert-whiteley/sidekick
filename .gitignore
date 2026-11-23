@@ -47,3 +47,4 @@ google-service-account.json
 local.properties
 *.keystore
 coverage/
+/.models/
