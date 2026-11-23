@@ -55,6 +55,8 @@ declare class SidekickNativeModule extends NativeModule<SidekickNativeModuleEven
   journalDrain(): string[];
   /** Developer check: transcribe a 16 kHz WAV and test it for the wake word. */
   debugTranscribe(wavPath: string): Promise<{ text: string; wake: boolean }>;
+  /** Developer check: speak text with the system voice into a WAV file. */
+  debugSay(text: string, path: string): Promise<string>;
   /** Developer check: play a sound file through the speaker. */
   debugPlay(path: string): Promise<boolean>;
   /** Normalised text embeddings (EmbeddingGemma 2), [dims] long each. */

@@ -4,12 +4,12 @@ import { Button, ScrollView, StyleSheet, Text, View } from 'react-native';
 import SidekickNative, { type LlmBackend, type LlmStats } from '../../modules/sidekick-native';
 import { GEMMA_GENERIC } from '@/engine/llm-candidates';
 import { ensureLlm, resetBackendChoice, unloadLlm } from '@/engine/llm';
-import { modelsDir as modelsDirFn } from '@/engine/paths';
+import { dataDir, modelsDir as modelsDirFn } from '@/engine/paths';
 import { downloadFile } from '@/engine/downloads';
 import { MODEL_FILES, type ModelFile } from '@/engine/models';
 
 const MOONSHINE_WAVS = 'sherpa-onnx-moonshine-tiny-en-quantized-2026-02-27/test_wavs';
-const KWS_WAVS = 'sherpa-onnx-kws-zipformer-gigaspeech-3.3M-2024-01-01-mobile/test_wavs';
+const KWS_WAVS = 'sherpa-onnx-kws-zipformer-gigaspeech-3.3M-2024-01-01/test_wavs';
 
 const TEXT_PROMPT = 'In three sentences, explain why the sky is blue.';
 const PHOTO_PROMPT = 'What is in this photo? Answer in two sentences.';
@@ -72,6 +72,21 @@ export default function BenchScreen() {
           add(`${dir.split('-')[2]} ${n}.wav (${Date.now() - t0} ms, wake ${r.wake}): ${r.text}`);
         }
       }
+    });
+
+  // Makes a "Hey Sidekick …" recording with the phone's voice, checks it offline, then (Play)
+  // sends it out of the speaker so the live listener hears it like a person.
+  const wakeWav = () => `${dataDir()}/wake-test.wav`;
+  const wakeTest = () =>
+    run('wake', async () => {
+      await SidekickNative.debugSay('Hey Sidekick, what is my locker code?', wakeWav());
+      const r = await SidekickNative.debugTranscribe(wakeWav());
+      add(`wake test (wake ${r.wake}): ${r.text}`);
+    });
+  const playWake = () =>
+    run('play', async () => {
+      await SidekickNative.debugPlay(wakeWav());
+      add('played wake phrase');
     });
 
   const micTest = () =>
@@ -148,6 +163,10 @@ export default function BenchScreen() {
       <View style={styles.row}>
         <Button title="Speech test" disabled={busy} onPress={speechTest} />
         <Button title="Mic test" disabled={busy} onPress={micTest} />
+      </View>
+      <View style={styles.row}>
+        <Button title="Wake test" disabled={busy} onPress={wakeTest} />
+        <Button title="Play wake" disabled={busy} onPress={playWake} />
       </View>
       {busy && <Text>Working…</Text>}
       <Text style={styles.answer}>{answer}</Text>

@@ -188,6 +188,36 @@ class SidekickNativeModule : Module() {
       mapOf("text" to engine.transcribe(audio), "wake" to heard)
     }
 
+    // Speaks [text] with the system voice into a WAV file (to make test recordings on the phone).
+    AsyncFunction("debugSay") { text: String, path: String, promise: expo.modules.kotlin.Promise ->
+      var tts: android.speech.tts.TextToSpeech? = null
+      tts =
+        android.speech.tts.TextToSpeech(context) { status ->
+          val t = tts!!
+          if (status != android.speech.tts.TextToSpeech.SUCCESS) {
+            promise.reject("ERR_TTS", "Text-to-speech unavailable", null)
+            return@TextToSpeech
+          }
+          t.setOnUtteranceProgressListener(
+            object : android.speech.tts.UtteranceProgressListener() {
+              override fun onStart(id: String?) {}
+
+              override fun onDone(id: String?) {
+                t.shutdown()
+                promise.resolve(path)
+              }
+
+              @Deprecated("Deprecated in Java")
+              override fun onError(id: String?) {
+                t.shutdown()
+                promise.reject("ERR_TTS", "Synthesis failed", null)
+              }
+            }
+          )
+          t.synthesizeToFile(text, null, java.io.File(path), "debug")
+        }
+    }
+
     // Plays a sound file out of the speaker (to test the microphone path end to end).
     AsyncFunction("debugPlay") { path: String ->
       android.media.MediaPlayer().apply {

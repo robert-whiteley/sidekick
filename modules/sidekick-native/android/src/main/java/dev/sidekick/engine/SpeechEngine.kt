@@ -22,7 +22,7 @@ const val SAMPLE_RATE = 16000
 /** Where each speech model lives inside the models directory (matches src/engine/models.ts). */
 class SpeechPaths(modelsDir: String) {
   val vad = "$modelsDir/silero_vad.onnx"
-  private val kwsDir = "$modelsDir/sherpa-onnx-kws-zipformer-gigaspeech-3.3M-2024-01-01-mobile"
+  private val kwsDir = "$modelsDir/sherpa-onnx-kws-zipformer-gigaspeech-3.3M-2024-01-01"
   val kwsEncoder = "$kwsDir/encoder-epoch-12-avg-2-chunk-16-left-64.int8.onnx"
   val kwsDecoder = "$kwsDir/decoder-epoch-12-avg-2-chunk-16-left-64.onnx"
   val kwsJoiner = "$kwsDir/joiner-epoch-12-avg-2-chunk-16-left-64.int8.onnx"
