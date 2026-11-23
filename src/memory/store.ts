@@ -228,14 +228,19 @@ export async function searchMemory(question: string, k = 8, now = new Date()): P
     // Nothing matched by content inside the window: fall back to the window's most recent moments.
     ids = ranked.length ? ranked : [...inWin];
   }
-  ids = ids.slice(0, k);
+  ids = ids.slice(0, k * 3);
   if (!ids.length) return [];
   const r = await db.execute(
     `${MOMENT_SELECT} WHERE m.id IN (${ids.map(() => '?').join(',')})`,
     ids,
   );
   const byId = new Map(r.rows.map((x) => [x.id as number, toMoment(x)]));
-  return ids.map((id) => byId.get(id)).filter((m): m is Moment => !!m);
+  // Sidekick's own text answers are not evidence: recalling them makes an old "I don't know"
+  // (or an old mistake) repeat itself. Photo answers stay, since they describe what was seen.
+  return ids
+    .map((id) => byId.get(id))
+    .filter((m): m is Moment => !!m && m.kind !== 'answer')
+    .slice(0, k);
 }
 
 export async function recentMoments(limit = 100, offset = 0): Promise<Moment[]> {
