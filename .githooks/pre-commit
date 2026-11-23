@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+# Fast checks on staged files only. Tests run in CI.
+set -euo pipefail
+
+files=$(git diff --cached --name-only --diff-filter=ACMR)
+[ -z "$files" ] && exit 0
+
+if grep -nE '^(<<<<<<<|>>>>>>>)( |$)|^=======$' $(echo "$files" | grep -vE '\.(png|jpg|jpeg|gif|webp|ico)$' || true) 2>/dev/null; then
+  echo "✗ conflict markers found" >&2; exit 1
+fi
+
+code=$(echo "$files" | grep -E '\.(js|jsx|ts|tsx)$' || true)
+if [ -n "$code" ]; then
+  npx --no-install eslint --max-warnings=0 $code
+fi
+fmt=$(echo "$files" | grep -E '\.(js|jsx|ts|tsx|json|md|yml|yaml)$' || true)
+if [ -n "$fmt" ]; then
+  npx --no-install prettier --check --ignore-unknown $fmt
+fi
+
+if command -v gitleaks >/dev/null; then
+  gitleaks git --staged --no-banner --redact
+else
+  echo "⚠ gitleaks not installed — secret scan skipped (CI still runs it)" >&2
+fi

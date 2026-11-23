@@ -39,3 +39,11 @@ Docs: https://docs.expo.dev/eas/index.md
 - If `ios/` and `android/` directories do not exist, they are generated (Continuous Native Generation). Never create or edit them by hand — configure native behavior in `app.json` and config plugins.
 - Expo Go only includes its bundled native modules. After adding a library with native code, the app needs a development build: `npx expo run:ios|android` locally, or `eas build --profile development`.
 - Prefer recommended Expo modules over third-party libraries, and check your available skills before adding dependencies. Docs: https://docs.expo.dev/versions/latest/index.md
+
+## Project rules (Sidekick)
+
+- Read `docs/SPEC.md`, `ARCHITECTURE.md`, `ROADMAP.md` and `docs/decisions/` before larger changes.
+- Fully on-device: no network by default, no accounts, no telemetry.
+- Commercial-safe licences only; update `THIRD_PARTY_NOTICES.md` with each dependency/model.
+- Must work on Pixel 5 (CPU only, 8 GB) and iPhone 13 mini (4 GB): load big models on demand, never LLM + embedder together.
+- Tests for logic changes. Report what was verified on a device vs only built.

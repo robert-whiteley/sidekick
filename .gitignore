@@ -39,3 +39,11 @@ yarn-error.*
 # generated native folders
 /ios
 /android
+
+# never commit
+.env
+.env.*
+google-service-account.json
+local.properties
+*.keystore
+coverage/
