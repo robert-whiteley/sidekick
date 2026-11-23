@@ -21,7 +21,7 @@ const val SAMPLE_RATE = 16000
 
 /** Where each speech model lives inside the models directory (matches src/engine/models.ts). */
 class SpeechPaths(modelsDir: String) {
-  val vad = "$modelsDir/silero_vad_v5.onnx"
+  val vad = "$modelsDir/silero_vad_v6.2.3.onnx"
   private val kwsDir = "$modelsDir/sherpa-onnx-kws-zipformer-gigaspeech-3.3M-2024-01-01"
   val kwsEncoder = "$kwsDir/encoder-epoch-12-avg-2-chunk-16-left-64.int8.onnx"
   val kwsDecoder = "$kwsDir/decoder-epoch-12-avg-2-chunk-16-left-64.onnx"
@@ -44,7 +44,11 @@ class SpeechPaths(modelsDir: String) {
  * so it can stay resident next to the LLM.
  */
 class SpeechEngine(private val paths: SpeechPaths, keywordsFile: File) {
-  val asr =
+  /** Speech-to-text; swapped by [setAsrThreads], so only touch it under the engine's lock. */
+  private var asr = newAsr(asrThreads)
+  private var asrThreadsInUse = asrThreads
+
+  private fun newAsr(threads: Int) =
     OfflineRecognizer(
       null,
       OfflineRecognizerConfig(
@@ -59,10 +63,20 @@ class SpeechEngine(private val paths: SpeechPaths, keywordsFile: File) {
               ),
             modelType = "nemo_transducer",
             tokens = paths.asrTokens,
-            numThreads = 4,
+            numThreads = threads,
           ),
       ),
     )
+
+  /** Reloads speech-to-text with [threads] CPU threads (waits for a running transcription). */
+  @Synchronized
+  fun setAsrThreads(threads: Int) {
+    if (threads == asrThreadsInUse) return
+    val next = newAsr(threads)
+    asr.release()
+    asr = next
+    asrThreadsInUse = threads
+  }
 
   val speaker =
     SpeakerEmbeddingExtractor(null, SpeakerEmbeddingExtractorConfig(model = paths.speaker, numThreads = 1))
@@ -123,6 +137,7 @@ class SpeechEngine(private val paths: SpeechPaths, keywordsFile: File) {
     return heard
   }
 
+  @Synchronized
   fun transcribe(samples: FloatArray): String {
     val s = asr.createStream()
     try {
@@ -149,7 +164,16 @@ class SpeechEngine(private val paths: SpeechPaths, keywordsFile: File) {
   companion object {
     const val VAD_WINDOW = 512
 
+    /** Parakeet CPU threads; set from JS (speed bench) before or after loading. */
+    @Volatile var asrThreads = 4
+
     @Volatile private var instance: SpeechEngine? = null
+
+    /** Sets the Parakeet thread count (1-8); reloads it now if the models are already loaded. */
+    fun configureAsrThreads(threads: Int) {
+      asrThreads = threads.coerceIn(1, 8)
+      instance?.setAsrThreads(asrThreads)
+    }
 
     /** Loads the models on first use. [keywords] is written to the file sherpa requires. */
     @Synchronized
@@ -159,7 +183,10 @@ class SpeechEngine(private val paths: SpeechPaths, keywordsFile: File) {
       val missing = paths.missing()
       check(missing.isEmpty()) { "Speech models missing: ${missing.joinToString { File(it).name }}" }
       val kwFile = File(cacheDir, "keywords.txt").apply { writeText(keywords + "\n") }
-      return SpeechEngine(paths, kwFile).also { instance = it }
+      return SpeechEngine(paths, kwFile).also {
+        instance = it
+        it.setAsrThreads(asrThreads) // in case it changed while loading
+      }
     }
   }
 }

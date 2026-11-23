@@ -5,11 +5,15 @@ import { ScrollView, StyleSheet } from 'react-native';
 import { AutoPauseSection } from '@/features/settings/AutoPauseSection';
 import { ChipSection } from '@/features/settings/ChipSection';
 import { DataSection } from '@/features/settings/DataSection';
+import { EntryPointsSection } from '@/features/settings/EntryPointsSection';
 import { type Fact, FactsSection } from '@/features/settings/FactsSection';
+import { FollowupsSection } from '@/features/settings/FollowupsSection';
 import { ListeningSection } from '@/features/settings/ListeningSection';
 import { MemorySection } from '@/features/settings/MemorySection';
+import { OnlineSection } from '@/features/settings/OnlineSection';
 import { PeopleSection, type Person } from '@/features/settings/PeopleSection';
 import { RetentionSection } from '@/features/settings/RetentionSection';
+import { SourcesSection } from '@/features/settings/SourcesSection';
 import { ACCENT } from '@/features/settings/ui';
 import { listSpeakers, type Moment, recentMoments, savedFacts } from '@/memory/store';
 
@@ -46,10 +50,14 @@ export default function SettingsScreen() {
   return (
     <ScrollView contentContainerStyle={styles.container}>
       <ListeningSection />
+      <EntryPointsSection />
       <AutoPauseSection />
       <RetentionSection onChanged={changed} />
       <PeopleSection people={people} onChanged={changed} />
       <FactsSection facts={facts} onChanged={changed} />
+      <FollowupsSection />
+      <SourcesSection onChanged={changed} />
+      <OnlineSection />
       <MemorySection
         moments={moments}
         hasMore={hasMore}

@@ -1,0 +1,25 @@
+{
+  "batchcomplete": true,
+  "continue": { "gsroffset": 1, "continue": "gsroffset||" },
+  "query": {
+    "pages": [
+      {
+        "pageid": 24899,
+        "ns": 0,
+        "title": "President of France",
+        "index": 1,
+        "extract": "The president of France (French: Président de la France), officially the president of the French Republic (French: Président de la République française) or president of the Republic (Président de la République), is the executive head of state of France, and the commander-in-chief of the French Armed Forces. As the presidency is the supreme magistracy of the country, the position is the highest office in France. The powers, functions and duties of prior presidential offices, in addition to their relation with the prime minister and government of France, have over time differed with the various constitutional documents since the Second Republic.",
+        "contentmodel": "wikitext",
+        "pagelanguage": "en",
+        "pagelanguagehtmlcode": "en",
+        "pagelanguagedir": "ltr",
+        "touched": "2026-11-22T23:49:20Z",
+        "lastrevid": 1386434052,
+        "length": 39112,
+        "fullurl": "https://en.wikipedia.org/wiki/President_of_France",
+        "editurl": "https://en.wikipedia.org/w/index.php?title=President_of_France&action=edit",
+        "canonicalurl": "https://en.wikipedia.org/wiki/President_of_France"
+      }
+    ]
+  }
+}

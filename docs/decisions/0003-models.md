@@ -15,7 +15,7 @@ All models must allow commercial use. Downloads are verified against pinned SHA-
 | Wake word          | sherpa-onnx keyword spotter (open vocabulary)                   | Apache-2.0 | small   |
 | Speaker embeddings | 3D-Speaker CAM++ / ERes2Net                                     | Apache-2.0 | small   |
 
-Image embeddings (later): LiteRT-LM `EmbeddingEngine` or onnx-community/embeddinggemma-2-ONNX via onnxruntime-react-native or LiteRT.
+Image embeddings: LiteRT-LM `EmbeddingEngine` with `litert-community/embeddinggemma-2-text-vision-440m-litert-lm` (Apache-2.0, 388 MB), which also replaces the text-only embedder (see ADR 5).
 
 ## Rejected (licence)
 

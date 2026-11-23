@@ -6,6 +6,13 @@ import type { ConsentChoice } from '@/memory/consent-region';
 /** User settings, stored on the phone. Every feature can be switched off. */
 export type Settings = {
   wakePhrase: string;
+  /** Show the conversation live on the Ask screen while listening (display only). */
+  showConversation: boolean;
+  /**
+   * With other people: nothing around you is transcribed or kept; only push-to-talk and the wake
+   * word are taken (see listen-mode.ts).
+   */
+  instructionsOnly: boolean;
   /** Keep transcripts of conversations around you while listening (not just questions). */
   recordConversations: boolean;
   /**
@@ -24,10 +31,33 @@ export type Settings = {
   quietEnd: number;
   /** Places where listening auto-pauses. */
   pausePlaces: PausePlace[];
+  /** Data sources (all off until the user turns them on; see features/settings/SourcesSection). */
+  sourceNotes: boolean;
+  sourceFolders: boolean;
+  /** Folders the user picked (Storage Access Framework content:// URIs). */
+  folderUris: string[];
+  sourceContacts: boolean;
+  sourceCalendar: boolean;
+  /** Android only: keep the text of notifications from other apps. */
+  sourceNotifications: boolean;
+  /** Propose to-dos, events and reminders from what was said (each waits for approval). */
+  suggestFollowups: boolean;
+  /** A morning notification summarising yesterday's open and today's follow-ups. */
+  followupDigest: boolean;
+  /** Hour (0-23) the digest arrives. */
+  digestHour: number;
+  /** Online lookup (Wikipedia, DuckDuckGo): off by default; sends only the question text. */
+  webLookup: boolean;
+  /** Optional user-chosen SearXNG instance (https, JSON format enabled); empty = not used. */
+  searxngUrl: string;
+  /** User-added RSS/Atom feeds (https) read for news questions; none by default. */
+  newsFeeds: string[];
 };
 
 export const DEFAULTS: Settings = {
   wakePhrase: DEFAULT_WAKE_PHRASE,
+  showConversation: true,
+  instructionsOnly: false,
   recordConversations: true,
   consent: 'auto',
   speakAnswers: true,
@@ -37,6 +67,18 @@ export const DEFAULTS: Settings = {
   quietStart: 22 * 60,
   quietEnd: 7 * 60,
   pausePlaces: [],
+  sourceNotes: false,
+  sourceFolders: false,
+  folderUris: [],
+  sourceContacts: false,
+  sourceCalendar: false,
+  sourceNotifications: false,
+  suggestFollowups: true,
+  followupDigest: false,
+  digestHour: 8,
+  webLookup: false,
+  searxngUrl: '',
+  newsFeeds: [],
 };
 
 const KEY = 'settings.v1';

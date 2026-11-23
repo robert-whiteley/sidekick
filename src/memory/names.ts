@@ -4,7 +4,11 @@
  * Pure functions; tested.
  */
 
-export type NameCue = { name: string; who: 'speaker' | 'addressee' };
+/**
+ * strong: a clear self-introduction ("my name is Sam", "hi, I'm Sam"), applied to the voice
+ * automatically (marked auto, with undo); weak cues only become an "Is this Sam?" suggestion.
+ */
+export type NameCue = { name: string; who: 'speaker' | 'addressee'; strong: boolean };
 
 /** Capitalised words that follow these patterns but are not names. */
 const NOT_NAMES = new Set(
@@ -25,13 +29,15 @@ const NOT_NAMES = new Set(
 
 const NAME = "([A-Za-z][a-z'-]{1,20})";
 
-const SELF = [
-  new RegExp(`\\bmy name(?:'s| is) ${NAME}\\b`, 'i'),
+/** Self-introductions; the flag says whether the cue is strong enough to apply on its own. */
+const SELF: [RegExp, boolean][] = [
+  [new RegExp(`\\bmy name(?:'s| is) ${NAME}\\b`, 'i'), true],
   // "I'm tired." is not a name: only with a greeting before or "nice to meet you" after.
-  new RegExp(`\\b(?:hi|hello|hey)[,\\s]+(?:i'm|i am) ${NAME}\\b`, 'i'),
-  new RegExp(`\\b(?:i'm|i am) ${NAME}[,.!\\s]+(?:nice|pleased|good) to meet`, 'i'),
-  new RegExp(`\\b(?:this is|it's) ${NAME}\\s*(?:speaking|here)\\b`, 'i'),
-  new RegExp(`\\bcall me ${NAME}\\b`, 'i'),
+  [new RegExp(`\\b(?:hi|hello|hey)[,\\s]+(?:i'm|i am) ${NAME}\\b`, 'i'), true],
+  [new RegExp(`\\b(?:i'm|i am) ${NAME}[,.!\\s]+(?:nice|pleased|good) to meet`, 'i'), true],
+  // "It's Sam here" can be passing on a message; "call me Sam" can be a nickname: suggest only.
+  [new RegExp(`\\b(?:this is|it's) ${NAME}\\s*(?:speaking|here)\\b`, 'i'), false],
+  [new RegExp(`\\bcall me ${NAME}\\b`, 'i'), false],
 ];
 
 const ADDRESS = [
@@ -46,6 +52,11 @@ const ADDRESS = [
   new RegExp(`\\b(?:what do you think|what about you|right|okay|ok)[,\\s]+${NAME}\\s*[?.!]`, 'i'),
 ];
 
+/** A heard word as a name ("sam" → "Sam"), or null if it is a common word, not a name. */
+export function asName(word: string): string | null {
+  return clean(word);
+}
+
 function clean(word: string): string | null {
   const w = word.toLowerCase();
   if (NOT_NAMES.has(w) || w.length < 2) return null;
@@ -56,15 +67,17 @@ function clean(word: string): string | null {
 export function findNameCues(text: string): NameCue[] {
   const out: NameCue[] = [];
   const t = text.trim();
-  for (const re of SELF) {
+  for (const [re, strong] of SELF) {
     const m = t.match(re);
     const n = m && clean(m[1]);
-    if (n && !out.some((c) => c.name === n)) out.push({ name: n, who: 'speaker' });
+    const seen = out.find((c) => c.name === n);
+    if (seen) seen.strong ||= strong;
+    else if (n) out.push({ name: n, who: 'speaker', strong });
   }
   for (const re of ADDRESS) {
     const m = t.match(re);
     const n = m && clean(m[1]);
-    if (n && !out.some((c) => c.name === n)) out.push({ name: n, who: 'addressee' });
+    if (n && !out.some((c) => c.name === n)) out.push({ name: n, who: 'addressee', strong: false });
   }
   return out;
 }
@@ -89,4 +102,38 @@ export function addresseeOf(line: Utterance, nearby: Utterance[]): number | null
   }
   // Two or more other voices around: "thanks, Sam" could be either; don't guess.
   return ids.size === 1 && best ? best.id : null;
+}
+
+// --- Contacts (when the user turns them on) ---
+
+/**
+ * A heard first name ("Sam") made specific with the phone's contacts: the full name if exactly
+ * one contact has that first name, else the name as heard.
+ */
+export function fullNameFromContacts(heard: string, contactNames: string[]): string {
+  const h = heard.toLowerCase();
+  const matches = new Set(
+    contactNames.filter((c) => c.trim().split(/\s+/)[0]?.toLowerCase() === h).map((c) => c.trim()),
+  );
+  return matches.size === 1 ? [...matches][0] : heard;
+}
+
+/** Contact names starting with what's been typed (any word), for naming a voice. */
+export function contactNameMatches(typed: string, contactNames: string[], limit = 4): string[] {
+  const t = typed.trim().toLowerCase();
+  if (t.length < 2) return [];
+  const out: string[] = [];
+  for (const c of contactNames) {
+    const name = c.trim();
+    if (name.toLowerCase() === t) continue;
+    if (
+      name
+        .toLowerCase()
+        .split(/\s+/)
+        .some((w, i, ws) => ws.slice(i).join(' ').startsWith(t))
+    )
+      if (!out.includes(name)) out.push(name);
+    if (out.length >= limit) break;
+  }
+  return out;
 }

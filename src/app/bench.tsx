@@ -1,12 +1,18 @@
 import { useEffect, useRef, useState } from 'react';
 import { Button, ScrollView, StyleSheet, Text, View } from 'react-native';
 
-import SidekickNative, { type LlmBackend, type LlmStats } from '../../modules/sidekick-native';
+import SidekickNative, {
+  type LlmBackend,
+  type LlmStats,
+  type LlmTuning,
+} from '../../modules/sidekick-native';
 import { GEMMA_GENERIC } from '@/engine/llm-candidates';
-import { ensureLlm, resetBackendChoice, unloadLlm } from '@/engine/llm';
+import { ensureLlm, resetBackendChoice, setLlmTuning, unloadLlm } from '@/engine/llm';
 import { dataDir, modelsDir as modelsDirFn } from '@/engine/paths';
-import { downloadFile } from '@/engine/downloads';
-import { MODEL_FILES, type ModelFile } from '@/engine/models';
+import { downloadFile, modelPath } from '@/engine/downloads';
+import { EMBEDDER_FILE, MODEL_FILES, type ModelFile } from '@/engine/models';
+import { callIfExists, speedLine, wavSeconds, type SpeedResult } from '@/engine/bench-logic';
+import { EMBED_DIMS } from '@/memory/db';
 import { cosine } from '@/memory/voices';
 
 const MOONSHINE_WAVS = 'sherpa-onnx-nemo-parakeet-tdt-0.6b-v2-int8/test_wavs';
@@ -14,6 +20,47 @@ const KWS_WAVS = 'sherpa-onnx-kws-zipformer-gigaspeech-3.3M-2024-01-01/test_wavs
 
 const TEXT_PROMPT = 'In three sentences, explain why the sky is blue.';
 const PHOTO_PROMPT = 'What is in this photo? Answer in two sentences.';
+
+// Native setters other code may add; the speed run uses whichever exists at run time.
+// Chat-model settings the speed run compares (library defaults first).
+const LLM_TUNINGS: [string, LlmTuning][] = [
+  ['default', {}],
+  ['t2', { threads: 2 }],
+  ['t4', { threads: 4 }],
+  ['t6', { threads: 6 }],
+  ['vis140', { visualTokenBudget: 140 }],
+  ['vis70', { visualTokenBudget: 70 }],
+  ['spec', { speculative: 'adaptive' }],
+];
+const STT_THREAD_SETTERS = ['speechSetAsrThreads'];
+
+const hasAny = (names: string[]) =>
+  names.some(
+    (n) => typeof (SidekickNative as unknown as Record<string, unknown>)[n] === 'function',
+  );
+
+const EMBED_SAMPLES = [
+  'My locker code at the gym is 4471.',
+  'Anna said the train to Leeds leaves at half past four.',
+  'The spare house key is under the blue flower pot.',
+  'Dentist appointment on Thursday at 10 in the morning.',
+  'Tom prefers his coffee black with no sugar.',
+  'The Wi-Fi password at the cottage is written on the fridge.',
+  'We parked on level 3, near the lifts, bay 42.',
+  'Mum is allergic to penicillin.',
+  'The plumber is coming next Tuesday between 8 and 12.',
+  'I lent my ladder to the neighbour at number 12.',
+  'The meeting with Priya moved to Friday afternoon.',
+  'The car needs its MOT before the end of March.',
+  'Sam recommended the Thai place on Market Street.',
+  'Bin day is Wednesday; recycling every other week.',
+  'My passport expires in June next year.',
+  'The boiler reset button is on the left underneath.',
+  'Grandma’s birthday is the 14th of August.',
+  'The kids’ school finishes at 3:15 on Fridays.',
+  'I put the warranty for the washing machine in the blue folder.',
+  'Remember to water the tomatoes every second day.',
+];
 
 /** Developer screen: loads Gemma on each backend and reports real speeds on this phone. */
 export default function BenchScreen() {
@@ -154,6 +201,143 @@ export default function BenchScreen() {
       add(`mic heard: ${r.text}`);
     });
 
+  // One back-to-back run of everything that matters for speed, one `[speed] {json}` line each.
+  // The chat model and the embedder are never loaded at the same time.
+  const speedRun = () =>
+    run('speed', async () => {
+      const emit = (r: SpeedResult) => {
+        const line = speedLine(r);
+        console.log(line);
+        setLog((l) => [...l, line]);
+      };
+      const fail = (test: string, variant: string, e: unknown) =>
+        emit({ test, variant, ms: 0, ok: false, text: e instanceof Error ? e.message : String(e) });
+      const ask = async (test: string, variant: string, image: string | null) => {
+        reqId.current = `speed-${Date.now()}`;
+        answerRef.current = '';
+        const t0 = Date.now();
+        try {
+          const s = await SidekickNative.llmGenerate(
+            reqId.current,
+            image ? PHOTO_PROMPT : TEXT_PROMPT,
+            image,
+          );
+          emit({
+            test,
+            variant,
+            ms: Date.now() - t0,
+            firstTokenMs: s.ttftMs,
+            ok: true,
+            text: answerRef.current,
+          });
+        } catch (e) {
+          fail(test, variant, e);
+        }
+      };
+
+      // 1. Chat model: text and photo questions under each tuning.
+      await SidekickNative.embedUnload();
+      const photo = `${modelsDir}/test.jpg`;
+      const hasPhoto = SidekickNative.fileExists(photo);
+      if (!hasPhoto) fail('photo', '', 'test.jpg missing');
+      for (const [name, tuning] of LLM_TUNINGS) {
+        await unloadLlm();
+        setLlmTuning(tuning);
+        const l0 = Date.now();
+        try {
+          const r = await ensureLlm();
+          emit({
+            test: 'llm_load',
+            variant: `${name} ${r.backend}`,
+            ms: Date.now() - l0,
+            ok: true,
+            text: '',
+          });
+        } catch (e) {
+          fail('llm_load', name, e);
+          continue;
+        }
+        for (let i = 0; i < 2; i++) await ask('text', `${name} q${i + 1}`, null);
+        if (hasPhoto) for (let i = 0; i < 2; i++) await ask('photo', `${name} q${i + 1}`, photo);
+      }
+      setLlmTuning({});
+      await unloadLlm();
+
+      // 2. Speech to text on the Parakeet sample recordings, per thread count.
+      const wavs = [0, 1, 2, 3, 4]
+        .map((n) => `${modelsDir}/${MOONSHINE_WAVS}/${n}.wav`)
+        .filter((w) => SidekickNative.fileExists(w));
+      const secs = wavs.map((w) => {
+        const b = SidekickNative.readBase64(w);
+        return b ? wavSeconds(b) : null;
+      });
+      const sttThreads = hasAny(STT_THREAD_SETTERS) ? [2, 3, 4] : [null];
+      for (const t of sttThreads) {
+        if (t !== null) await callIfExists(SidekickNative, STT_THREAD_SETTERS, t);
+        const tl = t === null ? 'default' : `t${t}`;
+        for (let i = 0; i < wavs.length; i++) {
+          const t0 = Date.now();
+          try {
+            const r = await SidekickNative.debugTranscribe(wavs[i]);
+            // The first file per setting includes loading the model.
+            emit({
+              test: i === 0 ? 'stt_first' : 'stt',
+              variant: `${tl} ${i}.wav`,
+              ms: Date.now() - t0,
+              audioSec: secs[i] ?? undefined,
+              ok: true,
+              text: r.text,
+            });
+          } catch (e) {
+            fail('stt', `${tl} ${i}.wav`, e);
+          }
+        }
+      }
+
+      // 3. Voiceprint of one recording.
+      if (wavs.length) {
+        const t0 = Date.now();
+        try {
+          const p = await SidekickNative.debugVoiceprint(wavs[0]);
+          emit({
+            test: 'voiceprint',
+            variant: '0.wav',
+            ms: Date.now() - t0,
+            audioSec: secs[0] ?? undefined,
+            ok: !!p,
+            text: p ? `${p.length} dims` : 'no voiceprint',
+          });
+        } catch (e) {
+          fail('voiceprint', '0.wav', e);
+        }
+      }
+
+      // 4. Embedder (chat model already unloaded): load with one item, then 20 sentences.
+      const emb = modelPath(EMBEDDER_FILE);
+      if (!SidekickNative.fileExists(emb)) fail('embed', '', 'embedder not downloaded');
+      else
+        try {
+          let t0 = Date.now();
+          await SidekickNative.embed(emb, [EMBED_SAMPLES[0]], EMBED_DIMS);
+          emit({ test: 'embed_load', variant: '1 item', ms: Date.now() - t0, ok: true, text: '' });
+          t0 = Date.now();
+          const v = await SidekickNative.embed(emb, EMBED_SAMPLES, EMBED_DIMS);
+          const ms = Date.now() - t0;
+          emit({
+            test: 'embed',
+            variant: `${EMBED_SAMPLES.length} items`,
+            ms: Math.round(ms / EMBED_SAMPLES.length),
+            ok: v.length === EMBED_SAMPLES.length,
+            text: `ms per item; total ${ms} ms`,
+          });
+        } catch (e) {
+          fail('embed', '', e);
+        }
+      await SidekickNative.embedUnload();
+      console.log('[speed] done');
+      setLog((l) => [...l, '[speed] done']);
+    });
+
   const load = (backend: LlmBackend | 'auto') =>
     run('load', async () => {
       await unloadLlm();
@@ -205,6 +389,9 @@ export default function BenchScreen() {
         />
       </View>
       {progress !== '' && <Text>{progress}</Text>}
+      <View style={styles.row}>
+        <Button title="Speed run" disabled={busy} onPress={speedRun} />
+      </View>
       <View style={styles.row}>
         <Button title="Measure + pick fastest" disabled={busy} onPress={() => load('auto')} />
         <Button title="GPU" disabled={busy} onPress={() => load('gpu')} />

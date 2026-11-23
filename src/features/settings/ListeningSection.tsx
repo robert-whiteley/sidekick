@@ -72,6 +72,18 @@ export function ListeningSection() {
           value={s.recordConversations}
           onChange={(v) => set({ recordConversations: v })}
         />
+        <Row
+          label="Show conversation"
+          hint="Show what is said, and who said it, on the main screen while listening. Off only hides it; it doesn't change what is kept."
+          value={s.showConversation}
+          onChange={(v) => setS(updateSettings({ showConversation: v }))}
+        />
+        <Row
+          label="Instructions only"
+          hint='For when you are with other people: nothing around you is transcribed or kept. Only "Sidekick …" / "Hey Sidekick …" and holding the mic are taken.'
+          value={s.instructionsOnly}
+          onChange={(v) => set({ instructionsOnly: v })}
+        />
         <Text style={styles.label}>Consent mode</Text>
         <View style={styles.chips}>
           {CONSENT_OPTIONS.map((o) => (

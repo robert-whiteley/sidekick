@@ -1,0 +1,7 @@
+[
+{
+  "directory": "/home/robert/sidekick/modules/sidekick-native/android/.cxx/RelWithDebInfo/533n6m34/x86_64",
+  "command": "/home/robert/Android/Sdk/ndk/27.1.12297006/toolchains/llvm/prebuilt/linux-x86_64/bin/clang++ --target=x86_64-none-linux-android24 --sysroot=/home/robert/Android/Sdk/ndk/27.1.12297006/toolchains/llvm/prebuilt/linux-x86_64/sysroot -Dsidekick_ort_EXPORTS -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security  -std=c++17 -O2 -g -DNDEBUG -fPIC -o CMakeFiles/sidekick_ort.dir/ort_shim.cpp.o -c /home/robert/sidekick/modules/sidekick-native/android/src/main/cpp/ort_shim.cpp",
+  "file": "/home/robert/sidekick/modules/sidekick-native/android/src/main/cpp/ort_shim.cpp"
+}
+]

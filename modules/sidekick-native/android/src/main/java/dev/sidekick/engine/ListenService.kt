@@ -10,42 +10,20 @@ import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
-import android.speech.tts.TextToSpeech
-import android.speech.tts.UtteranceProgressListener
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
-import java.util.Locale
 
 /**
  * Keeps the microphone open with the screen off: wake word, ambient transcripts, and spoken
  * answers when the app isn't on screen. Android shows a permanent notification while it runs.
  */
 class ListenService : Service() {
-  private var tts: TextToSpeech? = null
-  private var ttsReady = false
-
   override fun onBind(intent: Intent?): IBinder? = null
 
   override fun onCreate() {
     super.onCreate()
-    tts =
-      TextToSpeech(this) { status ->
-        ttsReady = status == TextToSpeech.SUCCESS
-        tts?.language = Locale.getDefault()
-        tts?.setOnUtteranceProgressListener(
-          object : UtteranceProgressListener() {
-            override fun onStart(id: String?) = MicLoop.setPaused(true)
-
-            override fun onDone(id: String?) {
-              if (id == LAST) MicLoop.setPaused(false)
-            }
-
-            @Deprecated("Deprecated in Java")
-            override fun onError(id: String?) = MicLoop.setPaused(false)
-          }
-        )
-      }
+    ListenPrefs.load(this)
     MicLoop.nativeAnswerer = ::answer
     MicLoop.onPauseChange = { reason ->
       getSystemService(NotificationManager::class.java)?.notify(NOTIFICATION_ID, notification(reason))
@@ -75,12 +53,14 @@ class ListenService : Service() {
     MicLoop.nativeAnswerer = null
     MicLoop.onPauseChange = null
     Places.stopTracking(this)
-    tts?.shutdown()
     super.onDestroy()
   }
 
-  /** Background answer: the app isn't on screen, so the service asks the model and speaks. */
-  private fun answer(question: String) {
+  /**
+   * Background answer: the app isn't on screen, so the service asks the model and speaks it
+   * sentence by sentence. A follow-up (said right after an answer, or over it) keeps the chat.
+   */
+  private fun answer(question: String, followUp: Boolean) {
     val llm = Engines.llm(this)
     if (!llm.ensureLoadedFromLastRun(this)) {
       speak("Open Sidekick once so I can load my model.")
@@ -88,13 +68,17 @@ class ListenService : Service() {
     }
     val prefs = getSharedPreferences("sidekick", Context.MODE_PRIVATE)
     val system = prefs.getString("assistant.system", null)
-    MicLoop.setPaused(true)
     val sb = StringBuilder()
+    val turn = Voice.begin()
+    val sentences = SentenceSplitter()
     llm.generate(
       question,
       null,
-      GenerateOptions(maxTokens = 160, system = system),
-      onText = { sb.append(it) },
+      GenerateOptions(maxTokens = 160, keepHistory = followUp, system = system),
+      onText = {
+        sb.append(it)
+        sentences.push(it).forEach { s -> Voice.say(this, s, turn) }
+      },
       onFinish = {
         val answer = sb.toString().trim()
         Journal.append(
@@ -107,23 +91,21 @@ class ListenService : Service() {
               .put("question", question)
           ),
         )
-        speak(answer)
+        Voice.say(this, sentences.finish(), turn)
+        Voice.end(turn)
       },
       onFail = {
         Log.w(TAG, "answer failed", it)
-        speak("Sorry, I couldn't answer that.")
+        // Stopped by the user talking over it: say nothing.
+        if (Voice.begin() == turn) speak("Sorry, I couldn't answer that.")
       },
     )
   }
 
   private fun speak(text: String) {
-    val t = tts
-    if (t == null || !ttsReady || text.isBlank()) {
-      MicLoop.setPaused(false)
-      return
-    }
-    val clean = text.replace(Regex("[*_`#>]+"), "")
-    t.speak(clean, TextToSpeech.QUEUE_FLUSH, null, LAST)
+    val turn = Voice.begin()
+    Voice.say(this, text, turn)
+    Voice.end(turn)
   }
 
   private fun notification(pauseReason: String?): Notification {
@@ -167,7 +149,6 @@ class ListenService : Service() {
     private const val CHANNEL = "listen"
     private const val NOTIFICATION_ID = 42
     private const val ACTION_STOP = "dev.sidekick.STOP_LISTENING"
-    private const val LAST = "answer"
     @Volatile var active = false
       private set
 

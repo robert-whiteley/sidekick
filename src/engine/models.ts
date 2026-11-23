@@ -27,8 +27,8 @@ export const MODEL_FILES = {
   gemmaTensorG6: {
     name: 'gemma-4-E2B-it_Google_Tensor_G6.litertlm',
     url: `${HF}/gemma-4-E2B-it_Google_Tensor_G6.litertlm`,
-    sha256: 'd6cbe8d625f4965a8c32565f65ae774d19598d0d967a4c2101a7e04988daaf58',
-    bytes: 3453960202,
+    sha256: '181938105e0eefd105961417e8da75903eacda102c4fce9ce90f50b97139a63c',
+    bytes: 2588147712,
   },
   benchPhoto: {
     name: 'test.jpg',
@@ -38,10 +38,10 @@ export const MODEL_FILES = {
   },
   // Speech (sherpa-onnx). Small, CPU-only, always resident while listening.
   vad: {
-    name: 'silero_vad_v5.onnx',
-    url: `${SHERPA}/asr-models/silero_vad_v5.onnx`,
-    sha256: '6b99cbfd39246b6706f98ec13c7c50c6b299181f2474fa05cbc8046acc274396',
-    bytes: 2313101,
+    name: 'silero_vad_v6.2.3.onnx',
+    url: 'https://raw.githubusercontent.com/snakers4/silero-vad/v6.2.3/src/silero_vad/data/silero_vad.onnx',
+    sha256: '1a153a22f4509e292a94e67d6f9b85e8deb25b4988682b7e174c65279d8788e3',
+    bytes: 2327524,
   },
   wakeWord: {
     name: 'sherpa-onnx-kws-zipformer-gigaspeech-3.3M-2024-01-01.tar.bz2',
@@ -63,13 +63,28 @@ export const MODEL_FILES = {
     sha256: '98daf9bcf1c8abf3db374fec4c27a5eda7c58705bb3f180d057b085a72a88bb5',
     bytes: 29596979,
   },
+  // Sidekick's voice: Kyutai Pocket TTS 100M (CC BY 4.0) via sherpa-onnx. Optional: the system
+  // voice speaks until it is downloaded (Wi-Fi only). No phonemizer, so no espeak-ng (GPL).
+  voice: {
+    name: 'sherpa-onnx-pocket-tts-int8-2026-01-26.tar.bz2',
+    url: `${SHERPA}/tts-models/sherpa-onnx-pocket-tts-int8-2026-01-26.tar.bz2`,
+    sha256: 'f4da7c7bd465f7b91e89191487fe90504396a51d6f0bcf94d0787633e2657293',
+    bytes: 98337865,
+    // Must match Voice.kt (DIR + the reference voice it reads).
+    unpackedCheck: 'sherpa-onnx-pocket-tts-int8-2026-01-26/test_wavs/bria.wav',
+  },
 } satisfies Record<string, ModelFile>;
 
+/**
+ * EmbeddingGemma 2 text + vision: text and photos land in one vector space, so a typed question
+ * finds a photo by what it shows. Same 270M text backbone as the text-only file, plus a 170M
+ * vision encoder that loads only when a photo is embedded.
+ */
 export const EMBEDDER_FILE: ModelFile = {
-  name: 'embeddinggemma-2-text-270m.litertlm',
-  url: 'https://huggingface.co/litert-community/embeddinggemma-2-text-270m-litert-lm/resolve/main/embeddinggemma-2-text-270m.litertlm',
-  sha256: '2d079ee2f6f066b1f368e8d7c819f55214eaef1d0513b312321901f30ab286fb',
-  bytes: 164626432,
+  name: 'embeddinggemma-2-text-vision-440m.litertlm',
+  url: 'https://huggingface.co/litert-community/embeddinggemma-2-text-vision-440m-litert-lm/resolve/main/embeddinggemma-2-text-vision-440m.litertlm',
+  sha256: '92dcbea108899e5d6e30d919b0744f90d9967e80c67a4ab5503ac16d54f62eb0',
+  bytes: 387710976,
 };
 
 export const SPEECH_FILES: ModelFile[] = [
@@ -78,6 +93,32 @@ export const SPEECH_FILES: ModelFile[] = [
   MODEL_FILES.speechToText,
   MODEL_FILES.voiceprint,
 ];
+
+/**
+ * PaddleOCR PP-OCRv6 small (Apache-2.0), PaddlePaddle's own ONNX exports, pinned to a commit:
+ * text detection, text recognition, and the recognizer's config (its character list).
+ */
+const PPOCR = 'https://huggingface.co/PaddlePaddle';
+export const OCR_FILES = {
+  det: {
+    name: 'pp-ocrv6-small-det.onnx',
+    url: `${PPOCR}/PP-OCRv6_small_det_onnx/resolve/28fe5895c24fd108c19eb3e8479f4ab385fbfc62/inference.onnx`,
+    sha256: 'd73e0058b7a8086bbd57f3d10b8bcd4ff95363f67e06e2762b5e814fe9c9410e',
+    bytes: 9880512,
+  },
+  rec: {
+    name: 'pp-ocrv6-small-rec.onnx',
+    url: `${PPOCR}/PP-OCRv6_small_rec_onnx/resolve/b8f84f0b80c529de40b4fbb3544b84fa7233a513/inference.onnx`,
+    sha256: '5435fd747c9e0efe15a96d0b378d5bd157e9492ed8fd80edf08f30d02fa24634',
+    bytes: 21159378,
+  },
+  dict: {
+    name: 'pp-ocrv6-small-rec.yml',
+    url: `${PPOCR}/PP-OCRv6_small_rec_onnx/resolve/b8f84f0b80c529de40b4fbb3544b84fa7233a513/inference.yml`,
+    sha256: 'ab078671bb49f06228eadccd34f1bb501e157f7a047095ffb943ba81512c77d1',
+    bytes: 150579,
+  },
+} satisfies Record<string, ModelFile>;
 
 /** "1.2 / 2.6 GB (46%)" */
 export function formatProgress(bytes: number, total: number): string {
@@ -92,4 +133,6 @@ export const OBSOLETE_MODEL_PATHS = [
   'sherpa-onnx-moonshine-tiny-en-quantized-2026-02-27',
   'sherpa-onnx-moonshine-base-en-quantized-2026-02-27',
   'silero_vad.onnx',
+  'silero_vad_v5.onnx',
+  'embeddinggemma-2-text-270m.litertlm',
 ];

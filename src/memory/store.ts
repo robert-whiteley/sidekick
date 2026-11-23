@@ -8,9 +8,23 @@ import { getSettings } from '@/engine/settings';
 import { isAgreement, isConsentQuestion, CONSENT_WINDOW_MS, keepOtherSpeech } from './consent';
 import { EMBED_DIMS, getDb, vecParam } from './db';
 import { appendSeen, captureText } from './photo-text';
-import { embedDocument, embedQuery, ftsQuery, fuseRankings, timeWindow } from './search-logic';
-import { addresseeOf, findNameCues, ADDRESS_WINDOW_MS } from './names';
-import { addToCentroid, cosine, matchSpeaker, type Speaker } from './voices';
+import { OCR_FOUND, readPendingPhotoText, readTextOf } from './photo-ocr';
+import {
+  embedDocument,
+  embedderChanged,
+  embedQuery,
+  ftsQuery,
+  fuseRankings,
+  imageHits,
+  PHOTO_EMBED_BATCH,
+  mentionedName,
+  timeWindow,
+} from './search-logic';
+import { addresseeOf, findNameCues, fullNameFromContacts, ADDRESS_WINDOW_MS } from './names';
+import { addToCentroid, canStartNewVoice, cosine, matchSpeaker, type Speaker } from './voices';
+import { applyAutoName, assignLabel, collectPersonInfo, type KeptLine } from './people';
+import { speakerLabel } from './people-logic';
+import { liveTranscript } from '@/engine/live-transcript';
 
 export type Moment = {
   id: number;
@@ -67,7 +81,11 @@ async function speakers(): Promise<Speaker[]> {
 }
 
 /** Finds (and learns) who is speaking. Owner clips teach the owner's voice. */
-async function assignSpeaker(voice: number[] | null, owner: boolean): Promise<Speaker | null> {
+async function assignSpeaker(
+  voice: number[] | null,
+  owner: boolean,
+  durationMs?: number,
+): Promise<Speaker | null> {
   if (!voice) return null;
   const db = await getDb();
   const all = await speakers();
@@ -83,11 +101,14 @@ async function assignSpeaker(voice: number[] | null, owner: boolean): Promise<Sp
     ]);
     return s;
   }
+  if (!owner && !canStartNewVoice(durationMs)) return null;
   const r = await db.execute('INSERT INTO speakers (is_owner, centroid) VALUES (?, ?)', [
     owner ? 1 : 0,
     JSON.stringify(voice),
   ]);
   s = { id: r.insertId!, centroid: voice, count: 1, isOwner: owner };
+  // Every new voice is "Person N" right away, stable for that voice.
+  if (!owner) await assignLabel(s.id);
   return s;
 }
 
@@ -98,14 +119,29 @@ export async function learnOwnerVoice(voice: number[]) {
 
 let lastConsentAsk = 0;
 
-/** Moves everything the listener heard into memory, applying consent rules. */
+let ingesting: Promise<number> | null = null;
+
+/**
+ * Moves everything the listener heard into memory, applying consent rules. Runs one at a time
+ * (the timer and each transcript event both call it); every line also goes to the live transcript.
+ */
 export async function ingestJournal(): Promise<number> {
+  while (ingesting) await ingesting.catch(() => 0);
+  ingesting = ingestJournalNow();
+  try {
+    return await ingesting;
+  } finally {
+    ingesting = null;
+  }
+}
+
+async function ingestJournalNow(): Promise<number> {
   const lines = SidekickNative.journalDrain();
   if (!lines.length) return 0;
   const db = await getDb();
   const consentMode = consentModeNow();
   let added = 0;
-  const kept: { at: number; speakerId: number | null; isOwner: boolean; text: string }[] = [];
+  const kept: KeptLine[] = [];
   for (const line of lines) {
     let e: JournalEntry;
     try {
@@ -123,7 +159,7 @@ export async function ingestJournal(): Promise<number> {
       added++;
       continue;
     }
-    const s = await assignSpeaker(e.voice, e.owner);
+    const s = await assignSpeaker(e.voice, e.owner, e.durationMs);
     const isOwner = e.owner || s?.isOwner === true;
     if (isOwner && isConsentQuestion(e.text)) lastConsentAsk = e.at;
     if (!isOwner) {
@@ -136,14 +172,24 @@ export async function ingestJournal(): Promise<number> {
           consented = true;
         }
       }
-      if (!keepOtherSpeech({ consentMode, speakerConsented: consented })) continue;
+      if (!keepOtherSpeech({ consentMode, speakerConsented: consented })) {
+        liveTranscript.put({
+          at: e.at,
+          text: e.text,
+          speakerId: s?.id ?? null,
+          isOwner,
+          saved: false,
+        });
+        continue;
+      }
     }
     const ins = await db.execute(
       'INSERT INTO moments (kind, at, text, speaker_id) VALUES (?, ?, ?, ?)',
       [e.kind, e.at, e.text, s?.id ?? null],
     );
     await tagPlace(ins.insertId!, entryPlace(e));
-    kept.push({ at: e.at, speakerId: s?.id ?? null, isOwner, text: e.text });
+    kept.push({ id: ins.insertId!, at: e.at, speakerId: s?.id ?? null, isOwner, text: e.text });
+    liveTranscript.put({ at: e.at, text: e.text, speakerId: s?.id ?? null, isOwner, saved: true });
     added++;
   }
   try {
@@ -151,15 +197,21 @@ export async function ingestJournal(): Promise<number> {
   } catch (err) {
     console.log(`[memory] name suggestions failed: ${String(err)}`);
   }
+  try {
+    await collectPersonInfo(kept);
+  } catch (err) {
+    console.log(`[memory] person notes failed: ${String(err)}`);
+  }
   return added;
 }
 
 // --- Names ---
 
-/** Looks for "I'm Sam" / "thanks, Sam" in newly kept lines and records name suggestions. */
-async function suggestNamesFrom(
-  lines: { at: number; speakerId: number | null; isOwner: boolean; text: string }[],
-) {
+/**
+ * Looks for "I'm Sam" / "thanks, Sam" in newly kept lines: a strong self-introduction names the
+ * voice automatically (marked auto); anything else is recorded as a suggestion.
+ */
+async function suggestNamesFrom(lines: KeptLine[]) {
   const db = await getDb();
   for (const line of lines) {
     for (const cue of findNameCues(line.text)) {
@@ -180,9 +232,22 @@ async function suggestNamesFrom(
           })),
         );
       }
-      if (target != null) await suggestName(target, cue.name);
+      if (target == null) continue;
+      const name = await expandName(cue.name);
+      if (!(cue.strong && (await applyAutoName(target, name)))) await suggestName(target, name);
     }
   }
+}
+
+/** "Sam" → "Sam Jones" when contacts are on and exactly one contact is called Sam. */
+async function expandName(name: string): Promise<string> {
+  if (!getSettings().sourceContacts) return name;
+  const db = await getDb();
+  const r = await db.execute('SELECT name FROM contacts');
+  return fullNameFromContacts(
+    name,
+    r.rows.map((x) => x.name as string),
+  );
 }
 
 async function suggestName(speakerId: number, name: string) {
@@ -277,6 +342,11 @@ export async function rememberPhotoQuestion(tmpPhoto: string, question: string, 
  */
 export const afterMomentSaved: ((momentId: number) => Promise<void>)[] = [
   (id) => tagPlace(id, here()),
+  // The photo's text (OCR, ~1 s): searchable right away. Not awaited, so saving isn't held up.
+  (id) => {
+    void readTextOf(id).catch(() => {});
+    return Promise.resolve();
+  },
 ];
 
 /** Voices heard this long before a capture count as "who was around". */
@@ -313,22 +383,27 @@ export async function capturePhoto(
 export async function peopleAround(momentId: number): Promise<string[]> {
   const db = await getDb();
   const r = await db.execute(
-    `SELECT s.id, s.name, s.is_owner FROM moment_people p JOIN speakers s ON s.id = p.speaker_id
+    `SELECT s.id, s.name, s.is_owner, s.label_no FROM moment_people p JOIN speakers s ON s.id = p.speaker_id
      WHERE p.moment_id = ? ORDER BY s.is_owner DESC, s.id`,
     [momentId],
   );
   return r.rows.map((x) =>
-    x.is_owner === 1 ? 'You' : ((x.name as string | null) ?? `Voice ${x.id as number}`),
+    speakerLabel({
+      id: x.id as number,
+      name: (x.name as string | null) ?? null,
+      isOwner: x.is_owner === 1,
+      labelNo: (x.label_no as number | null) ?? null,
+    }),
   );
 }
 
-/** The newest saved photo that hasn't had its text and scene read yet. */
+/** The newest saved photo not yet described (photos whose text OCR found are left to OCR). */
 export async function nextUndescribedPhoto(): Promise<{ id: number; photoPath: string } | null> {
   const db = await getDb();
   const r = await db.execute(
     `SELECT m.id, m.photo_path FROM moments m
      LEFT JOIN photo_descriptions d ON d.moment_id = m.id
-     WHERE m.photo_path IS NOT NULL AND d.moment_id IS NULL
+     WHERE m.photo_path IS NOT NULL AND d.moment_id IS NULL AND m.photo_ocr != ${OCR_FOUND}
      ORDER BY m.at DESC LIMIT 1`,
   );
   const row = r.rows[0];
@@ -371,15 +446,60 @@ export async function saveFact(text: string, status: 'saved' | 'suggested' = 'sa
   ]);
 }
 
-/** Embeds moments that don't have a vector yet. Call when the phone is otherwise idle. */
+/** A new embedder file may place text slightly differently: re-embed every memory once. */
+async function reembedIfModelChanged() {
+  const db = await getDb();
+  const r = await db.execute("SELECT value FROM meta WHERE key = 'embedder'");
+  if (!embedderChanged((r.rows[0]?.value as string | undefined) ?? null, EMBEDDER_FILE.name))
+    return;
+  // Old vectors stay searchable until each is replaced.
+  await db.execute('UPDATE moments SET embedded = 0');
+  await db.execute("INSERT OR REPLACE INTO meta (key, value) VALUES ('embedder', ?)", [
+    EMBEDDER_FILE.name,
+  ]);
+}
+
+/** Gives saved photos a vector of the image itself, so they're found by what they show. */
+async function embedPendingPhotos(limit = PHOTO_EMBED_BATCH): Promise<number> {
+  const db = await getDb();
+  const r = await db.execute(
+    'SELECT id, photo_path FROM moments WHERE photo_path IS NOT NULL AND image_embedded = 0 ORDER BY id DESC LIMIT ?',
+    [limit],
+  );
+  for (const row of r.rows) {
+    const id = row.id as number;
+    const path = row.photo_path as string;
+    try {
+      if (SidekickNative.fileExists(path)) {
+        const t0 = Date.now();
+        const [v] = await SidekickNative.embedImages(modelPath(EMBEDDER_FILE), [path], EMBED_DIMS);
+        // vec0 tables ignore OR REPLACE: delete first so re-embedding works.
+        await db.execute('DELETE FROM photos_vec WHERE id = ?', [id]);
+        await db.execute('INSERT INTO photos_vec (id, embedding) VALUES (?, ?)', [id, vecParam(v)]);
+        console.log(`[embed] photo ${id}, ${Date.now() - t0} ms`);
+      }
+    } catch (e) {
+      // A photo that can't be read is skipped rather than retried forever.
+      console.log(`[embed] photo ${id} failed: ${String(e)}`);
+    }
+    await db.execute('UPDATE moments SET image_embedded = 1 WHERE id = ?', [id]);
+  }
+  return r.rows.length;
+}
+
+/** Embeds moments (text, and photos) that don't have a vector yet. Call when otherwise idle. */
 export async function embedPending(limit = 64): Promise<number> {
+  await readPendingPhotoText().catch(() => 0);
   if (!isDownloaded(EMBEDDER_FILE)) return 0;
+  await reembedIfModelChanged();
+  const photos = await embedPendingPhotos();
   const db = await getDb();
   const r = await db.execute(
     "SELECT id, text, place FROM moments WHERE embedded = 0 AND text != '' ORDER BY id LIMIT ?",
     [limit],
   );
-  if (!r.rows.length) return 0;
+  if (!r.rows.length) return photos;
+  const t0 = Date.now();
   const vecs = await SidekickNative.embed(
     modelPath(EMBEDDER_FILE),
     r.rows.map((x) =>
@@ -389,18 +509,33 @@ export async function embedPending(limit = 64): Promise<number> {
   );
   await db.transaction(async (tx) => {
     for (let i = 0; i < r.rows.length; i++) {
-      await tx.execute('INSERT OR REPLACE INTO moments_vec (id, embedding) VALUES (?, ?)', [
+      // vec0 tables ignore OR REPLACE (re-embedding after OCR failed): delete first.
+      await tx.execute('DELETE FROM moments_vec WHERE id = ?', [r.rows[i].id as number]);
+      await tx.execute('INSERT INTO moments_vec (id, embedding) VALUES (?, ?)', [
         r.rows[i].id as number,
         vecParam(vecs[i]),
       ]);
       await tx.execute('UPDATE moments SET embedded = 1 WHERE id = ?', [r.rows[i].id as number]);
     }
   });
-  return r.rows.length;
+  console.log(`[embed] ${r.rows.length} items, ${Date.now() - t0} ms`);
+  return photos + r.rows.length;
+}
+
+/** How many memories still need a vector (0 if the embedder isn't downloaded). */
+export async function countPendingEmbeds(): Promise<number> {
+  if (!isDownloaded(EMBEDDER_FILE)) return 0;
+  await reembedIfModelChanged();
+  const db = await getDb();
+  const r = await db.execute(
+    "SELECT COUNT(*) AS n FROM moments WHERE (embedded = 0 AND text != '') OR (photo_path IS NOT NULL AND image_embedded = 0)",
+  );
+  return (r.rows[0]?.n as number | undefined) ?? 0;
 }
 
 const MOMENT_SELECT =
-  'SELECT m.*, s.name, s.is_owner FROM moments m LEFT JOIN speakers s ON s.id = m.speaker_id';
+  // Unnamed voices show as their automatic label ("Person 3") in lists and prompts.
+  "SELECT m.*, COALESCE(s.name, 'Person ' || s.label_no) AS name, s.is_owner FROM moments m LEFT JOIN speakers s ON s.id = m.speaker_id";
 
 /** Hybrid search: meaning (vectors) + exact words (FTS5), narrowed by time words in the question. */
 export async function searchMemory(question: string, k = 8, now = new Date()): Promise<Moment[]> {
@@ -409,6 +544,10 @@ export async function searchMemory(question: string, k = 8, now = new Date()): P
   const lists: number[][] = [];
   if (isDownloaded(EMBEDDER_FILE)) {
     try {
+      // The embedder is loaded for the question anyway: first catch up on memories still waiting
+      // for an idle-time batch, so every memory is searchable by meaning, not only by words.
+      // Capped: at ~0.34 s per memory on a Pixel 5, 16 adds at most ~5 s; idle time does the rest.
+      await embedPending(16);
       const [qv] = await SidekickNative.embed(
         modelPath(EMBEDDER_FILE),
         [embedQuery(question)],
@@ -419,6 +558,12 @@ export async function searchMemory(question: string, k = 8, now = new Date()): P
         [vecParam(qv), win ? 200 : k * 3],
       );
       lists.push(r.rows.map((x) => x.id as number));
+      // The same question vector against the photos themselves (one shared space).
+      const p = await db.execute(
+        'SELECT id FROM photos_vec WHERE embedding MATCH ? AND k = ? ORDER BY distance',
+        [vecParam(qv), imageHits(!!win)],
+      );
+      lists.push(p.rows.map((x) => x.id as number));
     } catch (e) {
       console.log(`[memory] vector search failed: ${String(e)}`);
     }
@@ -431,7 +576,7 @@ export async function searchMemory(question: string, k = 8, now = new Date()): P
     );
     lists.push(r.rows.map((x) => x.id as number));
   }
-  console.log(`[memory] search: vector ${lists[0]?.length ?? 0}, words ${lists[1]?.length ?? 0}`);
+  console.log(`[memory] search lists (text vec, photo vec, words): ${lists.map((l) => l.length)}`);
   let ids = fuseRankings(lists);
   if (win) {
     const r = await db.execute('SELECT id FROM moments WHERE at >= ? AND at < ? ORDER BY at DESC', [
@@ -443,6 +588,7 @@ export async function searchMemory(question: string, k = 8, now = new Date()): P
     // Nothing matched by content inside the window: fall back to the window's most recent moments.
     ids = ranked.length ? ranked : [...inWin];
   }
+  ids = await narrowByPlaceOrPerson(question, ids);
   ids = ids.slice(0, k * 3);
   if (!ids.length) return [];
   const r = await db.execute(
@@ -460,6 +606,48 @@ export async function searchMemory(question: string, k = 8, now = new Date()): P
   return found;
 }
 
+/**
+ * "What did Sam say", "what did I see in Leeds": keep only moments with that named person (as the
+ * speaker or around a photo) or at that place. Falls back to their most recent moments when no
+ * ranked result matches, and to the unfiltered results when the name has no moments at all.
+ */
+async function narrowByPlaceOrPerson(question: string, ids: number[]): Promise<number[]> {
+  const db = await getDb();
+  const places = (
+    await db.execute('SELECT DISTINCT place FROM moments WHERE place IS NOT NULL')
+  ).rows.map((x) => x.place as string);
+  const people = (await db.execute('SELECT id, name FROM speakers WHERE name IS NOT NULL')).rows;
+  let wanted: Set<number> | null = null;
+  const place = mentionedName(question, places);
+  if (place) {
+    const r = await db.execute(
+      'SELECT id FROM moments WHERE place = ? ORDER BY at DESC LIMIT 500',
+      [place],
+    );
+    wanted = new Set(r.rows.map((x) => x.id as number));
+  }
+  const person = mentionedName(
+    question,
+    people.map((x) => x.name as string),
+  );
+  if (person) {
+    const pid = people.filter((x) => x.name === person).map((x) => x.id as number);
+    const marks = pid.map(() => '?').join(',');
+    const r = await db.execute(
+      `SELECT id FROM moments WHERE speaker_id IN (${marks})
+       UNION SELECT moment_id FROM moment_people WHERE speaker_id IN (${marks})
+       UNION SELECT rowid FROM moments_fts WHERE moments_fts MATCH ?
+       ORDER BY 1 DESC LIMIT 500`,
+      [...pid, ...pid, `"${person.replace(/"/g, '')}"`],
+    );
+    const byPerson = new Set(r.rows.map((x) => x.id as number));
+    wanted = wanted ? new Set([...wanted].filter((id) => byPerson.has(id))) : byPerson;
+  }
+  if (!wanted || !wanted.size) return ids;
+  const kept = ids.filter((id) => wanted.has(id));
+  return kept.length ? kept : [...wanted];
+}
+
 export async function recentMoments(limit = 100, offset = 0): Promise<Moment[]> {
   const db = await getDb();
   const r = await db.execute(`${MOMENT_SELECT} ORDER BY m.at DESC LIMIT ? OFFSET ?`, [
@@ -471,7 +659,10 @@ export async function recentMoments(limit = 100, offset = 0): Promise<Moment[]> 
 
 export async function savedFacts(): Promise<{ id: number; text: string; status: string }[]> {
   const db = await getDb();
-  const r = await db.execute('SELECT id, text, status FROM facts ORDER BY at DESC');
+  // The owner's facts only; facts about other people are on their pages (people.ts).
+  const r = await db.execute(
+    'SELECT id, text, status FROM facts WHERE speaker_id IS NULL ORDER BY at DESC',
+  );
   return r.rows.map((x) => ({
     id: x.id as number,
     text: x.text as string,
@@ -482,7 +673,7 @@ export async function savedFacts(): Promise<{ id: number; text: string; status: 
 export async function listSpeakers() {
   const db = await getDb();
   const r = await db.execute(
-    'SELECT s.id, s.name, s.is_owner, s.consented_at, s.suggested_name, COUNT(m.id) AS n FROM speakers s LEFT JOIN moments m ON m.speaker_id = s.id GROUP BY s.id ORDER BY n DESC',
+    'SELECT s.id, s.name, s.is_owner, s.consented_at, s.suggested_name, s.label_no, s.name_auto, s.notes, COUNT(m.id) AS n FROM speakers s LEFT JOIN moments m ON m.speaker_id = s.id GROUP BY s.id ORDER BY n DESC',
   );
   return r.rows.map((x) => ({
     id: x.id as number,
@@ -490,6 +681,10 @@ export async function listSpeakers() {
     isOwner: x.is_owner === 1,
     consented: x.consented_at != null,
     suggestedName: (x.suggested_name as string | null) ?? null,
+    labelNo: (x.label_no as number | null) ?? null,
+    /** Named automatically from "my name is …" (not yet confirmed by the user). */
+    nameAuto: x.name_auto === 1,
+    notes: (x.notes as string | null) ?? '',
     moments: x.n as number,
   }));
 }
@@ -510,7 +705,11 @@ export async function speakerMoments(id: number, limit = 100): Promise<Moment[]>
 
 export async function nameSpeaker(id: number, name: string) {
   const db = await getDb();
-  await db.execute('UPDATE speakers SET name = ? WHERE id = ?', [name.trim() || null, id]);
+  // The user's own name for the voice: no longer auto, and any pending guess is dropped.
+  await db.execute(
+    'UPDATE speakers SET name = ?, name_auto = 0, suggested_name = NULL, suggested_count = 0 WHERE id = ?',
+    [name.trim() || null, id],
+  );
 }
 
 // --- Deleting ---
@@ -527,16 +726,20 @@ async function deletePhotos(where: string, params: (number | string)[]) {
 async function deleteMoments(where: string, params: (number | string)[]) {
   const db = await getDb();
   await deletePhotos(where, params);
-  await db.execute(
-    `DELETE FROM moments_vec WHERE id IN (SELECT id FROM moments WHERE ${where})`,
-    params,
-  );
+  for (const table of ['moments_vec', 'photos_vec']) {
+    await db.execute(
+      `DELETE FROM ${table} WHERE id IN (SELECT id FROM moments WHERE ${where})`,
+      params,
+    );
+  }
   await db.execute(`DELETE FROM moments WHERE ${where}`, params);
 }
 
 export const deleteMoment = (id: number) => deleteMoments('id = ?', [id]);
 export const deleteRange = (from: number, to: number) =>
   deleteMoments('at >= ? AND at < ?', [from, to]);
+/** Everything one data source added (e.g. kind 'file'). */
+export const deleteKind = (kind: string) => deleteMoments('kind = ?', [kind]);
 
 export async function deleteSpeaker(id: number) {
   await deleteMoments('speaker_id = ?', [id]);
@@ -555,6 +758,9 @@ export async function deleteEverything() {
   const db = await getDb();
   await db.execute('DELETE FROM speakers');
   await db.execute('DELETE FROM facts');
+  await db.execute('DELETE FROM followups');
+  await db.execute('DELETE FROM contacts');
+  liveTranscript.clear();
 }
 
 /** Applies the retention setting. */
@@ -569,8 +775,15 @@ export async function exportEverything(): Promise<string> {
   const moments = (
     await db.execute('SELECT id, kind, at, text, speaker_id, photo_path FROM moments ORDER BY at')
   ).rows;
-  const people = (await db.execute('SELECT id, name, is_owner, consented_at FROM speakers')).rows;
-  const facts = (await db.execute('SELECT id, text, status, at FROM facts')).rows;
+  const people = (
+    await db.execute('SELECT id, name, is_owner, consented_at, label_no, notes FROM speakers')
+  ).rows;
+  const facts = (await db.execute('SELECT id, text, status, at, speaker_id FROM facts')).rows;
+  const followups = (
+    await db.execute(
+      'SELECT id, kind, title, due_at, all_day, when_text, status, created_at, person_id FROM followups',
+    )
+  ).rows;
   const json = JSON.stringify(
     {
       exportedAt: new Date().toISOString(),
@@ -580,6 +793,7 @@ export async function exportEverything(): Promise<string> {
       })),
       people,
       facts,
+      followups,
     },
     null,
     2,

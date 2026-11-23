@@ -2,8 +2,22 @@
 
 export type Speaker = { id: number; centroid: number[]; count: number; isOwner: boolean };
 
-/** Same-voice threshold for 3D-Speaker CAM++ cosine similarity (tune on device). */
+/**
+ * Same-voice threshold for 3D-Speaker CAM++ cosine similarity. On LibriSpeech (20 speakers) 0.55
+ * merged two people ~0.01% of the time; the highest score between different people was 0.60.
+ */
 export const SAME_VOICE = 0.55;
+
+/**
+ * Shortest clip that may start a new person. Short first clips caused most duplicate "persons"
+ * (25 for 20 real speakers); from 2.5 s a voiceprint is near-reliable. Shorter unmatched clips stay
+ * unattributed ("Someone") instead.
+ */
+export const NEW_VOICE_MIN_MS = 2500;
+
+/** Whether an unmatched clip is long enough to become a new person. */
+export const canStartNewVoice = (durationMs: number | undefined) =>
+  (durationMs ?? 0) >= NEW_VOICE_MIN_MS;
 
 export function cosine(a: number[], b: number[]): number {
   let dot = 0;

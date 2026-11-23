@@ -6,3 +6,9 @@
 
 # sherpa-onnx native code builds these config/result classes through JNI.
 -keep class com.k2fsa.sherpa.onnx.** { *; }
+
+# Photo OCR's JNI bridge (src/main/cpp/ort_shim.cpp) binds these by name.
+-keep class dev.sidekick.engine.OrtShim { *; }
+
+# sherpa-onnx's TTS calls the chunk callback's invoke([F)Ljava/lang/Integer; over JNI.
+-keep class dev.sidekick.engine.TtsChunks { *; }

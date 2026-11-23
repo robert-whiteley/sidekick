@@ -1,6 +1,9 @@
 import {
+  mentionedName,
   asksAboutSomethingSeen,
   asksAboutWhatIsInView,
+  embedderChanged,
+  imageHits,
   ftsQuery,
   fuseRankings,
   timeWindow,
@@ -47,4 +50,42 @@ test('only questions about the view take a photo', () => {
   expect(asksAboutWhatIsInView('What is my locker code?')).toBe(false);
   expect(asksAboutWhatIsInView('When does my train leave?')).toBe(false);
   expect(asksAboutWhatIsInView('What did that sign say?')).toBe(false);
+});
+
+describe('photo vectors', () => {
+  test('re-embeds when the embedder file changes, including upgrades with no record', () => {
+    expect(embedderChanged(null, 'b.litertlm')).toBe(true);
+    expect(embedderChanged('a.litertlm', 'b.litertlm')).toBe(true);
+    expect(embedderChanged('b.litertlm', 'b.litertlm')).toBe(false);
+  });
+
+  test('only the top few photo matches join the ranking unless a time window filters them', () => {
+    expect(imageHits(false)).toBe(3);
+    expect(imageHits(true)).toBe(200);
+  });
+
+  test('a photo matched only by its image still reaches the fused ranking', () => {
+    const text = [1, 2, 3];
+    const photos = [9];
+    const words = [2];
+    const fused = fuseRankings([text, photos, words]);
+    expect(fused[0]).toBe(2);
+    expect(fused).toContain(9);
+  });
+});
+
+describe('mentionedName', () => {
+  it('finds a place by its city name', () => {
+    expect(mentionedName('What did I say in Leeds yesterday?', ['Leeds, GB', 'York, GB'])).toBe(
+      'Leeds, GB',
+    );
+  });
+  it('finds a person and prefers the longest name', () => {
+    expect(mentionedName('what did sam smith say about the car', ['Sam', 'Sam Smith'])).toBe(
+      'Sam Smith',
+    );
+  });
+  it('ignores partial words', () => {
+    expect(mentionedName('what about samples', ['Sam'])).toBeNull();
+  });
 });

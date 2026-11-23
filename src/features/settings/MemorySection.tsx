@@ -7,6 +7,10 @@ import { Button, formatTime, Section, styles } from './ui';
 export function who(m: Moment): string {
   if (m.kind === 'photo') return 'Photo';
   if (m.kind === 'answer') return 'Asked Sidekick';
+  if (m.kind === 'note') return 'Your note';
+  if (m.kind === 'file') return 'File';
+  if (m.kind === 'event') return 'Calendar';
+  if (m.kind === 'notification') return 'Notification';
   if (m.kind === 'question' || m.isOwner) return 'You';
   return m.speakerName ?? (m.speakerId ? `Voice ${m.speakerId}` : 'Someone');
 }

@@ -49,5 +49,9 @@ public class SidekickNativeModule: Module {
     Function("llmCancel") {}
 
     AsyncFunction("llmUnload") {}
+
+    Function("llmSetTuning") { (_: [String: Any]) in }
+
+    AsyncFunction("llmPrepare") { (_: String?) -> Bool in false }
   }
 }

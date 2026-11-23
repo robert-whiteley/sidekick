@@ -12,6 +12,21 @@ android {
     versionCode 1
     versionName "0.1.0"
     consumerProguardFiles "consumer-rules.pro"
+    externalNativeBuild {
+      cmake {
+        cppFlags "-std=c++17"
+      }
+    }
+  }
+  // JNI bridge to ONNX Runtime for photo OCR (src/main/cpp/ort_shim.cpp).
+  externalNativeBuild {
+    cmake {
+      path "src/main/cpp/CMakeLists.txt"
+      version "3.22.1"
+    }
+  }
+  if (rootProject.ext.has("ndkVersion")) {
+    ndkVersion rootProject.ext.ndkVersion
   }
   lintOptions {
     abortOnError false
@@ -27,4 +42,6 @@ dependencies {
   // Apache Commons Compress (Apache-2.0): unpacks the speech model archives.
   implementation "org.apache.commons:commons-compress:1.28.0"
   implementation "androidx.core:core-ktx:1.13.1"
+  // Plain JVM tests of the pure logic (Turns.kt).
+  testImplementation "junit:junit:4.13.2"
 }

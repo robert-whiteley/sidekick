@@ -9,6 +9,7 @@ import {
   listSpeakers,
   nameSpeaker,
 } from '@/memory/store';
+import { speakerLabel } from '@/memory/people-logic';
 import { confirm, Section, styles } from './ui';
 
 export type Person = Awaited<ReturnType<typeof listSpeakers>>[number];
@@ -28,7 +29,7 @@ export function PeopleSection({ people, onChanged }: { people: Person[]; onChang
 function PersonRow({ person, onChanged }: { person: Person; onChanged: () => void }) {
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(person.name ?? '');
-  const label = person.isOwner ? 'You' : (person.name ?? `Voice ${person.id}`);
+  const label = `${speakerLabel(person)}${person.nameAuto ? ' (auto)' : ''}`;
 
   const save = async () => {
     await nameSpeaker(person.id, name);

@@ -19,6 +19,15 @@ class GenerateOptionsRecord : Record {
   @Field val maxTokens: Int? = null
   @Field val keepHistory: Boolean = false
   @Field val system: String? = null
+  @Field val scratch: Boolean = false
+}
+
+class LlmTuningRecord : Record {
+  @Field val threads: Int? = null
+  @Field val speculative: String? = null
+  @Field val visualTokenBudget: Int? = null
+  @Field val maxTokens: Int? = null
+  @Field val maxImageEdge: Int? = null
 }
 
 class SidekickNativeModule : Module() {
@@ -34,9 +43,18 @@ class SidekickNativeModule : Module() {
   override fun definition() = ModuleDefinition {
     Name("SidekickNative")
 
-    Events("onLlmText", "onWake", "onTranscript", "onQuestion", "onListenError")
+    Events("onLlmText", "onWake", "onTranscript", "onQuestion", "onListenError", "onBargeIn", "onVoiceIdle")
 
-    OnCreate { MicLoop.listener = { name, body -> sendEvent(name, body) } }
+    OnCreate {
+      MicLoop.listener = { name, body -> sendEvent(name, body) }
+      Voice.onIdle = { sendEvent("onVoiceIdle", emptyMap<String, Any?>()) }
+    }
+
+    // Entry points: phone assistant role, Quick Settings tile, home-screen widget (EntryPoints.kt).
+    Function("assistantIsDefault") { EntryPoints.isDefaultAssistant(context) }
+    Function("openAssistantSettings") { EntryPoints.openAssistantSettings(context) }
+    Function("requestAddTile") { EntryPoints.requestAddTile(context) }
+    Function("requestAddWidget") { EntryPoints.requestAddWidget(context) }
 
     // Country for laws that depend on location: SIM, then mobile network, then language setting.
     Function("countryCode") {
@@ -61,6 +79,7 @@ class SidekickNativeModule : Module() {
 
     AsyncFunction("llmLoad") { candidates: List<LlmCandidateRecord> ->
       val cands = candidates.map { LlmCandidate(it.modelPath, it.backend) }
+      Embedder.unloadIfLowRam(context)
       val r = llm.load(cands)
       llm.rememberLoad(context, cands, r)
       mapOf("modelPath" to r.modelPath, "backend" to r.backend, "initMs" to r.initMs, "failures" to r.failures)
@@ -75,7 +94,7 @@ class SidekickNativeModule : Module() {
       llm.generate(
         prompt,
         imagePath,
-        GenerateOptions(opts?.maxTokens, opts?.keepHistory ?: false, opts?.system),
+        GenerateOptions(opts?.maxTokens, opts?.keepHistory ?: false, opts?.system, opts?.scratch ?: false),
         onText = { sendEvent("onLlmText", mapOf("requestId" to requestId, "text" to it)) },
         onFinish = { s ->
           promise.resolve(
@@ -160,6 +179,11 @@ class SidekickNativeModule : Module() {
       MicLoop.wakePhrase = wakePhrase
       MicLoop.recordAmbient = recordAmbient
       MicLoop.jsAnswers = jsAnswers
+      appContext.reactContext?.let { ListenPrefs.save(it) }
+    }
+    Function("listenCommandsOnly") { on: Boolean ->
+      MicLoop.commandsOnly = on
+      appContext.reactContext?.let { ListenPrefs.save(it) }
     }
 
     // --- Places ---
@@ -190,6 +214,19 @@ class SidekickNativeModule : Module() {
 
     Function("setMicPaused") { paused: Boolean -> MicLoop.setPaused(paused) }
 
+    // --- Spoken answers (Pocket TTS, else the system voice); see Voice.kt ---
+    // Starts an answer; the id ties its sentences together so a stopped answer stays silent.
+    Function("voiceBegin") { Voice.begin() }
+
+    Function("voiceSay") { text: String, answer: Int -> Voice.say(context, text, answer) }
+
+    // The answer is complete: the follow-up window opens when the last sentence has been heard.
+    Function("voiceEnd") { answer: Int -> Voice.end(answer) }
+
+    Function("voiceStop") { Voice.stop() }
+
+    Function("voiceEngine") { Voice.engineName(context) }
+
     Function("pttStart") { MicLoop.startPtt(context) }
 
     // Transcribes what was said while the button was held, plus a voiceprint of the speaker.
@@ -203,12 +240,33 @@ class SidekickNativeModule : Module() {
     // Loads the speech models now (so the first push-to-talk isn't slow); throws if any are missing.
     AsyncFunction("speechWarmUp") { Speech.engine(context, MicLoop.wakeKeywords); true }
 
+    // Parakeet CPU threads (default 4); reloads speech-to-text if loaded. For the speed bench.
+    AsyncFunction("speechSetAsrThreads") { threads: Int -> SpeechEngine.configureAsrThreads(threads); true }
+
     // Memory search vectors. Runs off the JS thread; returns one vector per text.
     AsyncFunction("embed") { modelPath: String, texts: List<String>, dims: Int ->
       Embedder.embed(context, modelPath, texts, dims).map { v -> v.map { it.toDouble() } }
     }
 
+    // Photo vectors in the same space as "embed", so a text question finds a photo by meaning.
+    AsyncFunction("embedImages") { modelPath: String, photoPaths: List<String>, dims: Int ->
+      Embedder.embedImages(context, modelPath, photoPaths, dims).map { v -> v.map { it.toDouble() } }
+    }
+
     AsyncFunction("embedUnload") { Embedder.unload() }
+
+    // Text in a photo (PP-OCRv6 small), in reading order; ~sub-second, so it runs on every save.
+    AsyncFunction("ocrPhoto") { detPath: String, recPath: String, dictPath: String, photoPath: String ->
+      val t0 = android.os.SystemClock.elapsedRealtime()
+      val lines = Ocr.read(detPath, recPath, dictPath, photoPath)
+      mapOf(
+        "lines" to lines.map { it.text },
+        "scores" to lines.map { it.score.toDouble() },
+        "ms" to (android.os.SystemClock.elapsedRealtime() - t0).toDouble(),
+      )
+    }
+
+    AsyncFunction("ocrUnload") { Ocr.unload() }
 
     // --- Developer checks (speed-test screen) ---
     // Runs a 16 kHz mono 16-bit WAV through speech-to-text and the wake word spotter.
@@ -306,7 +364,22 @@ class SidekickNativeModule : Module() {
 
     Function("journalDrain") { Journal.drain(context) }
 
+    // Data source: other apps' notifications (NotificationCapture.kt). Off unless enabled.
+    Function("notificationAccessGranted") { NotificationCapture.accessGranted(context) }
+    Function("openNotificationAccessSettings") { NotificationCapture.openAccessSettings(context) }
+    Function("notificationsSetCapture") { enabled: Boolean -> NotificationCapture.setCapture(context, enabled) }
+    Function("notificationsDrain") { NotificationCapture.drain(context) }
+
     Function("llmIsLoaded") { llm.loaded != null }
+
+    // Speed knobs for the bench; see LlmTuning for when each takes effect.
+    Function("llmSetTuning") { t: LlmTuningRecord ->
+      llm.tuning = LlmTuning(t.threads, t.speculative, t.visualTokenBudget ?: DEFAULT_VISUAL_TOKENS, t.maxTokens, t.maxImageEdge ?: ModelImage.DEFAULT_MAX_EDGE)
+      llm.resetBase()
+    }
+
+    // Reads the system prompt in ahead of the first question (no-op result false if not loaded).
+    AsyncFunction("llmPrepare") { system: String? -> llm.prepare(system) }
 
     Function("llmCancel") { llm.cancel() }
 
@@ -314,6 +387,7 @@ class SidekickNativeModule : Module() {
 
     OnDestroy {
       MicLoop.listener = null
+      Voice.onIdle = null
       if (!ListenService.active) llm.unload()
     }
   }

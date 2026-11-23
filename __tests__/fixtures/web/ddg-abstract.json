@@ -1,0 +1,220 @@
+{
+  "Abstract": "The Eiffel Tower is a lattice tower on the Champ de Mars in Paris, France. It is named after the engineer Gustave Eiffel, whose company designed and built the tower from 1887 to 1889. Locally nicknamed \"La dame de fer\" for its use of wrought iron, it was constructed as the centrepiece of the 1889 World's Fair, and to crown the centennial anniversary of the French Revolution. Although initially criticised by some of France's leading artists and intellectuals for its design, it has since become a global cultural icon of France and one of the most recognisable structures in the world. The tower received 5,889,000 visitors in 2022. The Eiffel Tower is the most visited monument with an entrance fee in the world: 6.91 million people ascended it in 2015. It was designated a monument historique in 1964, and was named part of a UNESCO World Heritage Site in 1991. The tower is 330 metres tall, about the same height as an 81-storey building, and the tallest structure in Paris.",
+  "AbstractSource": "Wikipedia",
+  "AbstractText": "The Eiffel Tower is a lattice tower on the Champ de Mars in Paris, France. It is named after the engineer Gustave Eiffel, whose company designed and built the tower from 1887 to 1889. Locally nicknamed \"La dame de fer\" for its use of wrought iron, it was constructed as the centrepiece of the 1889 World's Fair, and to crown the centennial anniversary of the French Revolution. Although initially criticised by some of France's leading artists and intellectuals for its design, it has since become a global cultural icon of France and one of the most recognisable structures in the world. The tower received 5,889,000 visitors in 2022. The Eiffel Tower is the most visited monument with an entrance fee in the world: 6.91 million people ascended it in 2015. It was designated a monument historique in 1964, and was named part of a UNESCO World Heritage Site in 1991. The tower is 330 metres tall, about the same height as an 81-storey building, and the tallest structure in Paris.",
+  "AbstractURL": "https://en.wikipedia.org/wiki/Eiffel_Tower",
+  "Answer": "",
+  "AnswerType": "",
+  "Definition": "",
+  "DefinitionSource": "",
+  "DefinitionURL": "",
+  "Entity": "location",
+  "Heading": "Eiffel Tower",
+  "Image": "",
+  "ImageHeight": 0,
+  "ImageIsLogo": 0,
+  "ImageWidth": 0,
+  "Infobox": {
+    "content": [
+      {
+        "data_type": "twitter_profile",
+        "label": "Twitter profile",
+        "value": "LaTourEiffel",
+        "wiki_order": "102"
+      },
+      {
+        "data_type": "instagram_profile",
+        "label": "Instagram profile",
+        "value": "toureiffelofficielle",
+        "wiki_order": "103"
+      },
+      {
+        "data_type": "facebook_profile",
+        "label": "Facebook profile",
+        "value": "TourEiffel",
+        "wiki_order": "104"
+      },
+      {
+        "data_type": "youtube_channel",
+        "label": "Youtube channel",
+        "value": "UCMYYoL1lRGp9yWf4zJufVhA",
+        "wiki_order": "105"
+      },
+      {
+        "data_type": "coordinates",
+        "label": "Coordinates",
+        "value": {
+          "altitude": null,
+          "globe": "http://www.wikidata.org/entity/Q2",
+          "latitude": 48.858296,
+          "longitude": 2.294479,
+          "precision": 2.777777777778e-6
+        },
+        "wiki_order": "205"
+      },
+      {
+        "data_type": "instance",
+        "label": "Instance of",
+        "value": { "entity-type": "item", "id": "Q1440476", "numeric-id": 1440476 },
+        "wiki_order": "207"
+      },
+      {
+        "data_type": "instance_2",
+        "label": "Instance of",
+        "value": { "entity-type": "item", "id": "Q1440300", "numeric-id": 1440300 },
+        "wiki_order": "207"
+      },
+      {
+        "data_type": "instance_3",
+        "label": "Instance of",
+        "value": { "entity-type": "item", "id": "Q2319498", "numeric-id": 2319498 },
+        "wiki_order": "207"
+      },
+      {
+        "data_type": "wd_description",
+        "label": "Wikidata description",
+        "value": "tower located on the Champ de Mars in Paris, France",
+        "wiki_order": "210"
+      },
+      { "data_type": "wikidata_id", "label": "Wikidata id", "value": "Q243", "wiki_order": "211" },
+      {
+        "data_type": "wikidata_label",
+        "label": "Wikidata label",
+        "value": "Eiffel Tower",
+        "wiki_order": "212"
+      },
+      {
+        "data_type": "wikidata_aliases",
+        "label": "Wikidata aliases",
+        "value": ["Eiffel Tower", "the Eiffel Tower"],
+        "wiki_order": "213"
+      }
+    ]
+  },
+  "OfficialDomain": "toureiffel.paris",
+  "OfficialWebsite": "https://www.toureiffel.paris/en",
+  "Redirect": "",
+  "RelatedTopics": [
+    {
+      "FirstURL": "https://duckduckgo.com/c/Eiffel_Tower",
+      "Icon": { "Height": "", "URL": "", "Width": "" },
+      "Result": "<a href=\"https://duckduckgo.com/c/Eiffel_Tower\">Eiffel Tower Category</a>",
+      "Text": "Eiffel Tower Category"
+    },
+    {
+      "FirstURL": "https://duckduckgo.com/Lattice_tower",
+      "Icon": { "Height": "", "URL": "", "Width": "" },
+      "Result": "<a href=\"https://duckduckgo.com/Lattice_tower\">Lattice tower</a> - A lattice tower, or truss tower, is a freestanding vertical framework tower. This construction is widely used in transmission towers carrying high-voltage electric power lines, in radio masts and towers and in observation towers.",
+      "Text": "Lattice tower - A lattice tower, or truss tower, is a freestanding vertical framework tower. This construction is widely used in transmission towers carrying high-voltage electric power lines, in radio masts and towers and in observation towers."
+    },
+    {
+      "FirstURL": "https://duckduckgo.com/Eiffel_Tower_(Delaunay_series)",
+      "Icon": { "Height": "", "URL": "", "Width": "" },
+      "Result": "<a href=\"https://duckduckgo.com/Eiffel_Tower_(Delaunay_series)\">Eiffel Tower</a>, 1909\u20131928 painting series by <a href=\"https://duckduckgo.com/?q=Robert%20Delaunay\">Robert Delaunay</a>.",
+      "Text": "Eiffel Tower , 1909\u20131928 painting series by Robert Delaunay ."
+    },
+    {
+      "FirstURL": "https://duckduckgo.com/Panorama_of_the_Paris_Exhibition_No._3",
+      "Icon": { "Height": "", "URL": "", "Width": "" },
+      "Result": "<a href=\"https://duckduckgo.com/Panorama_of_the_Paris_Exhibition_No._3\">Panorama of the Paris Exhibition No. 3</a> (1900), silent film depicting Paris and the Eiffel Tower.",
+      "Text": "Panorama of the Paris Exhibition No. 3 (1900), silent film depicting Paris and the Eiffel Tower."
+    },
+    {
+      "FirstURL": "https://duckduckgo.com/c/Observation_towers_in_France",
+      "Icon": { "Height": "", "URL": "", "Width": "" },
+      "Result": "<a href=\"https://duckduckgo.com/c/Observation_towers_in_France\">Observation towers in France</a>",
+      "Text": "Observation towers in France"
+    },
+    {
+      "FirstURL": "https://duckduckgo.com/c/Architectural_controversies",
+      "Icon": { "Height": "", "URL": "", "Width": "" },
+      "Result": "<a href=\"https://duckduckgo.com/c/Architectural_controversies\">Architectural controversies</a>",
+      "Text": "Architectural controversies"
+    },
+    {
+      "FirstURL": "https://duckduckgo.com/c/Former_world's_tallest_buildings",
+      "Icon": { "Height": "", "URL": "", "Width": "" },
+      "Result": "<a href=\"https://duckduckgo.com/c/Former_world's_tallest_buildings\">Former world's tallest buildings</a>",
+      "Text": "Former world's tallest buildings"
+    },
+    {
+      "FirstURL": "https://duckduckgo.com/c/Olympic_volleyball_venues",
+      "Icon": { "Height": "", "URL": "", "Width": "" },
+      "Result": "<a href=\"https://duckduckgo.com/c/Olympic_volleyball_venues\">Olympic volleyball venues</a>",
+      "Text": "Olympic volleyball venues"
+    },
+    {
+      "FirstURL": "https://duckduckgo.com/c/Landmarks_in_France",
+      "Icon": { "Height": "", "URL": "", "Width": "" },
+      "Result": "<a href=\"https://duckduckgo.com/c/Landmarks_in_France\">Landmarks in France</a>",
+      "Text": "Landmarks in France"
+    },
+    {
+      "FirstURL": "https://duckduckgo.com/c/Buildings_and_structures_in_the_7th_arrondissement_of_Paris",
+      "Icon": { "Height": "", "URL": "", "Width": "" },
+      "Result": "<a href=\"https://duckduckgo.com/c/Buildings_and_structures_in_the_7th_arrondissement_of_Paris\">Buildings and structures in the 7th arrondissement of Paris</a>",
+      "Text": "Buildings and structures in the 7th arrondissement of Paris"
+    },
+    {
+      "FirstURL": "https://duckduckgo.com/c/Historic_Civil_Engineering_Landmarks",
+      "Icon": { "Height": "", "URL": "", "Width": "" },
+      "Result": "<a href=\"https://duckduckgo.com/c/Historic_Civil_Engineering_Landmarks\">Historic Civil Engineering Landmarks</a>",
+      "Text": "Historic Civil Engineering Landmarks"
+    }
+  ],
+  "Results": [
+    {
+      "FirstURL": "https://www.toureiffel.paris/en",
+      "Icon": { "Height": 16, "URL": "/i/toureiffel.paris.ico", "Width": 16 },
+      "Result": "<a href=\"https://www.toureiffel.paris/en\">Official site</a><a href=\"https://www.toureiffel.paris/en\"></a>",
+      "Text": "Official site"
+    }
+  ],
+  "Type": "A",
+  "meta": {
+    "attribution": null,
+    "blockgroup": null,
+    "created_date": null,
+    "description": "Wikipedia",
+    "designer": null,
+    "dev_date": null,
+    "dev_milestone": "live",
+    "developer": [{ "name": "DDG Team", "type": "ddg", "url": "http://www.duckduckhack.com" }],
+    "example_query": "nikola tesla",
+    "id": "wikipedia_fathead",
+    "is_stackexchange": null,
+    "js_callback_name": "wikipedia",
+    "live_date": null,
+    "maintainer": { "github": "duckduckgo" },
+    "name": "Wikipedia",
+    "perl_module": "DDG::Fathead::Wikipedia",
+    "producer": null,
+    "production_state": "online",
+    "repo": "fathead",
+    "signal_from": "wikipedia_fathead",
+    "src_domain": "en.wikipedia.org",
+    "src_id": 1,
+    "src_name": "Wikipedia",
+    "src_options": {
+      "directory": "",
+      "is_fanon": 0,
+      "is_mediawiki": 1,
+      "is_wikipedia": 1,
+      "language": "en",
+      "min_abstract_length": "20",
+      "skip_abstract": 0,
+      "skip_abstract_paren": 0,
+      "skip_end": "0",
+      "skip_icon": 0,
+      "skip_image_name": 0,
+      "skip_qr": "",
+      "source_skip": "",
+      "src_info": ""
+    },
+    "src_url": null,
+    "status": "live",
+    "tab": "About",
+    "topic": ["productivity"],
+    "unsafe": 0
+  }
+}

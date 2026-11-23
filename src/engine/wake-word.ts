@@ -100,3 +100,23 @@ export function wakeKeywordLine(phrase: string, vocab: Vocab): string | null {
 }
 
 export const DEFAULT_WAKE_PHRASE = 'Hey Sidekick';
+
+const GREETING = /^(?:hey|hi|ok|okay|hello)\s+(.+)$/i;
+
+/** "Hey Sidekick" also wakes on plain "Sidekick" (the greeting is optional). */
+export function wakeVariants(phrase: string): string[] {
+  const p = phrase.trim().replace(/\s+/g, ' ');
+  const m = GREETING.exec(p);
+  return m ? [p, m[1]] : [p];
+}
+
+/** Keyword-spotter lines for every variant, one per line (the spotter takes several). */
+export function wakeKeywordLines(phrase: string, vocab: Vocab): string | null {
+  const first = wakeKeywordLine(wakeVariants(phrase)[0], vocab);
+  if (!first) return null;
+  const rest = wakeVariants(phrase)
+    .slice(1)
+    .map((v) => wakeKeywordLine(v, vocab))
+    .filter((l): l is string => !!l);
+  return [first, ...rest].join('\n');
+}

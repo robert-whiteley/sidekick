@@ -6,7 +6,10 @@ import java.nio.ByteOrder
 
 object Wav {
   /** Reads a 16-bit PCM WAV as mono floats in [-1, 1], resampled to 16 kHz (developer checks only). */
-  fun read16kMono(f: File): FloatArray {
+  fun read16kMono(f: File): FloatArray = readMono(f).let { (x, rate) -> resample(x, rate) }
+
+  /** Reads a 16-bit PCM WAV as mono floats in [-1, 1] at its own rate: (samples, rate). */
+  fun readMono(f: File): Pair<FloatArray, Int> {
     val b = ByteBuffer.wrap(f.readBytes()).order(ByteOrder.LITTLE_ENDIAN)
     var pos = 12
     var channels = 1
@@ -21,7 +24,7 @@ object Wav {
       if (id == "data") {
         val frames = minOf(size, b.limit() - pos - 8) / 2 / channels
         val mono = FloatArray(frames) { b.getShort(pos + 8 + it * 2 * channels) / 32768f }
-        return resample(mono, rate)
+        return mono to rate
       }
       pos += 8 + size + (size and 1)
     }

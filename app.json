@@ -26,7 +26,12 @@
       },
       "predictiveBackGestureEnabled": false,
       "package": "app.ondevice.sidekick",
-      "allowBackup": false
+      "allowBackup": false,
+      "blockedPermissions": [
+        "android.permission.WRITE_CONTACTS",
+        "android.permission.WRITE_CALENDAR"
+      ],
+      "permissions": ["android.permission.SCHEDULE_EXACT_ALARM"]
     },
     "web": {
       "favicon": "./assets/favicon.png"
@@ -54,7 +59,20 @@
       ],
       "expo-secure-store",
       "./plugins/with-third-party-sqlite",
-      "expo-sharing"
+      "expo-sharing",
+      [
+        "expo-contacts",
+        {
+          "contactsPermission": "Sidekick reads your contacts to answer \"what's Sam's number\" and to name voices. Contacts stay on this phone."
+        }
+      ],
+      [
+        "expo-calendar",
+        {
+          "calendarPermission": "Sidekick reads your calendar so it can answer questions like \"when is my dentist\". Events stay on this phone."
+        }
+      ],
+      ["expo-notifications", { "enableRemoteNotifications": false }]
     ],
     "scheme": "sidekick",
     "experiments": {

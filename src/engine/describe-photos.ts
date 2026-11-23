@@ -1,26 +1,11 @@
-import * as Battery from 'expo-battery';
-
 import SidekickNative from '../../modules/sidekick-native';
 import { DESCRIBE_PROMPT, parseDescription, shouldDescribeNow } from '@/memory/photo-text';
 import { nextUndescribedPhoto, savePhotoDescription } from '@/memory/store';
+import { batteryState } from './battery';
 import { askLlm, cancelLlm } from './llm';
 
 let running: Promise<void> | null = null;
 let cancelled = false;
-
-async function batteryState() {
-  try {
-    const [state, level, low] = await Promise.all([
-      Battery.getBatteryStateAsync(),
-      Battery.getBatteryLevelAsync(),
-      Battery.isLowPowerModeEnabledAsync(),
-    ]);
-    const charging = state === Battery.BatteryState.CHARGING || state === Battery.BatteryState.FULL;
-    return { charging, batteryLevel: level, lowPowerMode: low };
-  } catch {
-    return { charging: false, batteryLevel: -1, lowPowerMode: false };
-  }
-}
 
 /**
  * Reads one saved photo (visible text + one-line scene) into memory, if the phone is idle, the

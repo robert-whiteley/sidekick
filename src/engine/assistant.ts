@@ -1,6 +1,7 @@
 import { askLlm } from './llm';
 import { SYSTEM_PROMPT } from './prompts';
 import type { Moment } from '@/memory/store';
+import { MEMORY_LIMIT, memoryContext, pickFacts } from './prompt-budget';
 import {
   rememberExchange,
   rememberPhotoQuestion,
@@ -9,43 +10,19 @@ import {
   searchMemory,
 } from '@/memory/store';
 import { asksAboutSomethingSeen } from '@/memory/search-logic';
+import { ocrPromptLine } from '@/memory/photo-text';
+import { photoTextOrNull } from './photo-ocr';
+import { answerLocally } from '@/memory/sources';
+import { asksAboutFollowups, followupContext } from '@/memory/followup-logic';
+import { listFollowups } from '@/memory/followups';
+import { personPromptContext } from '@/memory/people';
+import { askWithLookup, type WebSource } from '@/web/lookup';
 
-export { SYSTEM_PROMPT };
+export { SYSTEM_PROMPT, memoryContext };
 
 export const DEFAULT_PHOTO_QUESTION = 'What am I looking at?';
 
 const REMEMBER = /^(please )?remember(?: that)? (.+)$/i;
-
-function when(at: number): string {
-  const d = new Date(at);
-  return d.toLocaleString(undefined, {
-    weekday: 'short',
-    day: 'numeric',
-    month: 'short',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
-}
-
-function who(m: Moment): string {
-  if (m.kind === 'photo')
-    return m.withPeople?.length ? `photo, with ${m.withPeople.join(', ')}` : 'photo';
-  if (m.kind === 'answer') return 'asked Sidekick';
-  if (m.isOwner) return 'you';
-  return m.speakerName ?? 'someone';
-}
-
-/** Memory notes as compact lines for the prompt. */
-export function memoryContext(moments: Moment[], facts: string[]): string {
-  const lines = [
-    ...facts.map((f) => `- Saved fact: ${f}`),
-    ...moments.map(
-      (m) =>
-        `- [${when(m.at)}${m.place ? `, in ${m.place}` : ''}] (${who(m)}) ${m.text.replace(/\s+/g, ' ').slice(0, 300)}`,
-    ),
-  ];
-  return lines.length ? `Notes from the user's memory:\n${lines.join('\n')}\n\n` : '';
-}
 
 export type AnswerResult = {
   text: string;
@@ -53,6 +30,10 @@ export type AnswerResult = {
   sources: Moment[];
   ms: number;
   ttftMs: number;
+  /** Online lookup results the answer used (Settings > Online lookup; off by default). */
+  web?: WebSource[];
+  /** The search words sent, when a lookup ran (reused by the browser link). */
+  webQuery?: string;
 };
 
 /**
@@ -63,6 +44,8 @@ export async function answer(
   question: string,
   photoNow: string | null,
   onText: (full: string) => void,
+  /** keepHistory: a follow-up in a spoken conversation; the model keeps the earlier turns. */
+  opts?: { keepHistory?: boolean },
 ): Promise<AnswerResult> {
   const remember = REMEMBER.exec(question.trim());
   if (remember && !photoNow && !question.trim().endsWith('?')) {
@@ -72,16 +55,24 @@ export async function answer(
     return { text, usedPhoto: null, sources: [], ms: 0, ttftMs: 0 };
   }
 
+  // "What's Sam's number": straight from contacts (when on), no model needed.
+  const local = photoNow ? null : await answerLocally(question).catch(() => null);
+  if (local) {
+    onText(local);
+    return { text: local, usedPhoto: null, sources: [], ms: 0, ttftMs: 0 };
+  }
+
   let sources: Moment[] = [];
   let facts: string[] = [];
   try {
     [sources, facts] = await Promise.all([
-      searchMemory(question, photoNow ? 3 : 6),
+      // A few extra candidates so a remembered photo can still be found below.
+      searchMemory(question, photoNow ? MEMORY_LIMIT.photo : MEMORY_LIMIT.text + 2),
       savedFacts().then((f) =>
-        f
-          .filter((x) => x.status === 'saved')
-          .slice(0, 10)
-          .map((x) => x.text),
+        pickFacts(
+          f.filter((x) => x.status === 'saved').map((x) => x.text),
+          question,
+        ),
       ),
     ]);
   } catch (e) {
@@ -93,11 +84,38 @@ export async function answer(
     image = sources.find((m) => m.photoPath)?.photoPath ?? null;
   }
 
-  const prompt = `${memoryContext(sources, facts)}Question: ${question}`;
-  const { text, stats } = await askLlm(prompt, image, onText, { system: SYSTEM_PROMPT });
+  // Only the best few notes reach the model: each prompt token delays the first word.
+  sources = sources.slice(0, photoNow ? MEMORY_LIMIT.photo : MEMORY_LIMIT.text);
+  // "What do I need to do?": the approved follow-ups go first.
+  const agenda =
+    !photoNow && asksAboutFollowups(question)
+      ? followupContext(await listFollowups().catch(() => []), new Date())
+      : '';
+  // "What did I ask Sam to do?": the named person's notes, kept facts and requests.
+  const person = await personPromptContext(question).catch(() => '');
+  // The photo's exact text (OCR, ~1 s) helps the model read numbers and names right.
+  const seenText = ocrPromptLine(await photoTextOrNull(image));
+  // Online lookup (when on) sends only the question text; the prompt itself stays on the phone.
+  const { text, stats, web, webQuery } = await askWithLookup(
+    question,
+    !!image,
+    (webPart) =>
+      `${agenda}${person}${webPart}${memoryContext(sources, facts, sources.length, question)}${seenText}Question: ${question}`,
+    (prompt, t) =>
+      askLlm(prompt, image, t, { system: SYSTEM_PROMPT, keepHistory: opts?.keepHistory ?? false }),
+    onText,
+  );
 
   if (photoNow) await rememberPhotoQuestion(photoNow, question, text).catch(() => {});
   else await rememberExchange(question, text).catch(() => {});
 
-  return { text, usedPhoto: image, sources, ms: stats.totalMs, ttftMs: stats.ttftMs };
+  return {
+    text,
+    usedPhoto: image,
+    sources,
+    ms: stats.totalMs,
+    ttftMs: stats.ttftMs,
+    web,
+    webQuery,
+  };
 }

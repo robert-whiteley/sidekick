@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <string name="sidekick_tile_label">Ask Sidekick</string>
+  <string name="sidekick_widget_label">Sidekick</string>
+  <string name="sidekick_widget_description">Ask a question or capture a photo</string>
+  <string name="sidekick_widget_ask">Ask</string>
+  <string name="sidekick_widget_capture">Capture</string>
+</resources>

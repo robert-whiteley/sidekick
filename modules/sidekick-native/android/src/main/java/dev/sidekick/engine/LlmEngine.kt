@@ -13,6 +13,8 @@ import com.google.ai.edge.litertlm.ExperimentalApi
 import com.google.ai.edge.litertlm.ExperimentalFlags
 import com.google.ai.edge.litertlm.Message
 import com.google.ai.edge.litertlm.MessageCallback
+import com.google.ai.edge.litertlm.SpeculativeDecodingConfig
+import com.google.ai.edge.litertlm.SpeculativeDecodingMode
 import java.io.File
 
 /** One candidate way to run the model: a model file plus the hardware to run it on. */
@@ -20,7 +22,34 @@ data class LlmCandidate(val modelPath: String, val backend: String)
 
 data class LlmLoadResult(val modelPath: String, val backend: String, val initMs: Long, val failures: List<String>)
 
-data class GenerateOptions(val maxTokens: Int? = null, val keepHistory: Boolean = false, val system: String? = null)
+/** [scratch]: run in a separate throwaway conversation, leaving the chat and its history as they are. */
+data class GenerateOptions(
+  val maxTokens: Int? = null,
+  val keepHistory: Boolean = false,
+  val system: String? = null,
+  val scratch: Boolean = false,
+)
+
+/**
+ * Speed knobs a bench can try. Null means "library default". [threads], [speculative] and
+ * [maxTokens] apply on the next load; [visualTokenBudget] on the next conversation; [maxImageEdge]
+ * on the next photo.
+ */
+/** Image tokens per photo: on a Pixel 5, 140 answers in 18 s vs 28 s at the default and still reads sign text. */
+const val DEFAULT_VISUAL_TOKENS = 140
+
+data class LlmTuning(
+  /** CPU backend worker threads. */
+  val threads: Int? = null,
+  /** Speculative decoding (multi-token prediction): "off", "on" or "adaptive". */
+  val speculative: String? = null,
+  /** Image tokens per photo (Gemma 4 supports e.g. 70, 140, 280, 560, 1120); fewer = faster read. */
+  val visualTokenBudget: Int? = DEFAULT_VISUAL_TOKENS,
+  /** Context size (prompt + answer) the KV cache is sized for. */
+  val maxTokens: Int? = null,
+  /** Longest photo edge handed to the model, px. */
+  val maxImageEdge: Int = ModelImage.DEFAULT_MAX_EDGE,
+)
 
 data class LlmStats(
   val ttftMs: Double,
@@ -39,6 +68,12 @@ data class LlmStats(
 class LlmEngine(private val cacheDir: String, private val nativeLibDir: String) {
   private var engine: Engine? = null
   private var conversation: Conversation? = null
+  /** The last side task's conversation; closed at the next generate (not inside its own callback). */
+  private var scratch: Conversation? = null
+  /** A conversation with only the system prompt read in; fresh questions start from a clone of it. */
+  private var base: Conversation? = null
+  private var baseSystem: String? = null
+  @Volatile var tuning = LlmTuning()
   var loaded: LlmLoadResult? = null
     private set
 
@@ -59,7 +94,9 @@ class LlmEngine(private val cacheDir: String, private val nativeLibDir: String) 
             modelPath = c.modelPath,
             backend = backendFor(c.backend),
             visionBackend = visionBackendFor(c.backend),
+            maxNumTokens = tuning.maxTokens,
             cacheDir = cacheDir,
+            speculativeDecodingConfig = speculativeConfig(),
           )
         val e = Engine(config)
         e.initialize()
@@ -71,6 +108,7 @@ class LlmEngine(private val cacheDir: String, private val nativeLibDir: String) 
           e.close()
           throw t
         }
+        pruneModelCache(cacheDir, c.modelPath)
         engine = e
         val result = LlmLoadResult(c.modelPath, c.backend, (System.nanoTime() - start) / 1_000_000, failures)
         loaded = result
@@ -96,15 +134,24 @@ class LlmEngine(private val cacheDir: String, private val nativeLibDir: String) 
     onFail: (Throwable) -> Unit,
   ) {
     val e = engine ?: return onFail(IllegalStateException("Model not loaded"))
+    closeScratch()
     val conv =
-      conversation?.takeIf { opts.keepHistory }
-        ?: run {
-          conversation?.close()
-          val system = opts.system?.let { Contents.of(listOf(Content.Text(it))) }
-          e.createConversation(ConversationConfig(systemInstruction = system)).also { conversation = it }
+      try {
+        if (opts.scratch) {
+          freshConversation(e, opts.system).also { scratch = it }
+        } else {
+          conversation?.takeIf { opts.keepHistory }
+            ?: run {
+              conversation?.close()
+              conversation = null
+              freshConversation(e, opts.system).also { conversation = it }
+            }
         }
+      } catch (t: Throwable) {
+        return onFail(t)
+      }
     val parts = buildList {
-      if (imagePath != null) add(Content.ImageFile(ModelImage.prepare(imagePath)))
+      if (imagePath != null) add(Content.ImageFile(ModelImage.prepare(imagePath, tuning.maxImageEdge)))
       add(Content.Text(prompt))
     }
     val start = System.nanoTime()
@@ -140,14 +187,84 @@ class LlmEngine(private val cacheDir: String, private val nativeLibDir: String) 
     }
   }
 
+  /**
+   * Reads [system] into a base conversation now (e.g. at app start) so the first question skips it.
+   * Returns false if the model isn't loaded.
+   */
+  fun prepare(system: String?): Boolean {
+    val e = engine ?: return false
+    baseFor(e, system)
+    return true
+  }
+
+  /**
+   * A new conversation that already has [system] read in. Cloning the prefilled base skips
+   * re-reading the system prompt every question; if cloning fails, falls back to a plain new one.
+   */
+  private fun freshConversation(e: Engine, system: String?): Conversation {
+    try {
+      return baseFor(e, system).clone()
+    } catch (t: Throwable) {
+      Log.w(TAG, "conversation clone failed; starting fresh", t)
+    }
+    return e.createConversation(conversationConfig(system, prefill = false))
+  }
+
+  @Synchronized
+  private fun baseFor(e: Engine, system: String?): Conversation {
+    base?.takeIf { baseSystem == system && it.isAlive }?.let { return it }
+    base?.close()
+    base = null
+    ExperimentalFlags.visualTokenBudget = tuning.visualTokenBudget
+    return e.createConversation(conversationConfig(system, prefill = true)).also {
+      base = it
+      baseSystem = system
+    }
+  }
+
+  private fun conversationConfig(system: String?, prefill: Boolean) =
+    ConversationConfig(
+      systemInstruction = system?.let { Contents.of(listOf(Content.Text(it))) },
+      prefillPrefaceOnInit = prefill,
+    )
+
+  /** Drops the prefilled base so the next question rebuilds it with the current [tuning]. */
+  @Synchronized
+  fun resetBase() {
+    base?.close()
+    base = null
+    baseSystem = null
+  }
+
+  private fun speculativeConfig(): SpeculativeDecodingConfig? =
+    when (tuning.speculative) {
+      "on" -> SpeculativeDecodingConfig(SpeculativeDecodingMode.ON)
+      "adaptive" -> SpeculativeDecodingConfig(SpeculativeDecodingMode.ADAPTIVE)
+      "off" -> SpeculativeDecodingConfig(SpeculativeDecodingMode.OFF)
+      else -> null
+    }
+
+  private fun closeScratch() {
+    val s = scratch ?: return
+    scratch = null
+    try {
+      s.close()
+    } catch (t: Throwable) {
+      Log.w(TAG, "scratch conversation close failed", t)
+    }
+  }
+
   fun cancel() {
     conversation?.cancelProcess()
+    scratch?.cancelProcess()
   }
 
   @Synchronized
   fun unload() {
+    closeScratch()
     conversation?.close()
     conversation = null
+    resetBase()
     engine?.close()
     engine = null
     loaded = null
@@ -158,7 +275,7 @@ class LlmEngine(private val cacheDir: String, private val nativeLibDir: String) 
       "gpu" -> Backend.GPU()
       "npu" -> Backend.NPU(nativeLibraryDir = nativeLibDir)
       "tensor" -> Backend.GOOGLE_TENSOR()
-      else -> Backend.CPU()
+      else -> Backend.CPU(threadCount = tuning.threads)
     }
 
   // The vision encoder runs on the GPU when the main model does; otherwise CPU.
@@ -175,7 +292,23 @@ object Engines {
 
   @Synchronized
   fun llm(ctx: Context): LlmEngine =
-    llm ?: LlmEngine(ctx.cacheDir.absolutePath, ctx.applicationInfo.nativeLibraryDir).also { llm = it }
+    llm ?: LlmEngine(modelCacheDir(ctx), ctx.applicationInfo.nativeLibraryDir).also { llm = it }
+}
+
+/**
+ * Where LiteRT keeps its compiled-model caches (~1 GB for Gemma). Not [Context.getCacheDir]: Android
+ * purges that past a small quota, which forced a full recompile on the next load.
+ */
+fun modelCacheDir(ctx: Context): String =
+  File(ctx.noBackupFilesDir, "litert-cache").apply { mkdirs() }.absolutePath
+
+/** Deletes caches built for older copies of [modelPath] (LiteRT names them name_mtime_size…). */
+fun pruneModelCache(dir: String, modelPath: String) {
+  val model = File(modelPath)
+  val current = "${model.name}_${model.lastModified() / 1000}_"
+  File(dir).listFiles()?.forEach {
+    if (it.name.startsWith("${model.name}_") && !it.name.startsWith(current)) it.deleteRecursively()
+  }
 }
 
 private const val LAST_CANDIDATES = "llm.lastCandidates"
