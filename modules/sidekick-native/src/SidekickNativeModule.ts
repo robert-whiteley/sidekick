@@ -2,6 +2,7 @@ import { NativeModule, requireNativeModule } from 'expo';
 
 import type {
   DeviceInfo,
+  DeviceLocation,
   DownloadStatus,
   GenerateOptions,
   LlmCandidate,
@@ -27,6 +28,10 @@ declare class SidekickNativeModule extends NativeModule<SidekickNativeModuleEven
   downloadCancel(id: number): void;
   /** Checks the SHA-256 of the finished download and moves it into place; false if it doesn't match. */
   downloadFinish(destPath: string, sha256: string): Promise<boolean>;
+  /** Continues a failed download from its partial file with an HTTP Range request. */
+  downloadResume(url: string, destPath: string): Promise<boolean>;
+  /** Bytes in the partial file so far. */
+  downloadPartBytes(destPath: string): number;
   fileExists(path: string): boolean;
   readText(path: string): string | null;
   copyFile(src: string, dst: string): boolean;
@@ -36,6 +41,13 @@ declare class SidekickNativeModule extends NativeModule<SidekickNativeModuleEven
   /** Unpacks a verified .tar.bz2 into destDir and deletes the archive. */
   extractTarBz2(archive: string, destDir: string): Promise<boolean>;
   /** Wake word (sherpa token line + spoken phrase), whether to keep ambient transcripts, and whether JS answers questions. */
+  /** Freshest location ≤ 2 h old, or null (no permission / no fix). Also requests a new fix. */
+  lastLocation(): DeviceLocation | null;
+  hasLocationPermission(): boolean;
+  /** Auto-pause rules as JSON: { quietStart, quietEnd (minutes or -1), places: PausePlace[] }. */
+  listenPauseRules(json: string): void;
+  /** Why listening is auto-paused right now, or null. */
+  listenPauseReason(): string | null;
   listenConfigure(
     wakeKeywords: string,
     wakePhrase: string,
@@ -53,6 +65,8 @@ declare class SidekickNativeModule extends NativeModule<SidekickNativeModuleEven
   speechWarmUp(): Promise<boolean>;
   /** Everything heard since the last call (JSON lines), cleared on read. */
   journalDrain(): string[];
+  /** Two-letter country (SIM, network, then language setting), or null. */
+  countryCode(): string | null;
   /** Developer check: transcribe a 16 kHz WAV and test it for the wake word. */
   debugTranscribe(wavPath: string): Promise<{ text: string; wake: boolean }>;
   /** Developer check: speak text with the system voice into a WAV file. */

@@ -28,7 +28,8 @@ function when(at: number): string {
 }
 
 function who(m: Moment): string {
-  if (m.kind === 'photo') return 'photo';
+  if (m.kind === 'photo')
+    return m.withPeople?.length ? `photo, with ${m.withPeople.join(', ')}` : 'photo';
   if (m.kind === 'answer') return 'asked Sidekick';
   if (m.isOwner) return 'you';
   return m.speakerName ?? 'someone';
@@ -39,7 +40,8 @@ export function memoryContext(moments: Moment[], facts: string[]): string {
   const lines = [
     ...facts.map((f) => `- Saved fact: ${f}`),
     ...moments.map(
-      (m) => `- [${when(m.at)}] (${who(m)}) ${m.text.replace(/\s+/g, ' ').slice(0, 300)}`,
+      (m) =>
+        `- [${when(m.at)}${m.place ? `, in ${m.place}` : ''}] (${who(m)}) ${m.text.replace(/\s+/g, ' ').slice(0, 300)}`,
     ),
   ];
   return lines.length ? `Notes from the user's memory:\n${lines.join('\n')}\n\n` : '';

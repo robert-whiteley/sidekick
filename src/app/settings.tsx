@@ -1,7 +1,8 @@
-import { Link } from 'expo-router';
-import { useCallback, useEffect, useState } from 'react';
+import { Link, useFocusEffect } from 'expo-router';
+import { useCallback, useState } from 'react';
 import { ScrollView, StyleSheet } from 'react-native';
 
+import { AutoPauseSection } from '@/features/settings/AutoPauseSection';
 import { ChipSection } from '@/features/settings/ChipSection';
 import { DataSection } from '@/features/settings/DataSection';
 import { type Fact, FactsSection } from '@/features/settings/FactsSection';
@@ -33,17 +34,19 @@ export default function SettingsScreen() {
     }
   }, [limit]);
 
-  useEffect(() => {
-    // Loading from the database is async; state is set when the queries resolve.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    void reload();
-  }, [reload]);
+  // Reload whenever the screen is shown again (e.g. back from a person's page).
+  useFocusEffect(
+    useCallback(() => {
+      void reload();
+    }, [reload]),
+  );
 
   const changed = () => void reload();
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
       <ListeningSection />
+      <AutoPauseSection />
       <RetentionSection onChanged={changed} />
       <PeopleSection people={people} onChanged={changed} />
       <FactsSection facts={facts} onChanged={changed} />

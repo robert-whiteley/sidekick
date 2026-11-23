@@ -38,6 +38,14 @@ class SidekickNativeModule : Module() {
 
     OnCreate { MicLoop.listener = { name, body -> sendEvent(name, body) } }
 
+    // Country for laws that depend on location: SIM, then mobile network, then language setting.
+    Function("countryCode") {
+      val tm = context.getSystemService(android.telephony.TelephonyManager::class.java)
+      listOf(tm?.simCountryIso, tm?.networkCountryIso, java.util.Locale.getDefault().country)
+        .firstOrNull { !it.isNullOrBlank() }
+        ?.uppercase()
+    }
+
     Function("getDeviceInfo") {
       val mem = ActivityManager.MemoryInfo()
       (context.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager).getMemoryInfo(mem)
@@ -103,6 +111,14 @@ class SidekickNativeModule : Module() {
     // Hashing GBs takes seconds, so it runs off the JS thread.
     AsyncFunction("downloadFinish") { destPath: String, sha256: String -> downloads.finish(destPath, sha256) }
 
+    // Continues a failed download from its partial file (HTTP Range); blocking, off the UI thread.
+    AsyncFunction("downloadResume") { url: String, destPath: String ->
+      downloads.resume(url, destPath)
+      true
+    }
+
+    Function("downloadPartBytes") { destPath: String -> downloads.partBytes(destPath).toDouble() }
+
     Function("fileExists") { path: String -> java.io.File(path).isFile }
 
     Function("readBase64") { path: String ->
@@ -145,6 +161,26 @@ class SidekickNativeModule : Module() {
       MicLoop.recordAmbient = recordAmbient
       MicLoop.jsAnswers = jsAnswers
     }
+
+    // --- Places ---
+    // Freshest known location (≤ 2 h old) or null; also requests a new fix for next time.
+    Function("lastLocation") {
+      Places.current(context)?.let {
+        mapOf(
+          "lat" to it.latitude,
+          "lon" to it.longitude,
+          "accuracyM" to it.accuracy.toDouble(),
+          "at" to it.time.toDouble(),
+        )
+      }
+    }
+
+    Function("hasLocationPermission") { Places.hasPermission(context) }
+
+    // Quiet hours and paused places for auto-pause (JSON, see Places.setRules).
+    Function("listenPauseRules") { json: String -> Places.setRules(json) }
+
+    Function("listenPauseReason") { MicLoop.pauseReason }
 
     Function("listenStart") { ListenService.startListening(context) }
 

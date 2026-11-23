@@ -47,6 +47,9 @@ class ListenService : Service() {
         )
       }
     MicLoop.nativeAnswerer = ::answer
+    MicLoop.onPauseChange = { reason ->
+      getSystemService(NotificationManager::class.java)?.notify(NOTIFICATION_ID, notification(reason))
+    }
   }
 
   override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -54,12 +57,15 @@ class ListenService : Service() {
       stopListening(this)
       return START_NOT_STICKY
     }
-    ServiceCompat.startForeground(
-      this,
-      NOTIFICATION_ID,
-      notification(),
-      if (Build.VERSION.SDK_INT >= 30) ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE else 0,
-    )
+    // Location type only with permission: declaring it without permission crashes the service.
+    val withLocation = Places.hasPermission(this)
+    val type =
+      if (Build.VERSION.SDK_INT < 30) 0
+      else if (withLocation)
+        ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE or ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION
+      else ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
+    ServiceCompat.startForeground(this, NOTIFICATION_ID, notification(MicLoop.pauseReason), type)
+    if (withLocation) Places.startTracking(this)
     MicLoop.startAmbient(this)
     return START_STICKY
   }
@@ -67,6 +73,8 @@ class ListenService : Service() {
   override fun onDestroy() {
     MicLoop.stopAmbient()
     MicLoop.nativeAnswerer = null
+    MicLoop.onPauseChange = null
+    Places.stopTracking(this)
     tts?.shutdown()
     super.onDestroy()
   }
@@ -91,11 +99,13 @@ class ListenService : Service() {
         val answer = sb.toString().trim()
         Journal.append(
           this,
-          org.json.JSONObject()
-            .put("kind", "answer")
-            .put("at", System.currentTimeMillis())
-            .put("text", answer)
-            .put("question", question),
+          Places.tag(
+            org.json.JSONObject()
+              .put("kind", "answer")
+              .put("at", System.currentTimeMillis())
+              .put("text", answer)
+              .put("question", question)
+          ),
         )
         speak(answer)
       },
@@ -116,7 +126,7 @@ class ListenService : Service() {
     t.speak(clean, TextToSpeech.QUEUE_FLUSH, null, LAST)
   }
 
-  private fun notification(): Notification {
+  private fun notification(pauseReason: String?): Notification {
     val nm = getSystemService(NotificationManager::class.java)
     if (Build.VERSION.SDK_INT >= 26 && nm.getNotificationChannel(CHANNEL) == null) {
       nm.createNotificationChannel(
@@ -141,8 +151,11 @@ class ListenService : Service() {
       )
     return NotificationCompat.Builder(this, CHANNEL)
       .setSmallIcon(android.R.drawable.ic_btn_speak_now)
-      .setContentTitle("Sidekick is listening")
-      .setContentText("Say \"${MicLoop.wakePhrase}\". Everything stays on this phone.")
+      .setContentTitle(if (pauseReason == null) "Sidekick is listening" else "Sidekick is paused ($pauseReason)")
+      .setContentText(
+        if (pauseReason == null) "Say \"${MicLoop.wakePhrase}\". Everything stays on this phone."
+        else "Not listening or keeping anything until this ends. Hold the mic button to ask."
+      )
       .setOngoing(true)
       .setContentIntent(open)
       .addAction(0, "Stop", stop)

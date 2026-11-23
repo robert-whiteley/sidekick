@@ -1,6 +1,8 @@
 import { isAgreement, isConsentQuestion, keepOtherSpeech } from '../src/memory/consent';
 import { addToCentroid, cosine, matchSpeaker } from '../src/memory/voices';
 
+import { consentNeeded, lawRequiresConsent } from '@/memory/consent-region';
+
 test('voices match by cosine similarity', () => {
   const owner = { id: 1, centroid: [1, 0, 0], count: 5, isOwner: true };
   const sam = { id: 2, centroid: [0, 1, 0], count: 2, isOwner: false };
@@ -20,4 +22,15 @@ test('consent phrases', () => {
   expect(isAgreement("No, I'd rather you didn't")).toBe(false);
   expect(keepOtherSpeech({ consentMode: true, speakerConsented: false })).toBe(false);
   expect(keepOtherSpeech({ consentMode: false, speakerConsented: false })).toBe(true);
+});
+
+test('automatic consent follows where the phone is', () => {
+  expect(lawRequiresConsent({ country: 'GB', admin1: null })).toBe(false);
+  expect(lawRequiresConsent({ country: 'DE', admin1: null })).toBe(true);
+  expect(lawRequiresConsent({ country: 'US', admin1: 'CA' })).toBe(true);
+  expect(lawRequiresConsent({ country: 'US', admin1: 'NY' })).toBe(false);
+  expect(lawRequiresConsent({ country: 'US', admin1: null })).toBe(true);
+  expect(lawRequiresConsent({ country: null, admin1: null })).toBe(true);
+  expect(consentNeeded('off', { country: 'DE', admin1: null })).toBe(false);
+  expect(consentNeeded('on', { country: 'GB', admin1: null })).toBe(true);
 });

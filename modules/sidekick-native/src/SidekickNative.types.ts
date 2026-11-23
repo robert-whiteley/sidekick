@@ -43,19 +43,28 @@ export type SidekickNativeModuleEvents = {
   onTranscript: (event: { kind: 'speech' | 'question'; text: string; at: number }) => void;
   onQuestion: (event: { text: string }) => void;
   onListenError: (event: { message: string }) => void;
+  /** Auto-pause began (reason, e.g. "quiet hours", "at Work") or ended (null). */
+  onListenPause: (event: { reason: string | null }) => void;
 };
 
 /** One line of the native journal (see Journal in MicLoop.kt). */
-export type JournalEntry =
-  | {
-      kind: 'speech' | 'question';
-      at: number;
-      durationMs: number;
-      text: string;
-      owner: boolean;
-      voice: number[] | null;
-    }
-  | { kind: 'answer'; at: number; text: string; question: string };
+/** Where the phone was, when known (location permission granted and a fix ≤ 2 h old). */
+export type JournalPlace = { lat?: number; lon?: number };
+
+export type JournalEntry = JournalPlace &
+  (
+    | {
+        kind: 'speech' | 'question';
+        at: number;
+        durationMs: number;
+        text: string;
+        owner: boolean;
+        voice: number[] | null;
+      }
+    | { kind: 'answer'; at: number; text: string; question: string }
+  );
+
+export type DeviceLocation = { lat: number; lon: number; accuracyM: number; at: number };
 
 export type DownloadStatus = {
   status: 'pending' | 'running' | 'paused' | 'done' | 'failed';

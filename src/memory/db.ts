@@ -63,13 +63,63 @@ const SCHEMA = [
      status TEXT NOT NULL CHECK (status IN ('saved', 'suggested')),
      at INTEGER NOT NULL
    )`,
+  // Who was around when a photo was captured (voices heard in the minutes before).
+  `CREATE TABLE IF NOT EXISTS moment_people (
+     moment_id INTEGER NOT NULL REFERENCES moments(id) ON DELETE CASCADE,
+     speaker_id INTEGER NOT NULL REFERENCES speakers(id) ON DELETE CASCADE,
+     PRIMARY KEY (moment_id, speaker_id)
+   )`,
+  // Photos whose visible text + scene have been read into the moment text (once each).
+  `CREATE TABLE IF NOT EXISTS photo_descriptions (
+     moment_id INTEGER PRIMARY KEY REFERENCES moments(id) ON DELETE CASCADE,
+     at INTEGER NOT NULL
+   )`,
 ];
+
+/**
+ * Columns added after the first release. Each is added once if missing (idempotent), so any
+ * feature can append here without a version number.
+ */
+export const MIGRATIONS: { table: string; column: string; ddl: string }[] = [
+  {
+    table: 'speakers',
+    column: 'suggested_name',
+    ddl: 'ALTER TABLE speakers ADD COLUMN suggested_name TEXT',
+  },
+  {
+    table: 'speakers',
+    column: 'suggested_count',
+    ddl: 'ALTER TABLE speakers ADD COLUMN suggested_count INTEGER NOT NULL DEFAULT 0',
+  },
+  {
+    table: 'speakers',
+    column: 'dismissed_names',
+    ddl: "ALTER TABLE speakers ADD COLUMN dismissed_names TEXT NOT NULL DEFAULT ''",
+  },
+  {
+    table: 'moments',
+    column: 'facts_scanned',
+    ddl: 'ALTER TABLE moments ADD COLUMN facts_scanned INTEGER NOT NULL DEFAULT 0',
+  },
+  // Where it happened (when location is allowed): coordinates and offline place name.
+  { table: 'moments', column: 'lat', ddl: 'ALTER TABLE moments ADD COLUMN lat REAL' },
+  { table: 'moments', column: 'lon', ddl: 'ALTER TABLE moments ADD COLUMN lon REAL' },
+  { table: 'moments', column: 'place', ddl: 'ALTER TABLE moments ADD COLUMN place TEXT' },
+];
+
+function migrate(d: DB) {
+  for (const m of MIGRATIONS) {
+    const cols = d.executeSync(`PRAGMA table_info(${m.table})`).rows.map((r) => r.name);
+    if (!cols.includes(m.column)) d.executeSync(m.ddl);
+  }
+}
 
 export async function getDb(): Promise<DB> {
   if (db) return db;
   const d = open({ name: 'memory.db', encryptionKey: await dbKey() });
   d.executeSync('PRAGMA foreign_keys = ON');
   for (const sql of SCHEMA) d.executeSync(sql);
+  migrate(d);
   db = d;
   return d;
 }

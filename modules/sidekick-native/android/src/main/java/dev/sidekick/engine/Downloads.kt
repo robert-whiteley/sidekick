@@ -14,6 +14,8 @@ class Downloads(private val context: Context) {
   private val dm = context.getSystemService(Context.DOWNLOAD_SERVICE) as DownloadManager
 
   fun start(url: String, destPath: String, title: String, wifiOnly: Boolean): Long {
+    // The app may have been closed mid-download: keep following that job instead of restarting.
+    existing(destPath)?.let { return it }
     val dest = File(destPath)
     dest.parentFile?.mkdirs()
     File("$destPath.part").delete()
@@ -48,6 +50,71 @@ class Downloads(private val context: Context) {
       )
     }
   }
+
+  /** A queued, running, paused or finished job already writing to [destPath], if any. */
+  private fun existing(destPath: String): Long? {
+    val want = Uri.fromFile(File("$destPath.part")).toString()
+    val q =
+      DownloadManager.Query()
+        .setFilterByStatus(
+          DownloadManager.STATUS_PENDING or DownloadManager.STATUS_RUNNING or
+            DownloadManager.STATUS_PAUSED or DownloadManager.STATUS_SUCCESSFUL
+        )
+    dm.query(q).use { c ->
+      while (c.moveToNext()) {
+        val local = c.getString(c.getColumnIndexOrThrow(DownloadManager.COLUMN_LOCAL_URI))
+        val hint = runCatching { c.getString(c.getColumnIndexOrThrow("hint")) }.getOrNull()
+        if (local == want || hint == want) {
+          val id = c.getLong(c.getColumnIndexOrThrow(DownloadManager.COLUMN_ID))
+          val done = c.getInt(c.getColumnIndexOrThrow(DownloadManager.COLUMN_STATUS)) ==
+            DownloadManager.STATUS_SUCCESSFUL
+          if (!done || File("$destPath.part").exists()) return id
+        }
+      }
+    }
+    return null
+  }
+
+  /**
+   * Fallback when the system download gives up: continues the ".part" file from where it stopped
+   * with an HTTP Range request (or starts over if the server ignores Range). Blocking.
+   */
+  fun resume(url: String, destPath: String) {
+    val part = File("$destPath.part")
+    part.parentFile?.mkdirs()
+    var link = url
+    repeat(5) {
+      val have = if (part.exists()) part.length() else 0L
+      val conn = java.net.URL(link).openConnection() as java.net.HttpURLConnection
+      conn.instanceFollowRedirects = false
+      conn.connectTimeout = 20_000
+      conn.readTimeout = 60_000
+      if (have > 0) conn.setRequestProperty("Range", "bytes=$have-")
+      try {
+        when (val code = conn.responseCode) {
+          in 300..399 -> {
+            link = java.net.URL(java.net.URL(link), conn.getHeaderField("Location")).toString()
+            return@repeat
+          }
+          206, 200 -> {
+            val append = code == 206
+            conn.inputStream.use { input ->
+              java.io.FileOutputStream(part, append).use { out -> input.copyTo(out, 1 shl 20) }
+            }
+            return
+          }
+          416 -> return // already complete; the SHA-256 check decides
+          else -> error("HTTP $code")
+        }
+      } finally {
+        conn.disconnect()
+      }
+    }
+    error("Too many redirects")
+  }
+
+  /** Bytes in the ".part" file so far (progress while resuming). */
+  fun partBytes(destPath: String): Long = File("$destPath.part").let { if (it.exists()) it.length() else 0L }
 
   fun cancel(id: Long) {
     dm.remove(id)

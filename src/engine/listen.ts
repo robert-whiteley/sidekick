@@ -5,6 +5,7 @@ import SidekickNative from '../../modules/sidekick-native';
 import { isDownloaded } from './downloads';
 import { MODEL_FILES, SPEECH_FILES } from './models';
 import { modelsDir } from './paths';
+import { askLocationPermission, pushPauseRules } from './places';
 import { SYSTEM_PROMPT } from './prompts';
 import { getSettings } from './settings';
 import { DEFAULT_WAKE_PHRASE, parseSentencepiece, wakeKeywordLine } from './wake-word';
@@ -43,6 +44,7 @@ export function configureListening() {
   // The background service answers with the same instructions as the app.
   SidekickNative.kvSet('assistant.system', SYSTEM_PROMPT);
   SidekickNative.listenConfigure(line, phrase, s.recordConversations, true);
+  pushPauseRules();
 }
 
 export async function askMicPermission(): Promise<boolean> {
@@ -51,6 +53,8 @@ export async function askMicPermission(): Promise<boolean> {
   if (Platform.OS === 'android' && Platform.Version >= 33) {
     await PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS);
   }
+  // Optional: place names on memories and "pause here". Listening works without it.
+  await askLocationPermission().catch(() => false);
   return true;
 }
 
