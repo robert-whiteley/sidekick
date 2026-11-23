@@ -1,28 +1,60 @@
 import { Link } from 'expo-router';
-import { useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text } from 'react-native';
+import { useCallback, useEffect, useState } from 'react';
+import { ScrollView, StyleSheet } from 'react-native';
 
-import { resetBackendChoice, savedBackend, unloadLlm } from '@/engine/llm';
+import { ChipSection } from '@/features/settings/ChipSection';
+import { DataSection } from '@/features/settings/DataSection';
+import { type Fact, FactsSection } from '@/features/settings/FactsSection';
+import { ListeningSection } from '@/features/settings/ListeningSection';
+import { MemorySection } from '@/features/settings/MemorySection';
+import { PeopleSection, type Person } from '@/features/settings/PeopleSection';
+import { RetentionSection } from '@/features/settings/RetentionSection';
+import { ACCENT } from '@/features/settings/ui';
+import { listSpeakers, type Moment, recentMoments, savedFacts } from '@/memory/store';
+
+const PAGE = 50;
 
 export default function SettingsScreen() {
-  const [backend, setBackend] = useState(savedBackend());
+  const [people, setPeople] = useState<Person[]>([]);
+  const [facts, setFacts] = useState<Fact[]>([]);
+  const [moments, setMoments] = useState<Moment[]>([]);
+  const [limit, setLimit] = useState(PAGE);
+  const [hasMore, setHasMore] = useState(false);
+
+  const reload = useCallback(async () => {
+    try {
+      const [p, f, m] = await Promise.all([listSpeakers(), savedFacts(), recentMoments(limit + 1)]);
+      setPeople(p);
+      setFacts(f);
+      setHasMore(m.length > limit);
+      setMoments(m.slice(0, limit));
+    } catch (e) {
+      console.log(`[settings] memory unavailable: ${String(e)}`);
+    }
+  }, [limit]);
+
+  useEffect(() => {
+    // Loading from the database is async; state is set when the queries resolve.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void reload();
+  }, [reload]);
+
+  const changed = () => void reload();
+
   return (
     <ScrollView contentContainerStyle={styles.container}>
-      <Text style={styles.h}>AI chip</Text>
-      <Text style={styles.body}>
-        Sidekick times each chip on this phone once and uses the fastest:{' '}
-        {backend ? backend.toUpperCase() : 'not measured yet'}.
-      </Text>
-      <Pressable
-        style={styles.button}
-        onPress={async () => {
-          resetBackendChoice();
-          await unloadLlm();
-          setBackend(null);
-        }}
-      >
-        <Text style={styles.buttonText}>Measure again on next question</Text>
-      </Pressable>
+      <ListeningSection />
+      <RetentionSection onChanged={changed} />
+      <PeopleSection people={people} onChanged={changed} />
+      <FactsSection facts={facts} onChanged={changed} />
+      <MemorySection
+        moments={moments}
+        hasMore={hasMore}
+        onMore={() => setLimit((l) => l + PAGE)}
+        onChanged={changed}
+      />
+      <DataSection onChanged={changed} />
+      <ChipSection />
       <Link href="/bench" style={styles.link}>
         Speed test (developer)
       </Link>
@@ -31,11 +63,6 @@ export default function SettingsScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { padding: 20, gap: 12 },
-  title: { fontSize: 26, fontWeight: '700' },
-  h: { fontSize: 18, fontWeight: '600', marginTop: 12 },
-  body: { fontSize: 16, lineHeight: 22 },
-  button: { backgroundColor: '#f2f2f5', padding: 12, borderRadius: 12 },
-  buttonText: { fontSize: 16, color: '#2f6fed' },
-  link: { fontSize: 16, color: '#2f6fed', marginTop: 12 },
+  container: { padding: 20, gap: 12, paddingBottom: 48 },
+  link: { fontSize: 16, color: ACCENT, marginTop: 12 },
 });
