@@ -18,6 +18,32 @@ jest.mock('@/memory/store', () => ({
   recentMoments: async () => [],
   applyRetention: async () => {},
 }));
+jest.mock('@/engine/followup-notify', () => ({
+  addToCalendar: jest.fn(),
+  allowExactReminders: async () => true,
+  askNotificationPermission: async () => true,
+  exactRemindersAllowed: async () => true,
+  syncFollowupNotifications: async () => {},
+}));
+jest.mock('@/memory/followups', () => ({
+  listFollowups: async () => [
+    {
+      id: 1,
+      kind: 'todo',
+      title: 'Buy milk',
+      dueAt: null,
+      allDay: false,
+      whenText: '',
+      status: 'suggested',
+      createdAt: 0,
+      sourceMomentId: null,
+    },
+  ],
+  onFollowupsChange: () => () => {},
+  updateFollowup: jest.fn(),
+  dismissFollowup: jest.fn(),
+  deleteFollowup: jest.fn(),
+}));
 jest.mock('../modules/sidekick-native', () => ({
   __esModule: true,
   default: {
@@ -36,4 +62,6 @@ test('settings shows sections and loaded memory', async () => {
   expect(await screen.findByText('You')).toBeTruthy();
   expect(await screen.findByText('my locker is 42')).toBeTruthy();
   expect(screen.getByText('Delete everything')).toBeTruthy();
+  expect(await screen.findByText('To-do: Buy milk')).toBeTruthy();
+  expect(screen.getByText('Daily summary')).toBeTruthy();
 });

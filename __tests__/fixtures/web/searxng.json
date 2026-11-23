@@ -1,0 +1,25 @@
+{
+  "query": "rust programming language",
+  "number_of_results": 0,
+  "results": [
+    {
+      "url": "https://www.rust-lang.org/",
+      "title": "Rust Programming Language",
+      "content": "A language empowering everyone to build reliable and efficient software.",
+      "engine": "duckduckgo",
+      "score": 3.0
+    },
+    { "url": "javascript:alert(1)", "title": "Bad", "content": "should be skipped" },
+    {
+      "url": "https://en.wikipedia.org/wiki/Rust_(programming_language)",
+      "title": "Rust (programming language) - Wikipedia",
+      "content": "Rust is a general-purpose programming language emphasizing performance, type safety, and concurrency.",
+      "engine": "wikipedia"
+    }
+  ],
+  "answers": [],
+  "corrections": [],
+  "infoboxes": [],
+  "suggestions": [],
+  "unresponsive_engines": []
+}

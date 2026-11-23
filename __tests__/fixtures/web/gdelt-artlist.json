@@ -1,0 +1,84 @@
+{
+  "articles": [
+    {
+      "url": "https://www.theadvocate.com.au/story/9396884/all-is-not-lost-turkey-insists-despite-cop31-letdown/",
+      "url_mobile": "",
+      "title": "All is not lost , Turkey insists , despite COP31 letdown",
+      "seendate": "20261123T213000Z",
+      "socialimage": "https://www.theadvocate.com.au/images/transform/v1/crop/frm/silverstone-feed-data/1373200b-5c76-4821-9d13-fa57ddf3a718.jpg/r0_90_800_510_w1200_h630_fmax.jpg",
+      "domain": "theadvocate.com.au",
+      "language": "English",
+      "sourcecountry": "Australia"
+    },
+    {
+      "url": "https://www.dailyadvertiser.com.au/story/9396884/all-is-not-lost-turkey-insists-despite-cop31-letdown/",
+      "url_mobile": "",
+      "title": "All is not lost , Turkey insists , despite COP31 letdown",
+      "seendate": "20261123T213000Z",
+      "socialimage": "https://www.dailyadvertiser.com.au/images/transform/v1/crop/frm/silverstone-feed-data/1373200b-5c76-4821-9d13-fa57ddf3a718.jpg/r0_90_800_510_w1200_h630_fmax.jpg",
+      "domain": "dailyadvertiser.com.au",
+      "language": "English",
+      "sourcecountry": "Australia"
+    },
+    {
+      "url": "https://www.sconeadvocate.com.au/story/9396884/all-is-not-lost-turkey-insists-despite-cop31-letdown/",
+      "url_mobile": "",
+      "title": "All is not lost , Turkey insists , despite COP31 letdown",
+      "seendate": "20261123T213000Z",
+      "socialimage": "https://www.sconeadvocate.com.au/images/transform/v1/crop/frm/silverstone-feed-data/1373200b-5c76-4821-9d13-fa57ddf3a718.jpg/r0_90_800_510_w1200_h630_fmax.jpg",
+      "domain": "sconeadvocate.com.au",
+      "language": "English",
+      "sourcecountry": "Australia"
+    },
+    {
+      "url": "https://www.newcastleherald.com.au/story/9396884/all-is-not-lost-turkey-insists-despite-cop31-letdown/",
+      "url_mobile": "",
+      "title": "All is not lost , Turkey insists , despite COP31 letdown",
+      "seendate": "20261123T213000Z",
+      "socialimage": "https://www.newcastleherald.com.au/images/transform/v1/crop/frm/silverstone-feed-data/1373200b-5c76-4821-9d13-fa57ddf3a718.jpg/r0_90_800_510_w1200_h630_fmax.jpg",
+      "domain": "newcastleherald.com.au",
+      "language": "English",
+      "sourcecountry": ""
+    },
+    {
+      "url": "https://www.channelnewsasia.com/world/cop31-climate-change-talks-collapse-deal-6572946",
+      "url_mobile": "",
+      "title": "Climate talks collapse in chaotic end to COP31",
+      "seendate": "20261123T033000Z",
+      "socialimage": "https://dam.mediacorp.sg/image/upload/s--T5Y5ygxZ--/c_crop,h_449,w_799,x_1,y_20/c_fill,g_auto,h_338,w_600/fl_relative,g_south_east,l_mediacorp:cna:watermark:2024-04:reuters_1,w_0.1/f_auto,q_auto/v1/one-cms/core/2026-11-22T125020Z_1_LYNXNPEMAL081_RTROPTP_3_CLIMATE-COP31.JPG?itok=Kas_MLk-",
+      "domain": "channelnewsasia.com",
+      "language": "English",
+      "sourcecountry": "United States"
+    },
+    {
+      "url": "https://www.wbaa.org/npr-news/2026-11-22/what-its-like-at-a-climate-conference-as-talks-collapse",
+      "url_mobile": "",
+      "title": "What it like at a climate conference as talks collapse",
+      "seendate": "20261123T033000Z",
+      "socialimage": "",
+      "domain": "wbaa.org",
+      "language": "English",
+      "sourcecountry": "United States"
+    },
+    {
+      "url": "http://www.thejakartapost.com/world/2026/11/23/climate-deal-collapses-in-chaotic-end-to-cop31",
+      "url_mobile": "",
+      "title": "Climate deal collapses in chaotic end to COP31 - Europe",
+      "seendate": "20261123T023000Z",
+      "socialimage": "https://img.jakpost.net/c/2026/11/23/2026_11_23_181816_1795399465._large.jpg",
+      "domain": "thejakartapost.com",
+      "language": "English",
+      "sourcecountry": "Indonesia"
+    },
+    {
+      "url": "https://themoderatevoice.com/cop31s-collapse-does-not-change-the-alarming-facts-about-climate-extremes-un-chief-warns/",
+      "url_mobile": "",
+      "title": "COP31 collapse does not change the alarming facts about climate extremes , UN chief warns \u2013 The Moderate Voice",
+      "seendate": "20261123T023000Z",
+      "socialimage": "",
+      "domain": "themoderatevoice.com",
+      "language": "English",
+      "sourcecountry": "United States"
+    }
+  ]
+}

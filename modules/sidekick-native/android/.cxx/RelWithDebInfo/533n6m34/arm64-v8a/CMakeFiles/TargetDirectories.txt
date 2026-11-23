@@ -1,0 +1,3 @@
+/home/robert/sidekick/modules/sidekick-native/android/.cxx/RelWithDebInfo/533n6m34/arm64-v8a/CMakeFiles/sidekick_ort.dir
+/home/robert/sidekick/modules/sidekick-native/android/.cxx/RelWithDebInfo/533n6m34/arm64-v8a/CMakeFiles/edit_cache.dir
+/home/robert/sidekick/modules/sidekick-native/android/.cxx/RelWithDebInfo/533n6m34/arm64-v8a/CMakeFiles/rebuild_cache.dir

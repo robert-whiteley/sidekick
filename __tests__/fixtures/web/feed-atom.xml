@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <title type="text">Example Atom Log</title>
+  <link href="https://blog.example.net/"/>
+  <updated>2026-11-23T10:00:00Z</updated>
+  <entry>
+    <title>Ukraine drone strikes hit Russian refineries</title>
+    <link rel="replies" href="https://blog.example.net/comments/1"/>
+    <link rel="alternate" type="text/html" href="https://blog.example.net/2026/11/23/refineries"/>
+    <published>2026-11-23T07:00:00Z</published>
+  </entry>
+  <entry>
+    <title type="html">Turkey &amp;amp; the PKK: bases withdrawn</title>
+    <link href="http://blog.example.net/2026/11/23/pkk"/>
+    <updated>2026-11-23T05:00:00Z</updated>
+  </entry>
+</feed>

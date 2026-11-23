@@ -56,6 +56,13 @@ const SCHEMA = [
   `CREATE VIRTUAL TABLE IF NOT EXISTS moments_vec USING vec0(
      id INTEGER PRIMARY KEY, embedding FLOAT[${EMBED_DIMS}] distance_metric=cosine
    )`,
+  // Photo vectors from the same embedder (text and photos share one space). Text questions
+  // search both tables; a photo is findable by what it shows before its text is read.
+  `CREATE VIRTUAL TABLE IF NOT EXISTS photos_vec USING vec0(
+     id INTEGER PRIMARY KEY, embedding FLOAT[${EMBED_DIMS}] distance_metric=cosine
+   )`,
+  // Small key/value store, e.g. which embedder file made the stored vectors.
+  'CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)',
   // Things the user told Sidekick to remember (saved) or it guessed (suggested, needs approval).
   `CREATE TABLE IF NOT EXISTS facts (
      id INTEGER PRIMARY KEY,
@@ -74,13 +81,31 @@ const SCHEMA = [
      moment_id INTEGER PRIMARY KEY REFERENCES moments(id) ON DELETE CASCADE,
      at INTEGER NOT NULL
    )`,
+  // The phone's contacts, when the user turns that source on (names + numbers; see sources.ts).
+  `CREATE TABLE IF NOT EXISTS contacts (
+     id TEXT PRIMARY KEY,
+     name TEXT NOT NULL,
+     phones TEXT NOT NULL DEFAULT '[]'
+   )`,
+  // To-dos, events and reminders proposed from what was said (suggested) until the user approves.
+  `CREATE TABLE IF NOT EXISTS followups (
+     id INTEGER PRIMARY KEY,
+     kind TEXT NOT NULL CHECK (kind IN ('todo', 'event', 'reminder')),
+     title TEXT NOT NULL,
+     due_at INTEGER,
+     all_day INTEGER NOT NULL DEFAULT 0,
+     when_text TEXT NOT NULL DEFAULT '',
+     status TEXT NOT NULL CHECK (status IN ('suggested', 'approved', 'done', 'dismissed')),
+     created_at INTEGER NOT NULL,
+     source_moment_id INTEGER REFERENCES moments(id) ON DELETE SET NULL
+   )`,
 ];
 
 /**
  * Columns added after the first release. Each is added once if missing (idempotent), so any
  * feature can append here without a version number.
  */
-export const MIGRATIONS: { table: string; column: string; ddl: string }[] = [
+export const MIGRATIONS: { table: string; column: string; ddl: string; after?: string }[] = [
   {
     table: 'speakers',
     column: 'suggested_name',
@@ -105,12 +130,68 @@ export const MIGRATIONS: { table: string; column: string; ddl: string }[] = [
   { table: 'moments', column: 'lat', ddl: 'ALTER TABLE moments ADD COLUMN lat REAL' },
   { table: 'moments', column: 'lon', ddl: 'ALTER TABLE moments ADD COLUMN lon REAL' },
   { table: 'moments', column: 'place', ddl: 'ALTER TABLE moments ADD COLUMN place TEXT' },
+  // Photo moments: 1 once the photo itself has a vector in photos_vec.
+  {
+    table: 'moments',
+    column: 'image_embedded',
+    ddl: 'ALTER TABLE moments ADD COLUMN image_embedded INTEGER NOT NULL DEFAULT 0',
+  },
+  // Imported moments (files, calendar, notifications): a stable key per item and its version,
+  // so a re-scan updates or removes it instead of adding a copy.
+  { table: 'moments', column: 'source_key', ddl: 'ALTER TABLE moments ADD COLUMN source_key TEXT' },
+  { table: 'moments', column: 'source_ver', ddl: 'ALTER TABLE moments ADD COLUMN source_ver TEXT' },
+  // 1 once the line has been read for follow-ups (to-dos, events, reminders).
+  {
+    table: 'moments',
+    column: 'followups_scanned',
+    ddl: 'ALTER TABLE moments ADD COLUMN followups_scanned INTEGER NOT NULL DEFAULT 0',
+  },
+  // Photo moments: OCR state (0 not read, 1 no text found, 2 text added as a "Read:" line).
+  {
+    table: 'moments',
+    column: 'photo_ocr',
+    ddl: 'ALTER TABLE moments ADD COLUMN photo_ocr INTEGER NOT NULL DEFAULT 0',
+  },
+  // People: a stable automatic label per voice ("Person 3"), names applied automatically from
+  // "my name is Sam" (name_auto = 1 until the user confirms or renames), and the user's notes.
+  {
+    table: 'speakers',
+    column: 'label_no',
+    ddl: 'ALTER TABLE speakers ADD COLUMN label_no INTEGER',
+    after:
+      'UPDATE speakers SET label_no = (SELECT COUNT(*) FROM speakers s2 WHERE s2.is_owner = 0 AND s2.id <= speakers.id) WHERE is_owner = 0',
+  },
+  {
+    table: 'speakers',
+    column: 'name_auto',
+    ddl: 'ALTER TABLE speakers ADD COLUMN name_auto INTEGER NOT NULL DEFAULT 0',
+  },
+  {
+    table: 'speakers',
+    column: 'notes',
+    ddl: "ALTER TABLE speakers ADD COLUMN notes TEXT NOT NULL DEFAULT ''",
+  },
+  // A fact about another person (from what they said), shown and approved on their page.
+  {
+    table: 'facts',
+    column: 'speaker_id',
+    ddl: 'ALTER TABLE facts ADD COLUMN speaker_id INTEGER REFERENCES speakers(id) ON DELETE CASCADE',
+  },
+  // "Sam, can you send the report": the follow-up is linked to the person it was asked of.
+  {
+    table: 'followups',
+    column: 'person_id',
+    ddl: 'ALTER TABLE followups ADD COLUMN person_id INTEGER REFERENCES speakers(id) ON DELETE SET NULL',
+  },
 ];
 
 function migrate(d: DB) {
   for (const m of MIGRATIONS) {
     const cols = d.executeSync(`PRAGMA table_info(${m.table})`).rows.map((r) => r.name);
-    if (!cols.includes(m.column)) d.executeSync(m.ddl);
+    if (cols.includes(m.column)) continue;
+    d.executeSync(m.ddl);
+    // One-off backfill for rows that existed before the column.
+    if (m.after) d.executeSync(m.after);
   }
 }
 

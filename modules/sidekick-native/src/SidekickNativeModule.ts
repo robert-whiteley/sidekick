@@ -8,6 +8,7 @@ import type {
   LlmCandidate,
   LlmLoadResult,
   LlmStats,
+  LlmTuning,
   SidekickNativeModuleEvents,
 } from './SidekickNative.types';
 
@@ -20,6 +21,10 @@ declare class SidekickNativeModule extends NativeModule<SidekickNativeModuleEven
     imagePath: string | null,
     opts?: GenerateOptions,
   ): Promise<LlmStats>;
+  /** Speed knobs (bench). Threads/speculative/maxTokens apply on the next load. */
+  llmSetTuning(tuning: LlmTuning): void;
+  /** Reads the system prompt in ahead of the first question; false if no model is loaded. */
+  llmPrepare(system: string | null): Promise<boolean>;
   /** Small persistent settings (not for secrets). */
   kvGet(key: string): string | null;
   kvSet(key: string, value: string | null): void;
@@ -54,17 +59,42 @@ declare class SidekickNativeModule extends NativeModule<SidekickNativeModuleEven
     recordAmbient: boolean,
     jsAnswers: boolean,
   ): void;
+  /**
+   * Android: instructions-only mode. Speech is transcribed only right after the wake word, in a
+   * spoken follow-up, or for push-to-talk; everything else is dropped untranscribed.
+   */
+  listenCommandsOnly?(on: boolean): void;
   /** Starts the background listening service. Only call while the app is on screen. */
   listenStart(): void;
   listenStop(): void;
   listenActive(): boolean;
+  /** Android: starts a spoken answer; pass the id to voiceSay/voiceEnd. */
+  voiceBegin(): number;
+  /** Android: queues one sentence (Pocket TTS, else the system voice); ignored if stopped since. */
+  voiceSay(text: string, answer: number): void;
+  /** Android: the answer is complete; the follow-up window opens once it has been heard. */
+  voiceEnd(answer: number): void;
+  /** Android: stops speaking now. */
+  voiceStop(): void;
+  /** Android: which voice is in use: "pocket" or "system". */
+  voiceEngine(): 'pocket' | 'system';
   /** Stops processing mic audio (e.g. while Sidekick is speaking). */
   setMicPaused(paused: boolean): void;
   pttStart(): void;
   pttStop(): Promise<{ text: string; voice: number[] | null }>;
   speechWarmUp(): Promise<boolean>;
+  /** Parakeet CPU threads (1-8, default 4); reloads speech-to-text if already loaded. */
+  speechSetAsrThreads(threads: number): Promise<boolean>;
   /** Everything heard since the last call (JSON lines), cleared on read. */
   journalDrain(): string[];
+  /** Android: Sidekick holds the phone's assistant role. */
+  assistantIsDefault(): boolean;
+  /** Android: opens the system "Digital assistant app" settings. */
+  openAssistantSettings(): boolean;
+  /** Android 13+: asks to add the Ask Quick Settings tile; false if unsupported. */
+  requestAddTile(): boolean;
+  /** Android: asks the launcher to pin the Ask/Capture widget; false if unsupported. */
+  requestAddWidget(): boolean;
   /** Two-letter country (SIM, network, then language setting), or null. */
   countryCode(): string | null;
   /** Developer check: transcribe a 16 kHz WAV and test it for the wake word. */
@@ -79,10 +109,28 @@ declare class SidekickNativeModule extends NativeModule<SidekickNativeModuleEven
   debugPlay(path: string, delayMs?: number | null): Promise<boolean>;
   /** Normalised text embeddings (EmbeddingGemma 2), [dims] long each. */
   embed(modelPath: string, texts: string[], dims: number): Promise<number[][]>;
+  /** Normalised photo embeddings in the same space as [embed] (needs the text+vision model). */
+  embedImages(modelPath: string, photoPaths: string[], dims: number): Promise<number[][]>;
   embedUnload(): Promise<void>;
+  /** Text lines read from a photo (PP-OCRv6 small, Android), top to bottom, with confidences. */
+  ocrPhoto(
+    detPath: string,
+    recPath: string,
+    dictPath: string,
+    photoPath: string,
+  ): Promise<{ lines: string[]; scores: number[]; ms: number }>;
+  ocrUnload(): Promise<void>;
   llmCancel(): void;
   llmIsLoaded(): boolean;
   llmUnload(): Promise<void>;
+  /** Android: whether the user allowed Sidekick's notification listener in system settings. */
+  notificationAccessGranted(): boolean;
+  /** Android: opens the system screen where notification access is allowed. */
+  openNotificationAccessSettings(): void;
+  /** Android: keep (true) or ignore (false) new notifications; off by default. */
+  notificationsSetCapture(enabled: boolean): void;
+  /** Android: notifications kept since the last call (JSON lines), cleared on read. */
+  notificationsDrain(): string[];
 }
 
 export default requireNativeModule<SidekickNativeModule>('SidekickNative');

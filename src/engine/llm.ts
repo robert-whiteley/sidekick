@@ -4,6 +4,7 @@ import type {
   LlmBackend,
   LlmLoadResult,
   LlmStats,
+  LlmTuning,
 } from '../../modules/sidekick-native';
 import {
   CALIBRATION_MAX_TOKENS,
@@ -14,6 +15,7 @@ import {
 } from './backend-choice';
 import { llmCandidates } from './llm-candidates';
 import { modelsDir } from './paths';
+import { SYSTEM_PROMPT } from './prompts';
 
 const SAVED_KEY = 'llm.backend.v1';
 
@@ -40,7 +42,11 @@ export function ensureLlm(onStatus?: (s: string) => void): Promise<LlmLoadResult
   loaded = null;
   if (!loading) {
     loading = load(onStatus).then(
-      (r) => {
+      async (r) => {
+        // Read the fixed system prompt in now, so the first question doesn't wait for it.
+        await SidekickNative.llmPrepare(SYSTEM_PROMPT).catch((e) =>
+          console.log(`[llm] prepare failed: ${String(e)}`),
+        );
         loaded = r;
         loading = null;
         return r;
@@ -87,12 +93,23 @@ async function load(onStatus?: (s: string) => void): Promise<LlmLoadResult> {
   return SidekickNative.llmLoad(orderBySaved(cands, best.candidate.backend));
 }
 
+/** Sets speed knobs (for the bench). Unload and reload for threads/speculative/maxTokens. */
+export function setLlmTuning(tuning: LlmTuning) {
+  SidekickNative.llmSetTuning(tuning);
+}
+
 export async function unloadLlm() {
   loaded = null;
   await SidekickNative.llmUnload();
 }
 
 let seq = 0;
+let active = 0;
+
+/** Something (an answer, fact pass, photo description…) is using the model right now. */
+export function llmBusy(): boolean {
+  return active > 0;
+}
 
 /** Asks the model; streams text through [onText] and resolves with timing stats. */
 export async function askLlm(
@@ -109,12 +126,29 @@ export async function askLlm(
     text += e.text;
     onText(text);
   });
+  active++;
   try {
     const stats = await SidekickNative.llmGenerate(id, prompt, imagePath, opts);
     return { text, stats };
   } finally {
+    active--;
     sub.remove();
   }
+}
+
+/**
+ * A short side task (e.g. writing search words) in its own throwaway chat with the usual system
+ * prompt: the spoken conversation's history is kept, and none of it is seen. Only when the model
+ * is already loaded and idle; otherwise it fails at once.
+ */
+export async function askLlmAside(prompt: string, maxTokens: number): Promise<string> {
+  if (!SidekickNative.llmIsLoaded() || active > 0) throw new Error('model busy or not loaded');
+  const { text } = await askLlm(prompt, null, () => {}, {
+    system: SYSTEM_PROMPT,
+    maxTokens,
+    scratch: true,
+  });
+  return text;
 }
 
 export function cancelLlm() {

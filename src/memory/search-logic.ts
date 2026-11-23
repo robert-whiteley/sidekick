@@ -77,3 +77,28 @@ export function asksAboutWhatIsInView(q: string): boolean {
 /** Prompt formats EmbeddingGemma 2 was trained with. */
 export const embedQuery = (q: string) => `task: search result | query: ${q}`;
 export const embedDocument = (t: string) => `title: none | text: ${t}`;
+
+/** Stored vectors came from a different embedder file than the current one: re-embed them. */
+export const embedderChanged = (stored: string | null, current: string) => stored !== current;
+
+/**
+ * How many photo-vector matches join the ranking. Every photo is "nearest" to some question, so
+ * only the top few count; inside a time window all candidates are kept (the window filters them).
+ */
+export const imageHits = (hasTimeWindow: boolean) => (hasTimeWindow ? 200 : 3);
+
+/** Photos embedded per catch-up call: each takes ~1 s on an older phone, and a question waits. */
+export const PHOTO_EMBED_BATCH = 8;
+
+/**
+ * The known name (a place like "Leeds, GB" or a person like "Sam") the question is about, matched
+ * on whole words of its first part, longest name first. Null if none is mentioned.
+ */
+export function mentionedName(question: string, names: string[]): string | null {
+  const q = ` ${question.toLowerCase().replace(/[^a-z0-9' ]/g, ' ')} `;
+  const byLength = [...new Set(names)]
+    .map((n) => ({ n, key: n.split(',')[0].trim().toLowerCase() }))
+    .filter((x) => x.key.length >= 2)
+    .sort((a, b) => b.key.length - a.key.length);
+  return byLength.find((x) => q.includes(` ${x.key} `))?.n ?? null;
+}

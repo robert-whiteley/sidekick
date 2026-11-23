@@ -1,5 +1,5 @@
 import type { LlmCandidate } from '../../modules/sidekick-native';
-import { EMBEDDER_FILE, MODEL_FILES, type ModelFile, SPEECH_FILES } from './models';
+import { EMBEDDER_FILE, MODEL_FILES, type ModelFile, OCR_FILES, SPEECH_FILES } from './models';
 
 /** Gemma 4 E2B builds published by Google (litert-community/gemma-4-E2B-it-litert-lm). */
 export const GEMMA_GENERIC = MODEL_FILES.gemmaGeneric.name;
@@ -38,7 +38,7 @@ export function requiredModelFiles(soc: string): ModelFile[] {
   return tensor ? [tensor, MODEL_FILES.gemmaGeneric] : [MODEL_FILES.gemmaGeneric];
 }
 
-/** Everything the app downloads on first run: chat model, speech models, memory search model. */
+/** Everything the app downloads on first run: chat model, speech, memory search, photo text. */
 export function allRequiredFiles(soc: string): ModelFile[] {
-  return [...requiredModelFiles(soc), ...SPEECH_FILES, EMBEDDER_FILE];
+  return [...requiredModelFiles(soc), ...SPEECH_FILES, EMBEDDER_FILE, ...Object.values(OCR_FILES)];
 }

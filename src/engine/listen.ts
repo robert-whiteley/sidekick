@@ -2,13 +2,14 @@ import { Camera } from 'expo-camera';
 import { PermissionsAndroid, Platform } from 'react-native';
 
 import SidekickNative from '../../modules/sidekick-native';
-import { isDownloaded } from './downloads';
+import { downloadFile, isDownloaded } from './downloads';
 import { MODEL_FILES, SPEECH_FILES } from './models';
 import { modelsDir } from './paths';
 import { askLocationPermission, pushPauseRules } from './places';
 import { SYSTEM_PROMPT } from './prompts';
 import { getSettings } from './settings';
-import { DEFAULT_WAKE_PHRASE, parseSentencepiece, wakeKeywordLine } from './wake-word';
+import { listenPlan } from './listen-mode';
+import { DEFAULT_WAKE_PHRASE, parseSentencepiece, wakeKeywordLines } from './wake-word';
 
 const KWS_DIR = MODEL_FILES.wakeWord.unpackedCheck!.split('/')[0];
 
@@ -23,15 +24,21 @@ function base64ToBytes(b64: string): Uint8Array {
   return out;
 }
 
-/** The keyword-spotter line for the user's wake phrase (falls back to "Hey Sidekick"). */
+/**
+ * The keyword-spotter lines for the user's wake phrase, with and without its greeting ("Hey
+ * Sidekick" and "Sidekick"); falls back to those two.
+ */
 export function wakeLine(phrase: string): { line: string; phrase: string } {
   const b64 = SidekickNative.readBase64(`${modelsDir()}/${KWS_DIR}/bpe.model`);
   if (b64) {
     const vocab = parseSentencepiece(base64ToBytes(b64));
-    const line = wakeKeywordLine(phrase, vocab);
+    const line = wakeKeywordLines(phrase, vocab);
     if (line) return { line, phrase };
   }
-  return { line: '▁HE Y ▁ SIDE K IC K :2.0 #0.25 @HEY_SIDEKICK', phrase: DEFAULT_WAKE_PHRASE };
+  return {
+    line: '▁HE Y ▁ SIDE K IC K :2.0 #0.25 @HEY_SIDEKICK\n▁ SIDE K IC K :2.0 #0.25 @SIDEKICK',
+    phrase: DEFAULT_WAKE_PHRASE,
+  };
 }
 
 /**
@@ -43,8 +50,12 @@ export function configureListening() {
   const { line, phrase } = wakeLine(s.wakePhrase);
   // The background service answers with the same instructions as the app.
   SidekickNative.kvSet('assistant.system', SYSTEM_PROMPT);
-  SidekickNative.listenConfigure(line, phrase, s.recordConversations, true);
+  const plan = listenPlan(s);
+  SidekickNative.listenConfigure(line, phrase, plan.recordAmbient, true);
+  // Older native builds don't have it; the journal is still off for ambient speech then.
+  SidekickNative.listenCommandsOnly?.(plan.commandsOnly);
   pushPauseRules();
+  fetchVoiceInBackground();
 }
 
 export async function askMicPermission(): Promise<boolean> {
@@ -72,3 +83,18 @@ export function stopListening() {
 }
 
 export const isListening = () => SidekickNative.listenActive();
+
+let voiceFetch: Promise<void> | null = null;
+
+/**
+ * Fetches the neural voice once the required speech models are in (Wi-Fi only, in the
+ * background). Until then, and if it fails, answers use the system voice.
+ */
+export function fetchVoiceInBackground() {
+  if (Platform.OS !== 'android' || voiceFetch || !speechReady()) return;
+  if (isDownloaded(MODEL_FILES.voice)) return;
+  voiceFetch = downloadFile(MODEL_FILES.voice, () => {}, true).catch((e) => {
+    console.log(`[voice] download failed: ${String(e)}`);
+    voiceFetch = null;
+  });
+}

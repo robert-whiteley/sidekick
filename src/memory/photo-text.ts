@@ -22,6 +22,35 @@ export function parseDescription(raw: string): string | null {
   return parts.join(' · ');
 }
 
+/** Longest OCR text kept per photo (a full page of a document is still searchable by its start). */
+export const MAX_READ_CHARS = 1000;
+
+/**
+ * Turns OCR lines into one compact line, e.g. `CORNER CAFE · Total GBP 6.35`; null when nothing
+ * readable was found (a lone stray mark is not text).
+ */
+export function formatOcr(lines: string[]): string | null {
+  const parts = lines.map((l) => l.replace(/\s+/g, ' ').trim()).filter(Boolean);
+  const joined = parts.join(' · ');
+  if ((joined.match(/[\p{L}\p{N}]/gu)?.length ?? 0) < 2) return null;
+  return joined.length > MAX_READ_CHARS ? `${joined.slice(0, MAX_READ_CHARS - 1)}…` : joined;
+}
+
+/** Adds the OCR text to a moment's text as a `Read:` line (replacing an older one), before `Seen:`. */
+export function appendRead(text: string, read: string): string {
+  const lines = text.split('\n').filter((l) => !l.startsWith('Read: '));
+  const seen = lines.findIndex((l) => l.startsWith('Seen: '));
+  const line = `Read: "${read}"`;
+  if (seen >= 0) lines.splice(seen, 0, line);
+  else lines.push(line);
+  return lines.join('\n').trim();
+}
+
+/** The photo's exact text for a question's prompt, so the model copies numbers instead of guessing. */
+export function ocrPromptLine(read: string | null): string {
+  return read ? `Text read from the photo by OCR (exact): "${read}"\n` : '';
+}
+
 /** Adds the description to a moment's text (once). */
 export function appendSeen(text: string, description: string): string {
   const base = text.replace(/\n?Seen: .*$/s, '').trim();

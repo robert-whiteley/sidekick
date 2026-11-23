@@ -1,0 +1,4 @@
+# ninja log v5
+0	1823	1795473166485275402	CMakeFiles/sidekick_ort.dir/ort_shim.cpp.o	513fc8e9d195f70e
+1824	2118	1795473166788016452	/home/robert/sidekick/modules/sidekick-native/android/build/intermediates/cxx/RelWithDebInfo/533n6m34/obj/arm64-v8a/libsidekick_ort.so	1466708008cf69fe
+2	175	1795473880712702835	/home/robert/sidekick/modules/sidekick-native/android/build/intermediates/cxx/RelWithDebInfo/533n6m34/obj/arm64-v8a/libsidekick_ort.so	1466708008cf69fe

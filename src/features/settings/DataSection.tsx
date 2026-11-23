@@ -2,7 +2,9 @@ import * as Sharing from 'expo-sharing';
 import { useState } from 'react';
 import { Text } from 'react-native';
 
+import { syncFollowupNotifications } from '@/engine/followup-notify';
 import { deleteEverything, deleteRange, exportEverything } from '@/memory/store';
+import { DeleteBySource } from './SourcesSection';
 import { Button, confirm, Section, styles } from './ui';
 
 export function DataSection({ onChanged }: { onChanged: () => void }) {
@@ -56,6 +58,7 @@ export function DataSection({ onChanged }: { onChanged: () => void }) {
           })
         }
       />
+      <DeleteBySource onChanged={onChanged} />
       <Button
         danger
         title="Delete everything"
@@ -65,6 +68,7 @@ export function DataSection({ onChanged }: { onChanged: () => void }) {
             'All memories, people, facts and photos are permanently deleted.',
             async () => {
               await deleteEverything();
+              await syncFollowupNotifications(); // drop reminders for deleted follow-ups
               onChanged();
             },
           )

@@ -1,0 +1,1 @@
+/home/robert/sidekick/modules/sidekick-native/android/src/main/cpp/CMakeLists.txt

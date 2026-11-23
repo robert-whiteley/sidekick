@@ -22,3 +22,19 @@ test('markdown is stripped for speech', () => {
 test('newlines end a sentence', () => {
   expect(takeSentences('One\nTwo')).toEqual({ done: ['One'], rest: 'Two' });
 });
+
+test('several sentences, closing quotes and repeated marks', () => {
+  expect(takeSentences('Yes! Really?! He said "go." Then')).toEqual({
+    done: ['Yes!', 'Really?!', 'He said "go."'],
+    rest: ' Then',
+  });
+});
+
+test('no sentence end yet keeps everything', () => {
+  expect(takeSentences('The sky is')).toEqual({ done: [], rest: 'The sky is' });
+  expect(takeSentences('')).toEqual({ done: [], rest: '' });
+});
+
+test('blank lines do not produce empty sentences', () => {
+  expect(takeSentences('One.\n\nTwo')).toEqual({ done: ['One.'], rest: 'Two' });
+});
