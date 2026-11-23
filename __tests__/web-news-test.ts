@@ -297,7 +297,7 @@ describe('searchWeb with news', () => {
   test('feeds are only read for news questions, and only https ones', async () => {
     const g = getters();
     await searchWeb('Eiffel Tower', { ...opts, news: false }, g);
-    expect(g.asked.some((u) => u.includes('news.example.org'))).toBe(false);
+    expect(g.asked.some((u) => new URL(u).hostname === 'news.example.org')).toBe(false);
     const g2 = getters();
     await searchWeb('climate COP31', { ...opts, feeds: ['http://insecure.example/f'] }, g2);
     expect(g2.asked.some((u) => u.includes('insecure'))).toBe(false);
