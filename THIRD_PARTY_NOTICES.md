@@ -20,14 +20,14 @@ Every model and library shipped with or downloaded by Sidekick, with its licence
 
 ## Libraries
 
-| Component                     | Licence          |
-| ----------------------------- | ---------------- |
-| Expo, React Native, React     | MIT              |
-| LiteRT-LM (Google AI Edge)    | Apache-2.0       |
-| sherpa-onnx                   | Apache-2.0       |
-| @op-engineering/op-sqlite     | MIT              |
-| SQLCipher (community edition) | BSD-3-Clause     |
-| sqlite-vec                    | MIT / Apache-2.0 |
-| react-native-vision-camera    | MIT              |
+| Component                                      | Licence          |
+| ---------------------------------------------- | ---------------- |
+| Expo (incl. expo-updates), React Native, React | MIT              |
+| LiteRT-LM (Google AI Edge)                     | Apache-2.0       |
+| sherpa-onnx                                    | Apache-2.0       |
+| @op-engineering/op-sqlite                      | MIT              |
+| SQLCipher (community edition)                  | BSD-3-Clause     |
+| sqlite-vec                                     | MIT / Apache-2.0 |
+| react-native-vision-camera                     | MIT              |
 
 This list is updated whenever a dependency is added.
