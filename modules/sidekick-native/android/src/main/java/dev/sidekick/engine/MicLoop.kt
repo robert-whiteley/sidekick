@@ -42,6 +42,13 @@ object MicLoop {
 
   private var awaitingQuestionUntil = 0L
 
+  /** Why ambient listening is auto-paused (quiet hours, a paused place), or null. */
+  @Volatile var pauseReason: String? = null
+    private set
+  /** Told when [pauseReason] changes (the service updates its notification). */
+  @Volatile var onPauseChange: ((String?) -> Unit)? = null
+  private const val PAUSE_CHECK_MS = 10_000L
+
   fun startAmbient(ctx: Context) {
     ambient = true
     ensureRunning(ctx)
@@ -49,6 +56,7 @@ object MicLoop {
 
   fun stopAmbient() {
     ambient = false
+    pauseReason = null
     stopIfIdle()
   }
 
@@ -108,6 +116,7 @@ object MicLoop {
     val chunk = FloatArray(SpeechEngine.VAD_WINDOW)
     var samplesSeen = 0L
     val startedAt = System.currentTimeMillis()
+    var pauseCheckedAt = 0L
     try {
       rec.startRecording()
       while (running) {
@@ -116,6 +125,19 @@ object MicLoop {
         val samples = if (n == chunk.size) chunk.copyOf() else chunk.copyOf(n)
         samplesSeen += n
         ptt?.add(samples)
+        val nowMs = System.currentTimeMillis()
+        if (ambient && nowMs - pauseCheckedAt >= PAUSE_CHECK_MS) {
+          pauseCheckedAt = nowMs
+          val reason = Places.pauseReason()
+          if (reason != pauseReason) {
+            pauseReason = reason
+            if (reason != null) vad?.reset()
+            runCatching { onPauseChange?.invoke(reason) }
+            emit("onListenPause", mapOf("reason" to reason))
+          }
+        }
+        // Auto-paused: nothing is heard or kept (push-to-talk still works).
+        if (pauseReason != null && ptt == null) continue
         if (!ambient || paused || engine == null || vad == null || ptt != null) continue
         if (keywordsInUse != wakeKeywords) {
           wake?.release()
@@ -172,6 +194,7 @@ object MicLoop {
           .put("text", text)
           .put("owner", isQuestion)
           .put("voice", voice?.let { v -> JSONArray().apply { v.forEach { put(it.toDouble()) } } })
+      Places.tag(entry)
       if (isQuestion || recordAmbient) Journal.append(ctx, entry)
       emit("onTranscript", mapOf("kind" to entry.getString("kind"), "text" to text, "at" to atMs.toDouble()))
       if (isQuestion) {

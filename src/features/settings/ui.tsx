@@ -59,6 +59,7 @@ export const styles = StyleSheet.create({
   h: { fontSize: 18, fontWeight: '600', marginTop: 12 },
   body: { fontSize: 16, lineHeight: 22 },
   hint: { fontSize: 13, color: '#666', lineHeight: 18 },
+  label: { fontSize: 16 },
   row: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   flex: { flex: 1 },
   button: { backgroundColor: '#f2f2f5', padding: 12, borderRadius: 12 },

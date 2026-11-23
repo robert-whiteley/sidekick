@@ -1,7 +1,14 @@
+import { router } from 'expo-router';
 import { useState } from 'react';
 import { Pressable, Text, TextInput, View } from 'react-native';
 
-import { deleteSpeaker, listSpeakers, nameSpeaker } from '@/memory/store';
+import {
+  acceptSuggestedName,
+  deleteSpeaker,
+  dismissSuggestedName,
+  listSpeakers,
+  nameSpeaker,
+} from '@/memory/store';
 import { confirm, Section, styles } from './ui';
 
 export type Person = Awaited<ReturnType<typeof listSpeakers>>[number];
@@ -42,7 +49,15 @@ function PersonRow({ person, onChanged }: { person: Person; onChanged: () => voi
             autoFocus
           />
         ) : (
-          <Text style={[styles.body, styles.flex]}>{label}</Text>
+          <Pressable
+            style={styles.flex}
+            accessibilityRole="link"
+            onPress={() =>
+              router.push({ pathname: '/person/[id]', params: { id: String(person.id) } })
+            }
+          >
+            <Text style={[styles.body, styles.link]}>{label}</Text>
+          </Pressable>
         )}
         {!person.isOwner &&
           (editing ? (
@@ -69,6 +84,27 @@ function PersonRow({ person, onChanged }: { person: Person; onChanged: () => voi
           <Text style={[styles.link, styles.danger]}>Delete</Text>
         </Pressable>
       </View>
+      {person.suggestedName && !person.isOwner && (
+        <View style={styles.itemRow}>
+          <Text style={[styles.body, styles.flex]}>Is this {person.suggestedName}?</Text>
+          <Pressable
+            onPress={async () => {
+              await acceptSuggestedName(person.id);
+              onChanged();
+            }}
+          >
+            <Text style={styles.link}>Yes</Text>
+          </Pressable>
+          <Pressable
+            onPress={async () => {
+              await dismissSuggestedName(person.id);
+              onChanged();
+            }}
+          >
+            <Text style={styles.link}>No</Text>
+          </Pressable>
+        </View>
+      )}
       <Text style={styles.small}>
         {person.moments} {person.moments === 1 ? 'memory' : 'memories'}
         {!person.isOwner && (person.consented ? ' · agreed to notes' : '')}

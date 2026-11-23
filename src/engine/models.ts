@@ -38,10 +38,10 @@ export const MODEL_FILES = {
   },
   // Speech (sherpa-onnx). Small, CPU-only, always resident while listening.
   vad: {
-    name: 'silero_vad.onnx',
-    url: `${SHERPA}/asr-models/silero_vad.onnx`,
-    sha256: '9e2449e1087496d8d4caba907f23e0bd3f78d91fa552479bb9c23ac09cbb1fd6',
-    bytes: 643854,
+    name: 'silero_vad_v5.onnx',
+    url: `${SHERPA}/asr-models/silero_vad_v5.onnx`,
+    sha256: '6b99cbfd39246b6706f98ec13c7c50c6b299181f2474fa05cbc8046acc274396',
+    bytes: 2313101,
   },
   wakeWord: {
     name: 'sherpa-onnx-kws-zipformer-gigaspeech-3.3M-2024-01-01.tar.bz2',
@@ -51,11 +51,11 @@ export const MODEL_FILES = {
     unpackedCheck: 'sherpa-onnx-kws-zipformer-gigaspeech-3.3M-2024-01-01/tokens.txt',
   },
   speechToText: {
-    name: 'sherpa-onnx-moonshine-base-en-quantized-2026-02-27.tar.bz2',
-    url: `${SHERPA}/asr-models/sherpa-onnx-moonshine-base-en-quantized-2026-02-27.tar.bz2`,
-    sha256: '43232c1d13013d37317163baec3135bd771a186a4356f28c889bab453bb0e891',
-    bytes: 111266225,
-    unpackedCheck: 'sherpa-onnx-moonshine-base-en-quantized-2026-02-27/tokens.txt',
+    name: 'sherpa-onnx-nemo-parakeet-tdt-0.6b-v2-int8.tar.bz2',
+    url: `${SHERPA}/asr-models/sherpa-onnx-nemo-parakeet-tdt-0.6b-v2-int8.tar.bz2`,
+    sha256: '6fc4426b54aa549a0019b8a75b8dea59164e71790a37ac56a045ad57f915f714',
+    bytes: 482440461,
+    unpackedCheck: 'sherpa-onnx-nemo-parakeet-tdt-0.6b-v2-int8/tokens.txt',
   },
   voiceprint: {
     name: '3dspeaker_speech_campplus_sv_en_voxceleb_16k.onnx',
@@ -90,4 +90,6 @@ export function formatProgress(bytes: number, total: number): string {
 export const OBSOLETE_MODEL_PATHS = [
   'sherpa-onnx-kws-zipformer-gigaspeech-3.3M-2024-01-01-mobile',
   'sherpa-onnx-moonshine-tiny-en-quantized-2026-02-27',
+  'sherpa-onnx-moonshine-base-en-quantized-2026-02-27',
+  'silero_vad.onnx',
 ];

@@ -48,3 +48,4 @@ local.properties
 *.keystore
 coverage/
 /.models/
+modules/sidekick-native/android/build/

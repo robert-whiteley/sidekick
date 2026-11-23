@@ -25,6 +25,7 @@ export function MemorySection(props: {
           <View style={styles.itemRow}>
             <Text style={[styles.small, styles.flex]}>
               {formatTime(m.at)} · {who(m)}
+              {m.place ? ` · ${m.place}` : ''}
               {m.photoPath ? ' · 📷' : ''}
             </Text>
             <Pressable

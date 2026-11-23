@@ -1,9 +1,31 @@
 import { useState } from 'react';
-import { Text, TextInput } from 'react-native';
+import { Pressable, Text, TextInput, View } from 'react-native';
 
 import { configureListening, wakeLine } from '@/engine/listen';
+import { currentRegion } from '@/engine/region';
 import { getSettings, type Settings, updateSettings } from '@/engine/settings';
+import { type ConsentChoice, lawRequiresConsent } from '@/memory/consent-region';
 import { Button, Row, Section, styles } from './ui';
+
+const CONSENT_OPTIONS: { value: ConsentChoice; label: string }[] = [
+  { value: 'auto', label: 'Automatic' },
+  { value: 'on', label: 'On' },
+  { value: 'off', label: 'Off' },
+];
+
+function consentHint(choice: ConsentChoice): string {
+  const how =
+    'Other people\'s speech is only kept after they agree, e.g. you ask "is it OK if I take notes?" and they say yes.';
+  if (choice !== 'auto') return how;
+  const r = currentRegion();
+  const where = r.country
+    ? r.admin1 && r.country === 'US'
+      ? `${r.admin1}, US`
+      : r.country
+    : 'unknown';
+  const on = lawRequiresConsent(r);
+  return `${how} Automatic follows the recording law where you are (${where}): ${on ? 'on' : 'off'} here. Not legal advice.`;
+}
 
 export function ListeningSection() {
   const [s, setS] = useState<Settings>(getSettings());
@@ -50,14 +72,23 @@ export function ListeningSection() {
           value={s.recordConversations}
           onChange={(v) => set({ recordConversations: v })}
         />
-        <Row
-          label="Consent mode"
-          hint={
-            'Other people\'s speech is only kept after they agree — e.g. you ask "is it OK if I take notes?" and they say yes.'
-          }
-          value={s.consentMode}
-          onChange={(v) => set({ consentMode: v })}
-        />
+        <Text style={styles.label}>Consent mode</Text>
+        <View style={styles.chips}>
+          {CONSENT_OPTIONS.map((o) => (
+            <Pressable
+              key={o.value}
+              onPress={() => set({ consent: o.value })}
+              style={[styles.chip, s.consent === o.value && styles.chipOn]}
+              accessibilityRole="radio"
+              accessibilityState={{ checked: s.consent === o.value }}
+            >
+              <Text style={[styles.chipText, s.consent === o.value && styles.chipTextOn]}>
+                {o.label}
+              </Text>
+            </Pressable>
+          ))}
+        </View>
+        <Text style={styles.hint}>{consentHint(s.consent)}</Text>
         <Row
           label="Speak answers"
           value={s.speakAnswers}

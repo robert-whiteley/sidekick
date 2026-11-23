@@ -3,6 +3,10 @@
   <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
   <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
   <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+  <!-- Offline place names for memories, and auto-pause at places you choose. Optional. -->
+  <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+  <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+  <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
   <application>
     <!-- GPU backend: vendor OpenCL, optional so phones without it still install. -->
     <uses-native-library android:name="libOpenCL.so" android:required="false" />
@@ -13,6 +17,6 @@
     <service
       android:name="dev.sidekick.engine.ListenService"
       android:exported="false"
-      android:foregroundServiceType="microphone" />
+      android:foregroundServiceType="microphone|location" />
   </application>
 </manifest>

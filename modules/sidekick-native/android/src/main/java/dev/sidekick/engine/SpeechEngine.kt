@@ -4,9 +4,9 @@ import com.k2fsa.sherpa.onnx.FeatureConfig
 import com.k2fsa.sherpa.onnx.KeywordSpotter
 import com.k2fsa.sherpa.onnx.KeywordSpotterConfig
 import com.k2fsa.sherpa.onnx.OfflineModelConfig
-import com.k2fsa.sherpa.onnx.OfflineMoonshineModelConfig
 import com.k2fsa.sherpa.onnx.OfflineRecognizer
 import com.k2fsa.sherpa.onnx.OfflineRecognizerConfig
+import com.k2fsa.sherpa.onnx.OfflineTransducerModelConfig
 import com.k2fsa.sherpa.onnx.OnlineModelConfig
 import com.k2fsa.sherpa.onnx.OnlineStream
 import com.k2fsa.sherpa.onnx.OnlineTransducerModelConfig
@@ -21,20 +21,21 @@ const val SAMPLE_RATE = 16000
 
 /** Where each speech model lives inside the models directory (matches src/engine/models.ts). */
 class SpeechPaths(modelsDir: String) {
-  val vad = "$modelsDir/silero_vad.onnx"
+  val vad = "$modelsDir/silero_vad_v5.onnx"
   private val kwsDir = "$modelsDir/sherpa-onnx-kws-zipformer-gigaspeech-3.3M-2024-01-01"
   val kwsEncoder = "$kwsDir/encoder-epoch-12-avg-2-chunk-16-left-64.int8.onnx"
   val kwsDecoder = "$kwsDir/decoder-epoch-12-avg-2-chunk-16-left-64.onnx"
   val kwsJoiner = "$kwsDir/joiner-epoch-12-avg-2-chunk-16-left-64.int8.onnx"
   val kwsTokens = "$kwsDir/tokens.txt"
-  private val asrDir = "$modelsDir/sherpa-onnx-moonshine-base-en-quantized-2026-02-27"
-  val asrEncoder = "$asrDir/encoder_model.ort"
-  val asrDecoder = "$asrDir/decoder_model_merged.ort"
+  private val asrDir = "$modelsDir/sherpa-onnx-nemo-parakeet-tdt-0.6b-v2-int8"
+  val asrEncoder = "$asrDir/encoder.int8.onnx"
+  val asrDecoder = "$asrDir/decoder.int8.onnx"
+  val asrJoiner = "$asrDir/joiner.int8.onnx"
   val asrTokens = "$asrDir/tokens.txt"
   val speaker = "$modelsDir/3dspeaker_speech_campplus_sv_en_voxceleb_16k.onnx"
 
   fun missing(): List<String> =
-    listOf(vad, kwsEncoder, kwsDecoder, kwsJoiner, kwsTokens, asrEncoder, asrDecoder, asrTokens, speaker)
+    listOf(vad, kwsEncoder, kwsDecoder, kwsJoiner, kwsTokens, asrEncoder, asrDecoder, asrJoiner, asrTokens, speaker)
       .filterNot { File(it).canRead() }
 }
 
@@ -50,10 +51,15 @@ class SpeechEngine(private val paths: SpeechPaths, keywordsFile: File) {
         featConfig = FeatureConfig(sampleRate = SAMPLE_RATE, featureDim = 80),
         modelConfig =
           OfflineModelConfig(
-            moonshine =
-              OfflineMoonshineModelConfig(encoder = paths.asrEncoder, mergedDecoder = paths.asrDecoder),
+            transducer =
+              OfflineTransducerModelConfig(
+                encoder = paths.asrEncoder,
+                decoder = paths.asrDecoder,
+                joiner = paths.asrJoiner,
+              ),
+            modelType = "nemo_transducer",
             tokens = paths.asrTokens,
-            numThreads = 2,
+            numThreads = 4,
           ),
       ),
     )

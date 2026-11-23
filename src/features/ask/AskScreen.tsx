@@ -16,6 +16,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import SidekickNative from '../../../modules/sidekick-native';
 import { answer as answerQuestion, DEFAULT_PHOTO_QUESTION } from '@/engine/assistant';
+import { describeOnePhoto, yieldToQuestion } from '@/engine/describe-photos';
 import {
   configureListening,
   isListening,
@@ -23,11 +24,12 @@ import {
   startListening,
   stopListening,
 } from '@/engine/listen';
+import { inferFactsIfIdle, stopFactInference } from '@/engine/fact-inference';
 import { cancelLlm, ensureLlm } from '@/engine/llm';
 import { getSettings, updateSettings } from '@/engine/settings';
 import { StreamingSpeaker } from '@/engine/speaker';
 import { asksAboutWhatIsInView } from '@/memory/search-logic';
-import { embedPending, ingestJournal, learnOwnerVoice } from '@/memory/store';
+import { capturePhoto, embedPending, ingestJournal, learnOwnerVoice } from '@/memory/store';
 
 type Phase = 'idle' | 'loading' | 'thinking' | 'answering';
 
@@ -42,6 +44,12 @@ export function AskScreen() {
   const [speak, setSpeakState] = useState(getSettings().speakAnswers);
   const [listening, setListening] = useState(isListening());
   const [holding, setHolding] = useState(false);
+  const [capturing, setCapturing] = useState(false);
+  const captureRef = useRef<{
+    photo: Promise<string | null>;
+    at: number;
+    mic: Promise<boolean>;
+  } | null>(null);
   const camera = useRef<CameraView>(null);
   const speaker = useRef<StreamingSpeaker | null>(null);
   const busyRef = useRef(true);
@@ -78,6 +86,10 @@ export function AskScreen() {
       try {
         await ingestJournal();
         await embedPending();
+        // Idle: read one saved photo's text into memory (only if the model is already loaded).
+        void describeOnePhoto(busyRef.current);
+        // Uses the model only if it is already loaded; a question cancels it.
+        if (!busyRef.current) await inferFactsIfIdle();
       } catch (e) {
         console.log(`[memory] ingest failed: ${String(e)}`);
       }
@@ -137,10 +149,55 @@ export function AskScreen() {
     }
   };
 
+  // Capture: tap saves a photo; hold to add a voice note (released = saved).
+  const captureStart = () => {
+    if (!cameraOn || captureRef.current) {
+      if (!cameraOn) setStatus('Turn the camera on to capture.');
+      return;
+    }
+    const at = Date.now();
+    const photo = (async () => {
+      const pic = await camera.current?.takePictureAsync({ quality: 0.8, shutterSound: false });
+      return pic?.uri.replace(/^file:\/\//, '') ?? null;
+    })();
+    // Set synchronously so a quick tap's release always finds it.
+    const mic = (async () => {
+      if (holding || !(await askMicPermission())) return false;
+      SidekickNative.pttStart();
+      return true;
+    })();
+    captureRef.current = { photo, at, mic };
+    setCapturing(true);
+    setStatus('Captured · keep holding to add a voice note');
+  };
+
+  const captureEnd = async () => {
+    const c = captureRef.current;
+    if (!c) return;
+    captureRef.current = null;
+    setCapturing(false);
+    try {
+      let note: string | null = null;
+      if (await c.mic) {
+        const { text, voice } = await SidekickNative.pttStop();
+        // A quick tap records a fraction of a second of nothing: only keep real notes.
+        if (Date.now() - c.at > 800 && text) note = text;
+        if (note && voice) void learnOwnerVoice(voice).catch(() => {});
+      }
+      const path = await c.photo;
+      if (!path) throw new Error('no photo');
+      await capturePhoto(path, note, c.at);
+      setStatus(note ? `Saved photo with note: "${note}"` : 'Saved photo');
+    } catch (e) {
+      setStatus(`Couldn't save: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  };
+
   const ask = async (spoken?: string) => {
     const q = (spoken ?? question).trim() || (cameraOn ? DEFAULT_PHOTO_QUESTION : '');
     if (!q || busyRef.current) return;
     busyRef.current = true;
+    await yieldToQuestion();
     if (spoken) setQuestion(spoken);
     setAnswer('');
     setPhase('thinking');
@@ -148,6 +205,7 @@ export function AskScreen() {
     const sp = new StreamingSpeaker(speak);
     speaker.current = sp;
     try {
+      await stopFactInference();
       let imagePath: string | null = null;
       const visible = AppState.currentState === 'active';
       if (cameraOn && visible && (q === DEFAULT_PHOTO_QUESTION || asksAboutWhatIsInView(q))) {
@@ -220,6 +278,17 @@ export function AskScreen() {
             value={listening}
             onChange={toggleListening}
           />
+          <Pressable
+            style={[styles.chip, styles.capture, capturing && styles.micOn]}
+            onPressIn={captureStart}
+            onPressOut={captureEnd}
+            accessibilityRole="button"
+            accessibilityLabel="Capture photo, hold to add a voice note"
+          >
+            <Text style={[styles.chipText, styles.chipTextOn]}>
+              {capturing ? '● Note' : 'Capture'}
+            </Text>
+          </Pressable>
         </View>
 
         <ScrollView style={styles.answerBox} contentContainerStyle={styles.answerContent}>
@@ -322,6 +391,7 @@ const styles = StyleSheet.create({
   stop: { backgroundColor: '#b00020' },
   mic: { paddingHorizontal: 16, backgroundColor: '#444' },
   micOn: { backgroundColor: '#b00020' },
+  capture: { backgroundColor: '#444', marginLeft: 'auto' },
   disabled: { opacity: 0.5 },
   askText: { color: 'white', fontSize: 17, fontWeight: '600' },
 });

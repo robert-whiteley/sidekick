@@ -7,7 +7,7 @@
 | UI + orchestration | Expo (React Native, new architecture, Expo Router, CNG + config plugins)                                                           | One UI codebase; iOS builds from Linux via EAS; maintained bindings for every engine below        |
 | Always-on audio    | Local Expo module `modules/sidekick-native` (Kotlin, then Swift) running a foreground service with sherpa-onnx; emits events to JS | Wake word, VAD and transcription must keep running with the screen off and without JS overhead    |
 | LLM / vision       | Google LiteRT-LM with Gemma 4 E2B (`.litertlm`) — ADR 4                                                                            | Uses each phone's fastest hardware (Tensor NPU, GPU, CPU fallback); Google-maintained; Apache-2.0 |
-| Speech             | sherpa-onnx: Silero VAD, keyword spotter, Moonshine v2 STT, 3D-Speaker embeddings, offline diarization                             | One Apache-2.0 runtime for all speech tasks; open-vocabulary wake word with no training           |
+| Speech             | sherpa-onnx: Silero VAD v5, keyword spotter, Parakeet TDT 0.6B STT, 3D-Speaker embeddings, offline diarization                     | One Apache-2.0 runtime for all speech tasks; open-vocabulary wake word with no training           |
 | Voice out          | System TTS (`expo-speech`)                                                                                                         | Zero download, fast on old phones. Later: Kitten / Piper via sherpa-onnx                          |
 | Memory             | `@op-engineering/op-sqlite` with SQLCipher + sqlite-vec; EmbeddingGemma 2 for text embeddings                                      | Encrypted, fast, vector search in the same DB. USearch (HNSW) later for millions of vectors       |
 | Camera             | `expo-camera`                                                                                                                      | Photo capture is all the MVP needs; vision-camera later if live frame processing is added         |
@@ -28,8 +28,10 @@ The chip is chosen by measurement, not by a list: the first run times every back
 ## Listening
 
 - A foreground service (Android, microphone type, permanent notification) owns one microphone loop shared by background listening and hold-to-talk.
-- Per 32 ms chunk: wake-word spotter + Silero VAD. Each speech segment is transcribed (Moonshine) and voiceprinted (CAM++) on a worker thread.
+- Per 32 ms chunk: wake-word spotter + Silero VAD. Each speech segment is transcribed (Parakeet) and voiceprinted (CAM++) on a worker thread.
 - Results go to an append-only journal file; the app drains it into the encrypted database when it is open. While the app is not on screen, the service answers wake-word questions itself (same model, same prompt) and speaks with the system voice.
+- Places: when location is allowed, the service also gets the `location` type and Android's `LocationManager` (network/GPS/passive, every 5 min or 100 m) supplies a fix; each journal entry gets lat/lon if the fix is under 2 h old. JS names the place from the bundled GeoNames table (nearest town ≤ 30 km, preferring the most populous within 5 km) and stores it on the moment; the name is in the embedded text and the prompt.
+- Auto-pause: quiet hours and "pause here" places (150 m + fix accuracy) are checked every 10 s; while paused, the wake word and conversation capture stop (push-to-talk still works) and the notification says why. Pausing in silence needs no setting: the VAD gate already skips all speech processing when nobody is talking.
 - Consent mode (default on everywhere): other people's speech is kept only after the owner asks for consent and that voice says yes within 30 s. The owner's voice is learned from hold-to-talk and wake-word questions.
 
 ## Platform limits

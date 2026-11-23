@@ -104,7 +104,7 @@ class LlmEngine(private val cacheDir: String, private val nativeLibDir: String) 
           e.createConversation(ConversationConfig(systemInstruction = system)).also { conversation = it }
         }
     val parts = buildList {
-      if (imagePath != null) add(Content.ImageFile(imagePath))
+      if (imagePath != null) add(Content.ImageFile(ModelImage.prepare(imagePath)))
       add(Content.Text(prompt))
     }
     val start = System.nanoTime()

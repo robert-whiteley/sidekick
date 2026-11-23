@@ -20,15 +20,17 @@ export function FactsSection({ facts, onChanged }: { facts: Fact[]; onChanged: (
   return (
     <Section title="Facts">
       <Text style={styles.hint}>{'Say "remember that…" to save a fact.'}</Text>
-      {suggested.length > 0 && <Text style={styles.body}>Suggested (needs your OK)</Text>}
+      {suggested.length > 0 && (
+        <Text style={styles.body}>Suggested from what you said (only used once you approve)</Text>
+      )}
       {suggested.map((f) => (
         <View key={f.id} style={[styles.item, styles.itemRow]}>
           <Text style={[styles.body, styles.flex]}>{f.text}</Text>
           <Pressable onPress={() => void approve(f)}>
-            <Text style={styles.link}>Keep</Text>
+            <Text style={styles.link}>Approve</Text>
           </Pressable>
           <Pressable onPress={() => void remove(f)}>
-            <Text style={[styles.link, styles.danger]}>Delete</Text>
+            <Text style={[styles.link, styles.danger]}>Reject</Text>
           </Pressable>
         </View>
       ))}
