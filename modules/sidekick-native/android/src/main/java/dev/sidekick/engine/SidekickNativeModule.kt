@@ -115,7 +115,7 @@ class SidekickNativeModule : Module() {
       true
     }
 
-    Function("deleteFile") { path: String -> java.io.File(path).delete() }
+    Function("deleteFile") { path: String -> java.io.File(path).deleteRecursively() }
 
     // Data export: memory.json plus the original photos, in one zip.
     AsyncFunction("exportZip") { json: String, files: List<String>, destPath: String ->

@@ -9,7 +9,7 @@ import { downloadFile } from '@/engine/downloads';
 import { MODEL_FILES, type ModelFile } from '@/engine/models';
 import { cosine } from '@/memory/voices';
 
-const MOONSHINE_WAVS = 'sherpa-onnx-moonshine-tiny-en-quantized-2026-02-27/test_wavs';
+const MOONSHINE_WAVS = 'sherpa-onnx-moonshine-base-en-quantized-2026-02-27/test_wavs';
 const KWS_WAVS = 'sherpa-onnx-kws-zipformer-gigaspeech-3.3M-2024-01-01/test_wavs';
 
 const TEXT_PROMPT = 'In three sentences, explain why the sky is blue.';

@@ -51,11 +51,11 @@ export const MODEL_FILES = {
     unpackedCheck: 'sherpa-onnx-kws-zipformer-gigaspeech-3.3M-2024-01-01/tokens.txt',
   },
   speechToText: {
-    name: 'sherpa-onnx-moonshine-tiny-en-quantized-2026-02-27.tar.bz2',
-    url: `${SHERPA}/asr-models/sherpa-onnx-moonshine-tiny-en-quantized-2026-02-27.tar.bz2`,
-    sha256: '9ec31b342d8fa3240c3b81b8f82e1cf7e3ac467c93ca5a999b741d5887164f8d',
-    bytes: 29858559,
-    unpackedCheck: 'sherpa-onnx-moonshine-tiny-en-quantized-2026-02-27/tokens.txt',
+    name: 'sherpa-onnx-moonshine-base-en-quantized-2026-02-27.tar.bz2',
+    url: `${SHERPA}/asr-models/sherpa-onnx-moonshine-base-en-quantized-2026-02-27.tar.bz2`,
+    sha256: '43232c1d13013d37317163baec3135bd771a186a4356f28c889bab453bb0e891',
+    bytes: 111266225,
+    unpackedCheck: 'sherpa-onnx-moonshine-base-en-quantized-2026-02-27/tokens.txt',
   },
   voiceprint: {
     name: '3dspeaker_speech_campplus_sv_en_voxceleb_16k.onnx',
@@ -85,3 +85,9 @@ export function formatProgress(bytes: number, total: number): string {
   if (total <= 0) return `${gb(bytes)} GB`;
   return `${gb(bytes)} / ${gb(total)} GB (${Math.floor((bytes / total) * 100)}%)`;
 }
+
+/** Model files earlier versions downloaded that are no longer used; deleted to free space. */
+export const OBSOLETE_MODEL_PATHS = [
+  'sherpa-onnx-kws-zipformer-gigaspeech-3.3M-2024-01-01-mobile',
+  'sherpa-onnx-moonshine-tiny-en-quantized-2026-02-27',
+];

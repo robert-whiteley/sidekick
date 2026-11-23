@@ -22,5 +22,5 @@ jest.mock('../modules/sidekick-native', () => ({
 test('first run asks to download the model', async () => {
   await render(<HomeScreen />);
   expect(screen.getByText('One-time setup')).toBeTruthy();
-  expect(screen.getByText(/2\.8 GB/)).toBeTruthy();
+  expect(screen.getByText(/2\.9 GB/)).toBeTruthy();
 });

@@ -9,7 +9,7 @@ Every model and library shipped with or downloaded by Sidekick, with its licence
 | Gemma 4 E2B (`.litertlm`)              | Apache-2.0 |
 | EmbeddingGemma 2 (`.litertlm`)         | Apache-2.0 |
 | Silero VAD                             | MIT        |
-| Moonshine v2 tiny (English)            | MIT        |
+| Moonshine v2 base (English)            | MIT        |
 | sherpa-onnx KWS zipformer (GigaSpeech) | Apache-2.0 |
 | 3D-Speaker CAM++ (VoxCeleb)            | Apache-2.0 |
 

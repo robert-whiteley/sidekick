@@ -27,7 +27,7 @@ class SpeechPaths(modelsDir: String) {
   val kwsDecoder = "$kwsDir/decoder-epoch-12-avg-2-chunk-16-left-64.onnx"
   val kwsJoiner = "$kwsDir/joiner-epoch-12-avg-2-chunk-16-left-64.int8.onnx"
   val kwsTokens = "$kwsDir/tokens.txt"
-  private val asrDir = "$modelsDir/sherpa-onnx-moonshine-tiny-en-quantized-2026-02-27"
+  private val asrDir = "$modelsDir/sherpa-onnx-moonshine-base-en-quantized-2026-02-27"
   val asrEncoder = "$asrDir/encoder_model.ort"
   val asrDecoder = "$asrDir/decoder_model_merged.ort"
   val asrTokens = "$asrDir/tokens.txt"
