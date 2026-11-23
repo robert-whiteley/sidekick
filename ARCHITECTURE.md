@@ -10,7 +10,7 @@
 | Speech             | sherpa-onnx: Silero VAD, keyword spotter, Moonshine v2 STT, 3D-Speaker embeddings, offline diarization                             | One Apache-2.0 runtime for all speech tasks; open-vocabulary wake word with no training           |
 | Voice out          | System TTS (`expo-speech`)                                                                                                         | Zero download, fast on old phones. Later: Kitten / Piper via sherpa-onnx                          |
 | Memory             | `@op-engineering/op-sqlite` with SQLCipher + sqlite-vec; EmbeddingGemma 2 for text embeddings                                      | Encrypted, fast, vector search in the same DB. USearch (HNSW) later for millions of vectors       |
-| Camera             | `react-native-vision-camera` 5                                                                                                     | Frame access for capture and vision                                                               |
+| Camera             | `expo-camera`                                                                                                                      | Photo capture is all the MVP needs; vision-camera later if live frame processing is added         |
 | Places             | GeoNames cities15000 (offline) + learned places (home/work from dwell time)                                                        | Place names with no network                                                                       |
 
 ## Memory model
@@ -21,9 +21,16 @@
 
 ## Memory budget
 
-The iPhone 13 mini has 4 GB RAM. Never keep the LLM and the embedder resident together; load on demand. Consider the `com.apple.developer.kernel.increased-memory-limit` entitlement.
+On phones under 6 GB RAM (iPhone 13 mini) the LLM and the embedder are never resident together: embedding unloads the LLM first. The iOS build uses the `increased-memory-limit` entitlement.
 
-Pixel 5 GPU/DSP are not usable by these runtimes → CPU only. Expect ~25–40 s per photo question with Gemma 4 E2B on Pixel 5 (≈2 s on a current flagship).
+The chip is chosen by measurement, not by a list: the first run times every backend that loads (one-token check, then a fixed prompt) and saves the fastest. On the Pixel 5 the GPU loads but writes slower than the CPU (2.9 vs 5.0 tokens/s), so it picks CPU. Measured on Pixel 5: typed question with memory ≈6 s, photo question ≈30 s.
+
+## Listening
+
+- A foreground service (Android, microphone type, permanent notification) owns one microphone loop shared by background listening and hold-to-talk.
+- Per 32 ms chunk: wake-word spotter + Silero VAD. Each speech segment is transcribed (Moonshine) and voiceprinted (CAM++) on a worker thread.
+- Results go to an append-only journal file; the app drains it into the encrypted database when it is open. While the app is not on screen, the service answers wake-word questions itself (same model, same prompt) and speaks with the system voice.
+- Consent mode (default on everywhere): other people's speech is kept only after the owner asks for consent and that voice says yes within 30 s. The owner's voice is learned from hold-to-talk and wake-word questions.
 
 ## Platform limits
 
