@@ -60,6 +60,14 @@ class LlmEngine(private val cacheDir: String, private val nativeLibDir: String) 
           )
         val e = Engine(config)
         e.initialize()
+        // Some backends initialize but fail on first use (e.g. GPU without a usable OpenCL), so
+        // prove the backend with a one-token answer before accepting it.
+        try {
+          e.createConversation(ConversationConfig()).use { it.sendMessage("Hi", maxOutputToken = 1) }
+        } catch (t: Throwable) {
+          e.close()
+          throw t
+        }
         engine = e
         val result = LlmLoadResult(c.modelPath, c.backend, (System.nanoTime() - start) / 1_000_000, failures)
         loaded = result
@@ -96,7 +104,8 @@ class LlmEngine(private val cacheDir: String, private val nativeLibDir: String) 
       Message.of(parts),
       object : MessageCallback {
         override fun onMessage(message: Message) {
-          val text = message.contents.contents.filterIsInstance<Content.Text>().joinToString("") { it.text }
+          val text = message.toString()
+          Log.d(TAG, "chunk: ${text.length} chars")
           if (text.isNotEmpty()) onText(text)
         }
 

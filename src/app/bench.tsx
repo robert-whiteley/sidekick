@@ -17,6 +17,7 @@ export default function BenchScreen() {
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState('');
   const reqId = useRef('');
+  const answerRef = useRef('');
 
   const add = (line: string) => {
     console.log(`[bench] ${line}`);
@@ -25,7 +26,9 @@ export default function BenchScreen() {
 
   useEffect(() => {
     const sub = SidekickNative.addListener('onLlmText', (e) => {
-      if (e.requestId === reqId.current) setAnswer((a) => a + e.text);
+      if (e.requestId !== reqId.current) return;
+      answerRef.current += e.text;
+      setAnswer(answerRef.current);
     });
     return () => sub.remove();
   }, []);
@@ -82,6 +85,7 @@ export default function BenchScreen() {
   const generate = (kind: 'text' | 'photo') =>
     run(kind, async () => {
       setAnswer('');
+      answerRef.current = '';
       reqId.current = `${Date.now()}`;
       const s: LlmStats = await SidekickNative.llmGenerate(
         reqId.current,
@@ -93,6 +97,7 @@ export default function BenchScreen() {
           `read ${s.prefillTokens} tok @ ${s.prefillTokensPerSec.toFixed(0)}/s · ` +
           `wrote ${s.decodeTokens} tok @ ${s.decodeTokensPerSec.toFixed(1)}/s`,
       );
+      console.log(`[bench] answer: ${answerRef.current}`);
     });
 
   return (
