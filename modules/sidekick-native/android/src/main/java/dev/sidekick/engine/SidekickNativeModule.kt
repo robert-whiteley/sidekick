@@ -19,6 +19,8 @@ class SidekickNativeModule : Module() {
   private val context: Context
     get() = appContext.reactContext ?: throw IllegalStateException("No React context")
 
+  private val downloads by lazy { Downloads(context) }
+
   private val llm by lazy {
     LlmEngine(context.cacheDir.absolutePath, context.applicationInfo.nativeLibraryDir)
   }
@@ -66,6 +68,19 @@ class SidekickNativeModule : Module() {
         onFail = { promise.reject(CodedException("ERR_LLM", it.message ?: "Generation failed", it)) },
       )
     }
+
+    Function("downloadStart") { url: String, destPath: String, title: String, wifiOnly: Boolean ->
+      downloads.start(url, destPath, title, wifiOnly).toDouble()
+    }
+
+    Function("downloadStatus") { id: Double -> downloads.status(id.toLong()) }
+
+    Function("downloadCancel") { id: Double -> downloads.cancel(id.toLong()) }
+
+    // Hashing GBs takes seconds, so it runs off the JS thread.
+    AsyncFunction("downloadFinish") { destPath: String, sha256: String -> downloads.finish(destPath, sha256) }
+
+    Function("fileExists") { path: String -> java.io.File(path).isFile }
 
     Function("llmCancel") { llm.cancel() }
 

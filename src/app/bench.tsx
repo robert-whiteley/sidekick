@@ -3,6 +3,7 @@ import { Button, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import SidekickNative, { type LlmBackend, type LlmStats } from '../../modules/sidekick-native';
 import { GEMMA_GENERIC, llmCandidates } from '@/engine/llm-candidates';
+import { formatProgress, MODEL_FILES, type ModelFile } from '@/engine/models';
 
 const TEXT_PROMPT = 'In three sentences, explain why the sky is blue.';
 const PHOTO_PROMPT = 'What is in this photo? Answer in two sentences.';
@@ -14,6 +15,7 @@ export default function BenchScreen() {
   const [log, setLog] = useState<string[]>([]);
   const [answer, setAnswer] = useState('');
   const [busy, setBusy] = useState(false);
+  const [progress, setProgress] = useState('');
   const reqId = useRef('');
 
   const add = (line: string) => {
@@ -38,6 +40,32 @@ export default function BenchScreen() {
       setBusy(false);
     }
   };
+
+  const download = (files: ModelFile[]) =>
+    run('download', async () => {
+      for (const f of files) {
+        const dest = `${modelsDir}/${f.name}`;
+        if (SidekickNative.fileExists(dest)) {
+          add(`${f.name}: already downloaded`);
+          continue;
+        }
+        const id = SidekickNative.downloadStart(f.url, dest, `Sidekick: ${f.name}`, false);
+        for (;;) {
+          await new Promise((r) => setTimeout(r, 1000));
+          const st = SidekickNative.downloadStatus(id);
+          setProgress(`${f.name}: ${st.status} ${formatProgress(st.bytes, st.total)}`);
+          if (st.status === 'failed')
+            throw new Error(`${f.name} download failed (reason ${st.reason})`);
+          if (st.status === 'done') break;
+        }
+        setProgress(`${f.name}: checking SHA-256…`);
+        if (!(await SidekickNative.downloadFinish(dest, f.sha256))) {
+          throw new Error(`${f.name} failed its SHA-256 check and was deleted`);
+        }
+        setProgress('');
+        add(`${f.name}: downloaded and verified`);
+      }
+    });
 
   const load = (backend: LlmBackend | 'auto') =>
     run('load', async () => {
@@ -77,6 +105,14 @@ export default function BenchScreen() {
       <Text selectable style={styles.mono}>
         Models: {modelsDir}
       </Text>
+      <View style={styles.row}>
+        <Button
+          title="Download model + photo"
+          disabled={busy}
+          onPress={() => download([MODEL_FILES.gemmaGeneric, MODEL_FILES.benchPhoto])}
+        />
+      </View>
+      {progress !== '' && <Text>{progress}</Text>}
       <View style={styles.row}>
         <Button title="Load auto" disabled={busy} onPress={() => load('auto')} />
         <Button title="GPU" disabled={busy} onPress={() => load('gpu')} />

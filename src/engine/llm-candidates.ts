@@ -1,10 +1,11 @@
 import type { LlmCandidate } from '../../modules/sidekick-native';
+import { MODEL_FILES } from './models';
 
 /** Gemma 4 E2B builds published by Google (litert-community/gemma-4-E2B-it-litert-lm). */
-export const GEMMA_GENERIC = 'gemma-4-E2B-it.litertlm';
+export const GEMMA_GENERIC = MODEL_FILES.gemmaGeneric.name;
 export const GEMMA_TENSOR: Record<string, string> = {
-  G5: 'gemma-4-E2B-it_Google_Tensor_G5.litertlm',
-  G6: 'gemma-4-E2B-it_Google_Tensor_G6.litertlm',
+  G5: MODEL_FILES.gemmaTensorG5.name,
+  G6: MODEL_FILES.gemmaTensorG6.name,
 };
 
 /** Returns the Tensor generation ("G5", "G6") for a Pixel SoC string, or null. */

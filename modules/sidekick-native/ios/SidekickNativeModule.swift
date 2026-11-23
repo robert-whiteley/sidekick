@@ -26,6 +26,20 @@ public class SidekickNativeModule: Module {
       throw Exception(name: "ERR_LLM", description: "On-device model not implemented on iOS yet")
     }
 
+    Function("downloadStart") { (_: String, _: String, _: String, _: Bool) -> Double in
+      throw Exception(name: "ERR_DOWNLOAD", description: "Model downloads not implemented on iOS yet")
+    }
+
+    Function("downloadStatus") { (_: Double) -> [String: Any] in
+      ["status": "failed", "bytes": 0, "total": -1, "reason": -1]
+    }
+
+    Function("downloadCancel") { (_: Double) in }
+
+    AsyncFunction("downloadFinish") { (_: String, _: String) -> Bool in false }
+
+    Function("fileExists") { (path: String) -> Bool in FileManager.default.fileExists(atPath: path) }
+
     Function("llmCancel") {}
 
     AsyncFunction("llmUnload") {}

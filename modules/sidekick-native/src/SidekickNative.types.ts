@@ -31,3 +31,10 @@ export type DeviceInfo = {
 export type SidekickNativeModuleEvents = {
   onLlmText: (event: { requestId: string; text: string }) => void;
 };
+
+export type DownloadStatus = {
+  status: 'pending' | 'running' | 'paused' | 'done' | 'failed';
+  bytes: number;
+  total: number;
+  reason: number;
+};
