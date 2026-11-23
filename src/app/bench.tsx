@@ -89,12 +89,41 @@ export default function BenchScreen() {
       add('played wake phrase');
     });
 
+  // Plays the wake phrase after 10 s, so there is time to leave the app (background answer test).
+  const playWakeLater = () => {
+    SidekickNative.debugPlay(wakeWav(), 10_000).then(
+      () => console.log('[bench] played wake phrase (delayed)'),
+      (e) => console.log(`[bench] delayed play failed: ${String(e)}`),
+    );
+    add('wake phrase plays in 10 s');
+  };
+
+  // A short conversation with different phone voices: the owner asks for consent, a second voice
+  // agrees and says something; a third voice never agreed, so consent mode must drop it.
+  const conversationTest = () =>
+    run('conversation', async () => {
+      const lines: [string, number | null][] = [
+        ['Is it okay if I record this conversation?', null],
+        ['Sure, that is fine.', 3],
+        ['My train to Leeds leaves at half past four.', 3],
+        ['The secret password for the shed is banana.', 7],
+      ];
+      for (let i = 0; i < lines.length; i++) {
+        const [text, voice] = lines[i];
+        const wav = `${dataDir()}/talk-${i}.wav`;
+        await SidekickNative.debugSay(text, wav, voice);
+        await SidekickNative.debugPlay(wav);
+        await new Promise((r) => setTimeout(r, 2500));
+      }
+      add('conversation played');
+    });
+
   const micTest = () =>
     run('mic', async () => {
       const wav = `${modelsDir}/${MOONSHINE_WAVS}/0.wav`;
       SidekickNative.pttStart();
       await SidekickNative.debugPlay(wav);
-      await new Promise((r) => setTimeout(r, 7000));
+      await new Promise((r) => setTimeout(r, 1500));
       const r = await SidekickNative.pttStop();
       add(`mic heard: ${r.text}`);
     });
@@ -167,6 +196,10 @@ export default function BenchScreen() {
       <View style={styles.row}>
         <Button title="Wake test" disabled={busy} onPress={wakeTest} />
         <Button title="Play wake" disabled={busy} onPress={playWake} />
+        <Button title="Wake in 10 s" disabled={busy} onPress={playWakeLater} />
+      </View>
+      <View style={styles.row}>
+        <Button title="Conversation test" disabled={busy} onPress={conversationTest} />
       </View>
       {busy && <Text>Working…</Text>}
       <Text style={styles.answer}>{answer}</Text>

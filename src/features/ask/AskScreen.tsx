@@ -2,6 +2,7 @@ import { CameraView, useCameraPermissions } from 'expo-camera';
 import { Link } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import {
+  AppState,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -21,11 +22,11 @@ import {
   askMicPermission,
   startListening,
   stopListening,
-  trackForeground,
 } from '@/engine/listen';
 import { cancelLlm, ensureLlm } from '@/engine/llm';
 import { getSettings, updateSettings } from '@/engine/settings';
 import { StreamingSpeaker } from '@/engine/speaker';
+import { asksAboutWhatIsInView } from '@/memory/search-logic';
 import { embedPending, ingestJournal, learnOwnerVoice } from '@/memory/store';
 
 type Phase = 'idle' | 'loading' | 'thinking' | 'answering';
@@ -65,7 +66,6 @@ export function AskScreen() {
   // Wake word / background listening events, and moving what was heard into memory.
   useEffect(() => {
     configureListening();
-    trackForeground();
     const subs = [
       SidekickNative.addListener('onWake', () => setStatus('Listening…')),
       SidekickNative.addListener('onQuestion', (e) => askRef.current(e.text)),
@@ -149,7 +149,8 @@ export function AskScreen() {
     speaker.current = sp;
     try {
       let imagePath: string | null = null;
-      if (cameraOn) {
+      const visible = AppState.currentState === 'active';
+      if (cameraOn && visible && (q === DEFAULT_PHOTO_QUESTION || asksAboutWhatIsInView(q))) {
         const pic = await camera.current?.takePictureAsync({ quality: 0.6, shutterSound: false });
         imagePath = pic?.uri.replace(/^file:\/\//, '') ?? null;
       }

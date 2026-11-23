@@ -1,5 +1,6 @@
 import {
   asksAboutSomethingSeen,
+  asksAboutWhatIsInView,
   ftsQuery,
   fuseRankings,
   timeWindow,
@@ -36,4 +37,14 @@ test('time windows', () => {
 test('detects questions about things seen', () => {
   expect(asksAboutSomethingSeen('What did that sign say?')).toBe(true);
   expect(asksAboutSomethingSeen('Who is coming on Friday?')).toBe(false);
+});
+
+test('only questions about the view take a photo', () => {
+  expect(asksAboutWhatIsInView('What am I looking at?')).toBe(true);
+  expect(asksAboutWhatIsInView('How much is this?')).toBe(true);
+  expect(asksAboutWhatIsInView("What's that building?")).toBe(true);
+  expect(asksAboutWhatIsInView('Can you read this label')).toBe(true);
+  expect(asksAboutWhatIsInView('What is my locker code?')).toBe(false);
+  expect(asksAboutWhatIsInView('When does my train leave?')).toBe(false);
+  expect(asksAboutWhatIsInView('What did that sign say?')).toBe(false);
 });

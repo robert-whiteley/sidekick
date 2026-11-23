@@ -64,6 +64,16 @@ export function asksAboutSomethingSeen(q: string): boolean {
   );
 }
 
+/**
+ * Is the question about what the camera sees right now? Only then is a photo taken: a photo adds
+ * ~25 s on older phones, so "what is my locker code?" must stay text-only.
+ */
+export function asksAboutWhatIsInView(q: string): boolean {
+  return /\b(this|these|here|in front|looking at|camera|(can|do) you see|what do you see|read (it|this|that)|what('s| is) (that|it)|what am i)\b/i.test(
+    q,
+  );
+}
+
 /** Prompt formats EmbeddingGemma 2 was trained with. */
 export const embedQuery = (q: string) => `task: search result | query: ${q}`;
 export const embedDocument = (t: string) => `title: none | text: ${t}`;

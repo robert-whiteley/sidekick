@@ -70,7 +70,7 @@ function PersonRow({ person, onChanged }: { person: Person; onChanged: () => voi
         </Pressable>
       </View>
       <Text style={styles.small}>
-        {person.moments} memories
+        {person.moments} {person.moments === 1 ? 'memory' : 'memories'}
         {!person.isOwner && (person.consented ? ' · agreed to notes' : '')}
       </Text>
     </View>

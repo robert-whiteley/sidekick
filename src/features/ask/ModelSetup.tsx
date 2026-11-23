@@ -10,7 +10,9 @@ export function ModelSetup({ onReady }: { onReady: () => void }) {
   const files = allRequiredFiles(SidekickNative.getDeviceInfo().soc).filter(
     (f) => !isDownloaded(f),
   );
-  const gb = (files.reduce((n, f) => n + f.bytes, 0) / 1e9).toFixed(1);
+  const bytes = files.reduce((n, f) => n + f.bytes, 0);
+  const size =
+    bytes >= 1e9 ? `${(bytes / 1e9).toFixed(1)} GB` : `${Math.max(1, Math.round(bytes / 1e6))} MB`;
   const [status, setStatus] = useState('');
   const [fraction, setFraction] = useState(0);
   const [busy, setBusy] = useState(false);
@@ -38,7 +40,7 @@ export function ModelSetup({ onReady }: { onReady: () => void }) {
     <View style={styles.card}>
       <Text style={styles.title}>One-time setup</Text>
       <Text style={styles.body}>
-        Sidekick needs its AI models ({gb} GB). It downloads once over the internet; after that
+        Sidekick needs its AI models ({size}). It downloads once over the internet; after that
         everything runs on this phone and nothing you say or see leaves it. Wi-Fi recommended.
       </Text>
       {busy ? (
@@ -50,7 +52,7 @@ export function ModelSetup({ onReady }: { onReady: () => void }) {
         </>
       ) : (
         <Pressable style={styles.button} onPress={start} accessibilityRole="button">
-          <Text style={styles.buttonText}>Download model</Text>
+          <Text style={styles.buttonText}>Download</Text>
         </Pressable>
       )}
       {error ? <Text style={styles.error}>{error}</Text> : null}

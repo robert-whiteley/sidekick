@@ -1,5 +1,5 @@
 import { Camera } from 'expo-camera';
-import { AppState, PermissionsAndroid, Platform } from 'react-native';
+import { PermissionsAndroid, Platform } from 'react-native';
 
 import SidekickNative from '../../modules/sidekick-native';
 import { isDownloaded } from './downloads';
@@ -33,24 +33,16 @@ export function wakeLine(phrase: string): { line: string; phrase: string } {
   return { line: '▁HE Y ▁ SIDE K IC K :2.0 #0.25 @HEY_SIDEKICK', phrase: DEFAULT_WAKE_PHRASE };
 }
 
-/** Pushes settings to the native listener. JS answers questions only while the app is on screen. */
+/**
+ * Pushes settings to the native listener. While this JS runtime is alive (app open or in the
+ * background) it answers questions, with memory; the service answers alone only if the app was closed.
+ */
 export function configureListening() {
   const s = getSettings();
   const { line, phrase } = wakeLine(s.wakePhrase);
   // The background service answers with the same instructions as the app.
   SidekickNative.kvSet('assistant.system', SYSTEM_PROMPT);
-  SidekickNative.listenConfigure(
-    line,
-    phrase,
-    s.recordConversations,
-    AppState.currentState === 'active',
-  );
-}
-
-let appStateSub: { remove(): void } | null = null;
-export function trackForeground() {
-  appStateSub?.remove();
-  appStateSub = AppState.addEventListener('change', () => configureListening());
+  SidekickNative.listenConfigure(line, phrase, s.recordConversations, true);
 }
 
 export async function askMicPermission(): Promise<boolean> {

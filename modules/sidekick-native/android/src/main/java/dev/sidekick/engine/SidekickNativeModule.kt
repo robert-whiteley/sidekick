@@ -189,7 +189,8 @@ class SidekickNativeModule : Module() {
     }
 
     // Speaks [text] with the system voice into a WAV file (to make test recordings on the phone).
-    AsyncFunction("debugSay") { text: String, path: String, promise: expo.modules.kotlin.Promise ->
+    // [voice] picks a different installed offline English voice (to simulate another person).
+    AsyncFunction("debugSay") { text: String, path: String, voice: Int?, promise: expo.modules.kotlin.Promise ->
       var tts: android.speech.tts.TextToSpeech? = null
       tts =
         android.speech.tts.TextToSpeech(context) { status ->
@@ -197,6 +198,13 @@ class SidekickNativeModule : Module() {
           if (status != android.speech.tts.TextToSpeech.SUCCESS) {
             promise.reject("ERR_TTS", "Text-to-speech unavailable", null)
             return@TextToSpeech
+          }
+          if (voice != null) {
+            val voices =
+              t.voices.orEmpty()
+                .filter { it.locale.language == "en" && !it.isNetworkConnectionRequired }
+                .sortedBy { it.name }
+            if (voices.isNotEmpty()) t.voice = voices[voice % voices.size]
           }
           t.setOnUtteranceProgressListener(
             object : android.speech.tts.UtteranceProgressListener() {
@@ -219,14 +227,23 @@ class SidekickNativeModule : Module() {
     }
 
     // Plays a sound file out of the speaker (to test the microphone path end to end).
-    AsyncFunction("debugPlay") { path: String ->
-      android.media.MediaPlayer().apply {
-        setDataSource(path)
-        setOnCompletionListener { it.release() }
-        prepare()
-        start()
-      }
-      true
+    // Plays a sound file out of the speaker after [delayMs]; resolves when it has finished.
+    AsyncFunction("debugPlay") { path: String, delayMs: Int?, promise: expo.modules.kotlin.Promise ->
+      android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+        try {
+          android.media.MediaPlayer().apply {
+            setDataSource(path)
+            setOnCompletionListener {
+              it.release()
+              promise.resolve(true)
+            }
+            prepare()
+            start()
+          }
+        } catch (e: Exception) {
+          promise.reject("ERR_PLAY", e.message ?: "play failed", e)
+        }
+      }, (delayMs ?: 0).toLong())
     }
 
     Function("journalDrain") { Journal.drain(context) }
