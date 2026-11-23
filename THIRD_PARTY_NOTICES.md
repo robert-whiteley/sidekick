@@ -23,7 +23,7 @@ Every model and library shipped with or downloaded by Sidekick, with its licence
 | Component                     | Licence          |
 | ----------------------------- | ---------------- |
 | Expo, React Native, React     | MIT              |
-| llama.rn / llama.cpp          | MIT              |
+| LiteRT-LM (Google AI Edge)    | Apache-2.0       |
 | sherpa-onnx                   | Apache-2.0       |
 | @op-engineering/op-sqlite     | MIT              |
 | SQLCipher (community edition) | BSD-3-Clause     |

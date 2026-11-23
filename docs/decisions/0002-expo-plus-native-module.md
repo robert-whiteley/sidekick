@@ -8,7 +8,7 @@ The app needs one UI on iOS and Android, cloud iOS builds from a Linux machine, 
 
 ## Decision
 
-Expo (React Native, new architecture, CNG) for UI and orchestration. Heavy, always-on work (wake word, VAD, STT, speaker embeddings) runs in a local Expo module `modules/sidekick-native` — Kotlin foreground service on Android, Swift on iOS — using sherpa-onnx's official Kotlin/Swift APIs. LLM/VLM via `llama.rn`.
+Expo (React Native, new architecture, CNG) for UI and orchestration. Heavy, always-on work (wake word, VAD, STT, speaker embeddings) runs in a local Expo module `modules/sidekick-native` — Kotlin foreground service on Android, Swift on iOS — using sherpa-onnx's official Kotlin/Swift APIs. LLM/VLM via `llama.rn` (superseded by ADR 4: LiteRT-LM).
 
 `react-native-sherpa-onnx` is not used: small project, no keyword spotting / VAD / diarization.
 
