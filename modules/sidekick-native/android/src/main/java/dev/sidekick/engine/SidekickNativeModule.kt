@@ -20,6 +20,7 @@ class GenerateOptionsRecord : Record {
   @Field val keepHistory: Boolean = false
   @Field val system: String? = null
   @Field val scratch: Boolean = false
+  @Field val undoable: Boolean = false
 }
 
 class LlmTuningRecord : Record {
@@ -80,6 +81,7 @@ class SidekickNativeModule : Module() {
     AsyncFunction("llmLoad") { candidates: List<LlmCandidateRecord> ->
       val cands = candidates.map { LlmCandidate(it.modelPath, it.backend) }
       Embedder.unloadIfLowRam(context)
+      Ocr.unload()
       val r = llm.load(cands)
       llm.rememberLoad(context, cands, r)
       mapOf("modelPath" to r.modelPath, "backend" to r.backend, "initMs" to r.initMs, "failures" to r.failures)
@@ -94,7 +96,7 @@ class SidekickNativeModule : Module() {
       llm.generate(
         prompt,
         imagePath,
-        GenerateOptions(opts?.maxTokens, opts?.keepHistory ?: false, opts?.system, opts?.scratch ?: false),
+        GenerateOptions(opts?.maxTokens, opts?.keepHistory ?: false, opts?.system, opts?.scratch ?: false, opts?.undoable ?: false),
         onText = { sendEvent("onLlmText", mapOf("requestId" to requestId, "text" to it)) },
         onFinish = { s ->
           promise.resolve(
@@ -185,6 +187,10 @@ class SidekickNativeModule : Module() {
       MicLoop.commandsOnly = on
       appContext.reactContext?.let { ListenPrefs.save(it) }
     }
+    // The owner's voiceprint (null: not known yet); only it may interrupt Sidekick.
+    Function("listenSetOwnerVoice") { centroid: List<Double>? ->
+      OwnerVoice.set(context, centroid?.map { it.toFloat() }?.toFloatArray())
+    }
 
     // --- Places ---
     // Freshest known location (≤ 2 h old) or null; also requests a new fix for next time.
@@ -267,6 +273,30 @@ class SidekickNativeModule : Module() {
     }
 
     AsyncFunction("ocrUnload") { Ocr.unload() }
+
+    // --- PDFs in picked folders (one page per call, so JS can pace them) ---
+    Function("pdfCanReadText") { Pdf.canReadText }
+
+    // Page count and one page's embedded text (null when this Android can't read PDF text).
+    AsyncFunction("pdfPageText") { uri: String, index: Int ->
+      val (pages, text) = Pdf.pageText(context, uri, index)
+      mapOf("pages" to pages, "text" to text)
+    }
+
+    // One page rendered at 1600 px and OCR'd (for scans).
+    AsyncFunction("pdfPageOcr") { uri: String, index: Int, detPath: String, recPath: String, dictPath: String ->
+      val t0 = android.os.SystemClock.elapsedRealtime()
+      val img = Pdf.renderPage(context, uri, index)
+      val lines = try {
+        Ocr.readBitmap(detPath, recPath, dictPath, img)
+      } finally {
+        img.recycle()
+      }
+      mapOf(
+        "lines" to lines.map { it.text },
+        "ms" to (android.os.SystemClock.elapsedRealtime() - t0).toDouble(),
+      )
+    }
 
     // --- Developer checks (speed-test screen) ---
     // Runs a 16 kHz mono 16-bit WAV through speech-to-text and the wake word spotter.
@@ -382,6 +412,7 @@ class SidekickNativeModule : Module() {
     AsyncFunction("llmPrepare") { system: String? -> llm.prepare(system) }
 
     Function("llmCancel") { llm.cancel() }
+    Function("llmUndoLast") { llm.undoLast() }
 
     AsyncFunction("llmUnload") { llm.unload() }
 

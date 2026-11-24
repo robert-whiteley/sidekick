@@ -12,13 +12,34 @@ export type PersonRef = {
   isOwner: boolean;
   /** Stable per voice cluster: "Person 3" until a name is known. */
   labelNo: number | null;
+  /** What they seem to be from context ("Waiter", "Bus driver", "Man"), until a name is known. */
+  description?: string | null;
 };
+
+/** Descriptions that say nothing about the person's role: kept apart by number ("Man 3"). */
+const GENERIC = new Set([
+  'man',
+  'woman',
+  'boy',
+  'girl',
+  'child',
+  'kid',
+  'person',
+  'adult',
+  'teenager',
+]);
 
 /** What a voice is called everywhere: "You", their name, or their automatic label. */
 export function speakerLabel(p: PersonRef | null | undefined): string {
   if (!p) return 'Someone';
   if (p.isOwner) return 'You';
-  return p.name ?? `Person ${p.labelNo ?? p.id}`;
+  if (p.name) return p.name;
+  const n = p.labelNo ?? p.id;
+  if (p.description) {
+    const d = p.description.charAt(0).toUpperCase() + p.description.slice(1);
+    return GENERIC.has(p.description.toLowerCase()) ? `${d} ${n}` : d;
+  }
+  return `Person ${n}`;
 }
 
 /** The label number for a new voice: one more than any used so far (never reused). */
@@ -61,7 +82,17 @@ export function mentionedPerson<T extends PersonRef>(question: string, people: T
     const f = p.name!.toLowerCase().split(/\s+/)[0];
     return f.length >= 2 && (q.includes(` ${f} `) || q.includes(` ${f}'s `));
   });
-  return first.length === 1 ? first[0] : null;
+  if (first.length === 1) return first[0];
+  // "What did the waiter say?": an unnamed voice by its description (roles only, one match).
+  const described = people.filter(
+    (p) =>
+      !p.isOwner &&
+      !p.name &&
+      p.description &&
+      !GENERIC.has(p.description.toLowerCase()) &&
+      q.includes(` ${p.description.toLowerCase()} `),
+  );
+  return described.length === 1 ? described[0] : null;
 }
 
 // --- Requests the owner gave someone ---

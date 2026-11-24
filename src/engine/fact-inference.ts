@@ -1,5 +1,5 @@
 import SidekickNative from '../../modules/sidekick-native';
-import { askLlm, cancelLlm } from './llm';
+import { askLlmInBackground, cancelLlm } from './llm';
 import { factPrompt, MAX_FACT_LINES, parseFacts } from '@/memory/fact-extraction';
 import { markFactsScanned, ownerLinesToScan, suggestFacts } from '@/memory/store';
 
@@ -16,11 +16,16 @@ export function inferFactsIfIdle(): Promise<void> {
   running = (async () => {
     const lines = await ownerLinesToScan(MAX_FACT_LINES);
     if (!lines.length) return;
-    const { text } = await askLlm(factPrompt(lines.map((l) => l.text)), null, () => {}, {
+    const { text } = await askLlmInBackground(factPrompt(lines.map((l) => l.text)), null, {
       maxTokens: 120,
     });
     if (cancelled) return; // partial output: try these lines again later
-    await suggestFacts(parseFacts(text));
+    await suggestFacts(
+      parseFacts(
+        text,
+        lines.map((l) => l.text),
+      ),
+    );
     await markFactsScanned(lines.map((l) => l.id));
   })()
     .catch((e) => {

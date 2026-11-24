@@ -181,6 +181,7 @@ describe('fetch and orchestration', () => {
     online: async () => true,
     search: jest.fn(async () => [parseWikipedia(wiki)!]),
     writeQuery: async () => null,
+    undoLast: jest.fn(),
     now: () => new Date('2026-11-23T00:00:00Z'),
     ...over,
   });
@@ -243,18 +244,26 @@ describe('fetch and orchestration', () => {
     const d = deps();
     const shown: string[] = [];
     const replies = ['LOOKUP', 'Cats purr to communicate.'];
-    const ask = jest.fn(async (_p: string, onText: (t: string) => void) => {
-      const text = replies.shift()!;
-      onText(text.slice(0, 3));
-      onText(text);
-      return { text, stats: stats(100) };
-    });
+    const ask = jest.fn(
+      async (_p: string, onText: (t: string) => void, _o?: { undoable?: boolean }) => {
+        const text = replies.shift()!;
+        onText(text.slice(0, 3));
+        onText(text);
+        return { text, stats: stats(100) };
+      },
+    );
     const r = await askWithLookup('Why do cats purr?', false, build, ask, (t) => shown.push(t), d);
     expect(shown).toEqual(['Cat', 'Cats purr to communicate.']);
     expect(r.text).toBe('Cats purr to communicate.');
     expect(r.stats.totalMs).toBe(200);
     expect(d.search).toHaveBeenCalledWith('cats purr', expect.objectContaining({ news: false }));
     expect(r.webQuery).toBe('cats purr');
+    // The hidden LOOKUP turn is dropped from the chat before the real answer.
+    expect(ask.mock.calls[0][2]).toEqual({ undoable: true });
+    expect(d.undoLast).toHaveBeenCalledTimes(1);
+    expect((d.undoLast as jest.Mock).mock.invocationCallOrder[0]).toBeLessThan(
+      (d.search as jest.Mock).mock.invocationCallOrder[0],
+    );
   });
 
   test('Gemma answers directly: streamed as usual, no lookup', async () => {
@@ -268,6 +277,8 @@ describe('fetch and orchestration', () => {
     expect(shown).toEqual(['Cats']);
     expect(r.web).toEqual([]);
     expect(d.search).not.toHaveBeenCalled();
+    // A direct answer is a real turn: it stays in the chat.
+    expect(d.undoLast).not.toHaveBeenCalled();
   });
 
   test('searchWeb survives a failing source', async () => {

@@ -58,6 +58,26 @@ object MicLoop {
       },
     )
 
+  /**
+   * Short jobs off the mic thread: Smart Turn and the barge-in voice check. Only the newest
+   * matters, so a backlog drops the oldest.
+   */
+  private val quick =
+    ThreadPoolExecutor(
+      1,
+      1,
+      0L,
+      TimeUnit.MILLISECONDS,
+      ArrayBlockingQueue(2),
+      ThreadFactory { r -> Thread(r, "sidekick-turn") },
+      ThreadPoolExecutor.DiscardOldestPolicy(),
+    )
+  /** (pause id, probability the turn is complete) from Smart Turn. */
+  @Volatile private var turnVerdict: Pair<Int, Float>? = null
+  /** (check id, is the owner) from the barge-in voice check. */
+  @Volatile private var ownerVerdict: Pair<Int, Boolean>? = null
+  @Volatile private var smartTurnFailed = false
+
   /** Shorter segments are skipped (the VAD's own minimum is ~0.41 s, so this only drops blips). */
   private const val MIN_TRANSCRIBE_SEC = 0.4f
   /**
@@ -66,7 +86,13 @@ object MicLoop {
    */
   private const val MIN_TRANSCRIBE_DBFS = -80.0
   /** Voiceprints of shorter clips are unreliable (CAM++ EER 13% on noisy 1.5 s clips). */
-  private const val MIN_VOICEPRINT_SEC = 1.5f
+  private const val MIN_VOICEPRINT_SEC = OwnerBarge.MIN_VOICEPRINT_SEC
+  /**
+   * Journal lines down to this length get a voiceprint too. JS only lets clips under
+   * MIN_VOICEPRINT_SEC join a clearly closest known voice (never the owner, never learned from),
+   * so short lines aren't all "Someone".
+   */
+  private const val MIN_LINE_VOICEPRINT_SEC = 0.5f
   /** Short replies that still get a voiceprint: consent needs to know which voice said yes. */
   private val AGREEMENT =
     Regex(
@@ -88,7 +114,7 @@ object MicLoop {
   @Volatile var nativeAnswerer: ((question: String, followUp: Boolean) -> Unit)? = null
   @Volatile var jsAnswers = false
 
-  private var awaitingQuestionUntil = 0L
+  @Volatile private var awaitingQuestionUntil = 0L
 
   /** Why ambient listening is auto-paused (quiet hours, a paused place), or null. */
   @Volatile var pauseReason: String? = null
@@ -96,6 +122,8 @@ object MicLoop {
   /** Told when [pauseReason] changes (the service updates its notification). */
   @Volatile var onPauseChange: ((String?) -> Unit)? = null
   private const val PAUSE_CHECK_MS = 10_000L
+  /** Audio kept from just before Smart Turn's first speech chunk (the VAD reacts a little late). */
+  private const val TURN_PREROLL_MS = 300
 
   fun startAmbient(ctx: Context) {
     ambient = true
@@ -182,16 +210,25 @@ object MicLoop {
     // and inherit the creating thread's priority, and speech-to-text must not compete with the mic.
     Process.setThreadPriority(Process.THREAD_PRIORITY_URGENT_AUDIO)
     val vad = engine?.newVad()
-    // Separate VAD for talking over Sidekick: per-chunk speech probability, stricter threshold.
-    val bargeVad = engine?.newVad()
+    // Separate VAD for per-chunk speech probability: talking over Sidekick, and Smart Turn's pauses.
+    val probVad = engine?.newVad()
+    val probWindow = SileroWindow()
     val barge = BargeIn()
+    val ownerGate = OwnerBarge()
+    var ownerCheck = 0
+    val turnEnd = TurnEnd()
+    val heard = AudioRing(WhisperMel.SAMPLES)
+    OwnerVoice.load(ctx)
     var wasTalking = false
     var bargedIn = false
+    var ducked = false
     var wake = engine?.newWakeStream(wakeKeywords)
     var keywordsInUse = wakeKeywords
     val chunk = FloatArray(SpeechEngine.VAD_WINDOW)
     var samplesSeen = 0L
     val startedAt = System.currentTimeMillis()
+    // Wall time of the VAD's sample 0 (moved on each reset).
+    var vadEpochMs = startedAt
     var pauseCheckedAt = 0L
     try {
       while (running) {
@@ -214,32 +251,64 @@ object MicLoop {
         val talking = Voice.speaking()
         if (talking && !wasTalking) {
           barge.reset()
-          bargeVad?.reset()
+          ownerGate.reset()
+          ownerCheck++
+          probVad?.reset()
+          probWindow.reset()
+          turnEnd.reset()
           bargedIn = false
         }
+        if (talking != wasTalking) Log.i(TAG, if (talking) "voice started" else "voice stopped")
         wasTalking = talking
-        if (talking && bargeVad != null && ptt == null) {
-          when (barge.feed(bargeVad.compute(samples))) {
-            BargeIn.Action.DUCK -> Voice.duck(true)
-            BargeIn.Action.STOP -> {
-              // The user is talking over Sidekick: stop the voice and the answer; what they say
-              // becomes the next question, with the conversation kept.
-              Log.i(TAG, "barge-in")
-              bargedIn = true
-              Voice.stop()
-              turns.bargedIn(nowMs)
-              runCatching { Engines.llm(ctx).cancel() }
-              emit("onBargeIn", emptyMap())
+        // The user is talking over Sidekick: stop the voice and the answer; what they say becomes
+        // the next question, with the conversation kept.
+        fun bargeIn(why: String) {
+          Log.i(TAG, "barge-in ($why)")
+          bargedIn = true
+          Voice.stop()
+          turns.bargedIn(nowMs)
+          runCatching { Engines.llm(ctx).cancel() }
+          emit("onBargeIn", emptyMap())
+        }
+        // A spoken question is coming: after the wake word, or a reply in a conversation.
+        val questionMode = ptt == null && (nowMs <= awaitingQuestionUntil || inConversation)
+        val speechP =
+          if (probVad != null && ptt == null && (talking || questionMode)) probVad.compute(probWindow.next(samples)) else -1f
+        if (talking && speechP >= 0f && engine != null && !bargedIn) {
+          val action = barge.feed(speechP)
+          val owner = OwnerVoice.centroid
+          when (ownerGate.feed(action, barge.ducked(), speechP >= TurnEnd.SPEECH, samples, owner != null)) {
+            OwnerBarge.Step.STOP -> bargeIn("no owner voice yet")
+            OwnerBarge.Step.VERIFY -> {
+              val clip = ownerGate.clip()
+              val id = ownerCheck
+              quick.execute { checkOwner(engine, clip, id) }
             }
-            BargeIn.Action.NONE -> if (!barge.ducked()) Voice.duck(false)
+            OwnerBarge.Step.REJECT -> barge.reset()
+            OwnerBarge.Step.NONE -> {}
           }
+          ownerVerdict?.let { (id, isOwner) ->
+            ownerVerdict = null
+            if (id == ownerCheck) {
+              if (ownerGate.verified(isOwner)) bargeIn("owner's voice") else barge.reset()
+            }
+          }
+          val duck = !bargedIn && (barge.ducked() || ownerGate.holding())
+          if (duck != ducked) Voice.duck(duck)
+          ducked = duck
+        } else if (ducked) {
+          Voice.duck(false)
+          ducked = false
         }
         if (ambient && nowMs - pauseCheckedAt >= PAUSE_CHECK_MS) {
           pauseCheckedAt = nowMs
           val reason = Places.pauseReason()
           if (reason != pauseReason) {
             pauseReason = reason
-            if (reason != null) vad?.reset()
+            if (reason != null) {
+              vad?.reset()
+              vadEpochMs = nowMs
+            }
             runCatching { onPauseChange?.invoke(reason) }
             emit("onListenPause", mapOf("reason" to reason))
           }
@@ -254,20 +323,55 @@ object MicLoop {
           wake = engine.newWakeStream(wakeKeywords)
           keywordsInUse = wakeKeywords
         }
-        // Not while Sidekick talks: its own voice could say the wake word.
-        if (wake != null && !talking && engine.wakeHeard(wake, samples)) {
-          awaitingQuestionUntil = System.currentTimeMillis() + QUESTION_WINDOW_MS
-          emit("onWake", emptyMap())
+        if (wake != null && engine.wakeHeard(wake, samples)) {
+          Log.i(TAG, "wake word heard (talking=$talking)")
+          if (!talking) {
+            awaitingQuestionUntil = System.currentTimeMillis() + QUESTION_WINDOW_MS
+            emit("onWake", emptyMap())
+          } else if (!bargedIn && !turns.hasSaid(normalize(wakePhrase).split(" ").last())) {
+            // The wake word always interrupts (short clips can't be told apart by voice), unless
+            // Sidekick itself just said it.
+            awaitingQuestionUntil = System.currentTimeMillis() + QUESTION_WINDOW_MS
+            bargeIn("wake word")
+          }
         }
         vad.acceptWaveform(samples)
+        heard.write(samples)
+        // Smart Turn: on a short pause in a spoken question, end the turn now if it sounds finished.
+        var endNow = false
+        if (questionMode && speechP >= 0f && (!talking || bargedIn) && !smartTurnFailed) {
+          if (turnEnd.feed(speechP) == TurnEnd.Step.CHECK) {
+            val id = turnEnd.pause
+            val audio = heard.last(minOf(turnEnd.turnMs() + TURN_PREROLL_MS, WhisperMel.SECONDS * 1000) * (SAMPLE_RATE / 1000))
+            quick.execute { checkTurn(ctx, audio, id) }
+          }
+          turnVerdict?.let { (id, p) ->
+            if (id == turnEnd.pause) {
+              turnVerdict = null
+              endNow = p >= SmartTurn.COMPLETE && turnEnd.stillPaused(id) && vad.isSpeechDetected()
+            }
+          }
+          if (endNow) {
+            Log.i(TAG, "turn ended early (Smart Turn)")
+            vad.flush()
+          }
+        } else {
+          turnEnd.reset()
+        }
         while (!vad.empty()) {
           val seg = vad.front()
           vad.pop()
-          val atMs = startedAt + (seg.start * 1000 / SAMPLE_RATE)
+          val atMs = vadEpochMs + (seg.start * 1000 / SAMPLE_RATE)
           val audio = seg.samples
           // Ended while Sidekick was still talking and never confirmed as barge-in: its own echo.
           if (talking && !bargedIn) continue
           worker.execute { handleSegment(ctx, engine, audio, atMs) }
+        }
+        if (endNow) {
+          // Flushing leaves Silero mid-speech; start it afresh so the pause isn't a second segment.
+          vad.reset()
+          vadEpochMs = System.currentTimeMillis()
+          turnEnd.reset()
         }
       }
     } catch (t: Throwable) {
@@ -277,7 +381,8 @@ object MicLoop {
       runCatching { rec.stop() }
       aec?.release()
       rec.release()
-      bargeVad?.release()
+      if (ducked) Voice.duck(false)
+      probVad?.release()
       wake?.release()
       vad?.release()
       running = false
@@ -294,7 +399,7 @@ object MicLoop {
       val raw = engine.transcribe(audio)
       if (raw.isBlank()) return
       val voice =
-        if (audio.size >= MIN_VOICEPRINT_SEC * SAMPLE_RATE || AGREEMENT.containsMatchIn(raw.trim())) {
+        if (audio.size >= MIN_LINE_VOICEPRINT_SEC * SAMPLE_RATE || AGREEMENT.containsMatchIn(raw.trim())) {
           engine.voiceprint(audio)
         } else null
       val now = System.currentTimeMillis()
@@ -334,6 +439,37 @@ object MicLoop {
     } catch (t: Throwable) {
       Log.e(TAG, "segment failed", t)
     }
+  }
+
+  /** Smart Turn on the turn so far (quick thread); the mic loop acts on [turnVerdict]. */
+  private fun checkTurn(ctx: Context, audio: FloatArray, id: Int) {
+    try {
+      val st = SmartTurn.get(Speech.modelsDir(ctx)) ?: return
+      val t0 = System.nanoTime()
+      val p = st.completeProbability(audio)
+      Log.i(TAG, "smart turn: p=${"%.2f".format(p)} in ${(System.nanoTime() - t0) / 1_000_000} ms")
+      turnVerdict = id to p
+    } catch (t: Throwable) {
+      Log.w(TAG, "Smart Turn failed; turns end on silence only", t)
+      smartTurnFailed = true
+    }
+  }
+
+  /** Whether the voice talking over Sidekick is the owner's (quick thread). */
+  private fun checkOwner(engine: SpeechEngine, clip: FloatArray, id: Int) {
+    val owner = OwnerVoice.centroid
+    val ok =
+      if (owner == null) true
+      else
+        try {
+          val v = engine.voiceprint(clip)
+          Log.i(TAG, "barge-in voice check: similarity ${v?.let { "%.2f".format(Turns.cosine(it, owner)) }}")
+          OwnerBarge.isOwner(v, owner)
+        } catch (t: Throwable) {
+          Log.w(TAG, "barge-in voice check failed", t)
+          false
+        }
+    ownerVerdict = id to ok
   }
 
   private fun worthTranscribing(audio: FloatArray): Boolean {

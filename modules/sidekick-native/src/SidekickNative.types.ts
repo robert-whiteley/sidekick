@@ -22,6 +22,8 @@ export type GenerateOptions = {
    * is. For short side tasks such as writing search words.
    */
   scratch?: boolean;
+  /** Keep a copy of the chat from before this turn, so `llmUndoLast()` can drop the turn. */
+  undoable?: boolean;
 };
 
 /** Speed knobs a bench can try; omitted = library default. */

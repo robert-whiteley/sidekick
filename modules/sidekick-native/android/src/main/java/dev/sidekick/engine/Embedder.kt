@@ -57,6 +57,7 @@ object Embedder {
   private fun load(ctx: Context, modelPath: String): EmbeddingEngine {
     engine?.takeIf { path == modelPath }?.let { return it }
     unload()
+    Ocr.unload() // small, but frees room for a big model; reloads on the next photo
     if (totalRamMb(ctx) < LOW_RAM_MB) Engines.llm(ctx).unload()
     val e = EmbeddingEngine(EmbeddingEngineConfig(modelPath = modelPath, backend = Backend.CPU(), visionBackend = Backend.CPU(), cacheDir = modelCacheDir(ctx)))
     e.initialize()

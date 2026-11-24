@@ -15,6 +15,7 @@ Every model and library shipped with or downloaded by Sidekick, with its licence
 | PaddleOCR PP-OCRv6 small det + rec (PaddlePaddle ONNX exports)               | Apache-2.0                                              |
 | Kyutai Pocket TTS 100M (sherpa-onnx int8 export)                             | CC BY 4.0 (weights, © Kyutai), Apache-2.0 (ONNX export) |
 | Pocket TTS reference voice `bria.wav` (kyutai-labs/delayed-streams-modeling) | Apache-2.0                                              |
+| Smart Turn v3.2 (pipecat-ai/smart-turn-v3, fp32 ONNX)                        | BSD-2-Clause (© Daily)                                  |
 
 ## Data
 
@@ -35,23 +36,22 @@ Every model and library shipped with or downloaded by Sidekick, with its licence
 
 ## Libraries
 
-| Component                                                                                            | Licence          |
-| ---------------------------------------------------------------------------------------------------- | ---------------- |
-| Expo (incl. expo-updates), React Native, React                                                       | MIT              |
-| LiteRT-LM (Google AI Edge)                                                                           | Apache-2.0       |
-| sherpa-onnx                                                                                          | Apache-2.0       |
-| ONNX Runtime C API headers (vendored in the native module, for photo OCR)                            | MIT              |
-| @op-engineering/op-sqlite                                                                            | MIT              |
-| SQLCipher (community edition)                                                                        | BSD-3-Clause     |
-| sqlite-vec                                                                                           | MIT / Apache-2.0 |
-| OpenSSL (used by SQLCipher)                                                                          | Apache-2.0       |
-| Apache Commons Compress                                                                              | Apache-2.0       |
-| AndroidX Core                                                                                        | Apache-2.0       |
-| Material Symbols "mic" icon (Quick Settings tile)                                                    | Apache-2.0       |
-| expo-camera, expo-speech, expo-secure-store, expo-crypto, expo-sharing, expo-battery                 | MIT              |
-| expo-notifications, expo-calendar (follow-ups)                                                       | MIT              |
-| expo-network (online lookup: connection state)                                                       | MIT              |
-| expo-contacts, expo-file-system, expo-calendar (data sources)                                        | MIT              |
-| Firebase Cloud Messaging (pulled in by expo-notifications on Android; never configured, so inactive) | Apache-2.0       |
+| Component                                                                            | Licence          |
+| ------------------------------------------------------------------------------------ | ---------------- |
+| Expo (incl. expo-updates), React Native, React                                       | MIT              |
+| LiteRT-LM (Google AI Edge)                                                           | Apache-2.0       |
+| sherpa-onnx                                                                          | Apache-2.0       |
+| ONNX Runtime C API headers (vendored in the native module, for photo OCR)            | MIT              |
+| @op-engineering/op-sqlite                                                            | MIT              |
+| SQLCipher (community edition)                                                        | BSD-3-Clause     |
+| sqlite-vec                                                                           | MIT / Apache-2.0 |
+| OpenSSL (used by SQLCipher)                                                          | Apache-2.0       |
+| Apache Commons Compress                                                              | Apache-2.0       |
+| AndroidX Core                                                                        | Apache-2.0       |
+| Material Symbols "mic" icon (Quick Settings tile)                                    | Apache-2.0       |
+| expo-camera, expo-speech, expo-secure-store, expo-crypto, expo-sharing, expo-battery | MIT              |
+| expo-notifications, expo-calendar (follow-ups)                                       | MIT              |
+| expo-network (online lookup: connection state)                                       | MIT              |
+| expo-contacts, expo-file-system, expo-calendar (data sources)                        | MIT              |
 
 This list is updated whenever a dependency is added.

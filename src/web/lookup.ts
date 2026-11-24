@@ -1,6 +1,6 @@
 import { getNetworkStateAsync } from 'expo-network';
 
-import { askLlmAside, cancelLlm, ensureLlm } from '@/engine/llm';
+import { askLlmAside, cancelLlm, ensureLlm, undoLastTurn } from '@/engine/llm';
 import { getSettings } from '@/engine/settings';
 import { listSpeakers } from '@/memory/store';
 import {
@@ -11,6 +11,7 @@ import {
   LOOKUP_FAILED_NOTE,
   LOOKUP_HINT,
   LOOKUP_TIMEOUT_MS,
+  NEWS_TIMEOUT_MS,
   mergeSources,
   MAX_SOURCES,
   mightBeLookup,
@@ -114,11 +115,14 @@ export type SearchOptions = {
 };
 
 export type Getters = {
-  json: (url: string) => Promise<unknown>;
+  json: (url: string, timeoutMs?: number) => Promise<unknown>;
   text: (url: string) => Promise<string | null>;
 };
 
-const defaultGetters: Getters = { json: (u) => fetchJson(u), text: (u) => fetchText(u) };
+const defaultGetters: Getters = {
+  json: (u, t) => fetchJson(u, t),
+  text: (u) => fetchText(u),
+};
 
 /**
  * Wikipedia + DuckDuckGo Instant Answers (+ the user's SearXNG, if set), all at once. For news
@@ -161,7 +165,7 @@ export async function searchWeb(
       : [],
     gdelt
       ? get
-          .json(gdelt)
+          .json(gdelt, NEWS_TIMEOUT_MS)
           .then(parseGdelt)
           .catch(() => [])
       : [],
@@ -248,6 +252,8 @@ export type LookupDeps = {
   search: (query: string, opts: SearchOptions) => Promise<WebSource[]>;
   /** Gemma's search words (names already stripped), or null to use the rule-based query. */
   writeQuery: (question: string, names: string[]) => Promise<string | null>;
+  /** Drops the model's last chat turn (its "LOOKUP" reply) so follow-ups never see it. */
+  undoLast: () => void;
   now: () => Date;
 };
 
@@ -269,6 +275,9 @@ const defaultDeps: LookupDeps = {
     await ensureLlm();
     return queryFromModel(question, names, writeAside, cancelLlm);
   },
+  undoLast: () => {
+    undoLastTurn();
+  },
   now: () => new Date(),
 };
 
@@ -283,7 +292,12 @@ export async function askWithLookup<T extends Asked>(
   question: string,
   photo: boolean,
   build: (webPart: string) => string,
-  ask: (prompt: string, onText: (full: string) => void) => Promise<T>,
+  /** undoable: the turn may be dropped from the chat afterwards (see LookupDeps.undoLast). */
+  ask: (
+    prompt: string,
+    onText: (full: string) => void,
+    opts?: { undoable?: boolean },
+  ) => Promise<T>,
   onText: (full: string) => void,
   deps: LookupDeps = defaultDeps,
 ): Promise<T & { web: WebSource[]; webQuery?: string }> {
@@ -296,17 +310,24 @@ export async function askWithLookup<T extends Asked>(
   let webQuery: string | undefined;
   const lookup = async (): Promise<WebSource[]> => {
     if (!(await deps.online())) return [];
+    const t0 = Date.now();
     const fromModel = await deps.writeQuery(question, names).catch(() => null);
     const q = fromModel ?? buildQuery(question, names);
     if (!q) return [];
     webQuery = q;
+    const tWords = Date.now() - t0;
     const opts: SearchOptions = {
       searx: deps.searxUrl(),
       news: isNewsQuestion(question),
       feeds: deps.feeds(),
       now: deps.now(),
     };
-    return deps.search(q, opts).catch(() => []);
+    const found = await deps.search(q, opts).catch(() => [] as WebSource[]);
+    // Timings only (no question text) for checking budgets on a phone.
+    console.log(
+      `[lookup] words by ${fromModel ? 'model' : 'rules'} in ${tWords} ms; ${found.length} sources (${[...new Set(found.map((w) => w.name))].join(', ')}) in ${Date.now() - t0 - tWords} ms${opts.news ? ' · news' : ''}`,
+    );
+    return found;
   };
 
   if (decision === 'lookup') {
@@ -316,15 +337,21 @@ export async function askWithLookup<T extends Asked>(
 
   // 'ask-model': hold the streamed text back while it could still be "LOOKUP".
   let shown = false;
-  const first = await ask(build(LOOKUP_HINT), (full) => {
-    if (!shown && mightBeLookup(full)) return;
-    shown = true;
-    onText(full);
-  });
+  const first = await ask(
+    build(LOOKUP_HINT),
+    (full) => {
+      if (!shown && mightBeLookup(full)) return;
+      shown = true;
+      onText(full);
+    },
+    { undoable: true },
+  );
   if (!requestsLookup(first.text)) {
     if (!shown && first.text) onText(first.text);
     return { ...first, web: [] };
   }
+  // The hidden "LOOKUP" turn leaves the chat: a spoken follow-up sees only question and answer.
+  deps.undoLast();
   const web = await lookup();
   const second = await ask(
     build(web.length ? webContext(web, deps.now()) : LOOKUP_FAILED_NOTE),

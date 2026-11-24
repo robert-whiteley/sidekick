@@ -22,12 +22,16 @@ data class LlmCandidate(val modelPath: String, val backend: String)
 
 data class LlmLoadResult(val modelPath: String, val backend: String, val initMs: Long, val failures: List<String>)
 
-/** [scratch]: run in a separate throwaway conversation, leaving the chat and its history as they are. */
+/**
+ * [scratch]: run in a separate throwaway conversation, leaving the chat and its history as they are.
+ * [undoable]: keep a copy of the chat from before this turn, so [LlmEngine.undoLast] can drop it.
+ */
 data class GenerateOptions(
   val maxTokens: Int? = null,
   val keepHistory: Boolean = false,
   val system: String? = null,
   val scratch: Boolean = false,
+  val undoable: Boolean = false,
 )
 
 /**
@@ -67,9 +71,11 @@ data class LlmStats(
 @OptIn(ExperimentalApi::class)
 class LlmEngine(private val cacheDir: String, private val nativeLibDir: String) {
   private var engine: Engine? = null
-  private var conversation: Conversation? = null
+  @Volatile private var conversation: Conversation? = null
   /** The last side task's conversation; closed at the next generate (not inside its own callback). */
-  private var scratch: Conversation? = null
+  @Volatile private var scratch: Conversation? = null
+  /** The chat as it was before the last undoable turn (see [undoLast]); dropped at the next chat turn. */
+  @Volatile private var before: Conversation? = null
   /** A conversation with only the system prompt read in; fresh questions start from a clone of it. */
   private var base: Conversation? = null
   private var baseSystem: String? = null
@@ -125,6 +131,7 @@ class LlmEngine(private val cacheDir: String, private val nativeLibDir: String) 
    * Streams the answer to [prompt] (optionally about [imagePath]) through [onText]. With
    * [keepHistory] the previous turns stay in context (chat); otherwise a fresh conversation starts.
    */
+  @Synchronized
   fun generate(
     prompt: String,
     imagePath: String?,
@@ -134,20 +141,36 @@ class LlmEngine(private val cacheDir: String, private val nativeLibDir: String) 
     onFail: (Throwable) -> Unit,
   ) {
     val e = engine ?: return onFail(IllegalStateException("Model not loaded"))
+    // A conversation must never be closed while it is still generating: LiteRT-LM's callback
+    // thread then uses freed memory and the app dies (SIGSEGV seen on the Pixel 5 when a background
+    // task and a question overlapped). Stop the running answer and wait for it to end first.
+    stopRunning()
+    val done = java.util.concurrent.CountDownLatch(1)
+    running = done
+    chatRunning = !opts.scratch
+    val finish = { done.countDown() }
     closeScratch()
     val conv =
       try {
         if (opts.scratch) {
           freshConversation(e, opts.system).also { scratch = it }
         } else {
-          conversation?.takeIf { opts.keepHistory }
-            ?: run {
-              conversation?.close()
-              conversation = null
-              freshConversation(e, opts.system).also { conversation = it }
+          (
+            conversation?.takeIf { opts.keepHistory }
+              ?: run {
+                conversation?.close()
+                conversation = null
+                freshConversation(e, opts.system).also { conversation = it }
+              }
+          ).also { chat ->
+            closeBefore()
+            if (opts.undoable) {
+              before = runCatching { chat.clone() }.onFailure { Log.w(TAG, "chat clone failed", it) }.getOrNull()
             }
+          }
         }
       } catch (t: Throwable) {
+        finish()
         return onFail(t)
       }
     val parts = buildList {
@@ -165,26 +188,52 @@ class LlmEngine(private val cacheDir: String, private val nativeLibDir: String) 
           }
 
           override fun onDone() {
-            val b = conv.getBenchmarkInfo()
-            onFinish(
-              LlmStats(
-                ttftMs = b.timeToFirstTokenInSecond * 1000,
-                prefillTokens = b.lastPrefillTokenCount,
-                prefillTokensPerSec = b.lastPrefillTokensPerSecond,
-                decodeTokens = b.lastDecodeTokenCount,
-                decodeTokensPerSec = b.lastDecodeTokensPerSecond,
-                totalMs = (System.nanoTime() - start) / 1_000_000,
+            val b = runCatching { conv.getBenchmarkInfo() }.getOrNull()
+            // Free the next generate only after the callbacks have run (it may close [conv]).
+            try {
+              if (b == null) return onFinish(LlmStats(0.0, 0, 0.0, 0, 0.0, (System.nanoTime() - start) / 1_000_000))
+              onFinish(
+                LlmStats(
+                  ttftMs = b.timeToFirstTokenInSecond * 1000,
+                  prefillTokens = b.lastPrefillTokenCount,
+                  prefillTokensPerSec = b.lastPrefillTokensPerSecond,
+                  decodeTokens = b.lastDecodeTokenCount,
+                  decodeTokensPerSec = b.lastDecodeTokensPerSecond,
+                  totalMs = (System.nanoTime() - start) / 1_000_000,
+                )
               )
-            )
+            } finally {
+              finish()
+            }
           }
 
-          override fun onError(throwable: Throwable) = onFail(throwable)
+          override fun onError(throwable: Throwable) {
+            try {
+              onFail(throwable)
+            } finally {
+              finish()
+            }
+          }
         },
         maxOutputToken = opts.maxTokens,
       )
     } catch (t: Throwable) {
+      finish()
       onFail(t)
     }
+  }
+
+  /** Signalled when the current generation has fully ended (done, failed or cancelled). */
+  @Volatile private var running: java.util.concurrent.CountDownLatch? = null
+  /** Whether the current generation runs in the chat (not a scratch conversation). */
+  @Volatile private var chatRunning = false
+
+  /** Cancels any generation still running and waits until LiteRT-LM has let go of it. */
+  private fun stopRunning() {
+    val r = running ?: return
+    if (r.count == 0L) return
+    cancel()
+    if (!r.await(15, java.util.concurrent.TimeUnit.SECONDS)) Log.w(TAG, "previous answer did not stop in 15 s")
   }
 
   /**
@@ -254,14 +303,38 @@ class LlmEngine(private val cacheDir: String, private val nativeLibDir: String) 
     }
   }
 
+  private fun closeBefore() {
+    val b = before ?: return
+    before = null
+    runCatching { b.close() }.onFailure { Log.w(TAG, "undo copy close failed", it) }
+  }
+
+  /**
+   * Drops the last undoable turn (e.g. the model's "LOOKUP" reply) from the chat, so a follow-up
+   * never sees it. Returns false when there is nothing to undo.
+   */
+  @Synchronized
+  fun undoLast(): Boolean {
+    // Never close the chat mid-answer (see generate); a background pass in its scratch chat is fine.
+    if (chatRunning && (running?.count ?: 0L) != 0L) return false
+    val b = before ?: return false
+    before = null
+    runCatching { conversation?.close() }
+    conversation = b
+    return true
+  }
+
+  /** Not locked (it must reach a running answer); a conversation closed meanwhile is ignored. */
   fun cancel() {
-    conversation?.cancelProcess()
-    scratch?.cancelProcess()
+    runCatching { conversation?.cancelProcess() }
+    runCatching { scratch?.cancelProcess() }
   }
 
   @Synchronized
   fun unload() {
+    stopRunning()
     closeScratch()
+    closeBefore()
     conversation?.close()
     conversation = null
     resetBase()

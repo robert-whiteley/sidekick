@@ -16,8 +16,24 @@ export function factPrompt(lines: string[]): string {
   );
 }
 
-/** Parses the model's reply into fact sentences (deduplicated, bounded). */
-export function parseFacts(reply: string): string[] {
+/** Replies about the task rather than facts ("Please provide the conversation…"). */
+const META =
+  /^(please|sorry|i|i'm|i am|you|your|could|can|there|it|this|based|as an|unfortunately|no )\b/i;
+
+/**
+ * Parses the model's reply into fact sentences (deduplicated, bounded). With the owner's `lines`,
+ * a fact must start with "My"/"Our" or a word the owner actually said (a name), so the model's
+ * remarks about the task are never suggested as facts.
+ */
+export function parseFacts(reply: string, lines?: string[]): string[] {
+  const said = lines
+    ? new Set(
+        lines
+          .join(' ')
+          .toLowerCase()
+          .match(/[\p{L}\p{N}']+/gu) ?? [],
+      )
+    : null;
   const out: string[] = [];
   for (const raw of reply.split('\n')) {
     const line = raw
@@ -28,6 +44,9 @@ export function parseFacts(reply: string): string[] {
     if (/^(here|sure|okay|these|the following|facts?:)/i.test(line)) continue;
     if (line.length < 8 || line.length > 160) continue;
     if (/\?$/.test(line)) continue;
+    if (META.test(line)) continue;
+    const first = (line.match(/^[\p{L}\p{N}']+/u)?.[0] ?? '').toLowerCase().replace(/'s$/, '');
+    if (said && !/^(my|our)$/.test(first) && !said.has(first)) continue;
     const s = /[.!]$/.test(line) ? line : `${line}.`;
     if (!out.some((x) => x.toLowerCase() === s.toLowerCase())) out.push(s);
     if (out.length >= 5) break;

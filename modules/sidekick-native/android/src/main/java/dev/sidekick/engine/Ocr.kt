@@ -5,6 +5,8 @@ import android.graphics.Canvas
 import android.graphics.Matrix
 import android.graphics.Paint
 import java.io.File
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 import kotlin.math.ceil
 import kotlin.math.floor
 import kotlin.math.hypot
@@ -16,7 +18,8 @@ import kotlin.math.roundToInt
  * Reads the text in a photo with PaddleOCR PP-OCRv6 small (detection + recognition, ONNX on
  * ONNX Runtime via [OrtShim], CPU). Mirrors PaddleOCR's DBPostProcess (threshold 0.2, box score 0.45, unclip
  * 1.4) and CTC decoding; the laptop reference this was ported from gave the same lines.
- * Sessions stay loaded once used (~31 MB of weights).
+ * Sessions (~31 MB of weights) unload [IDLE_MS] after the last read, and before the chat model or
+ * the embedder loads, so OCR never sits in memory next to a big model.
  */
 object Ocr {
   data class Line(val text: String, val score: Float)
@@ -24,6 +27,12 @@ object Ocr {
   private class Models(val det: Long, val rec: Long, val chars: List<String>, val key: String)
 
   @Volatile private var models: Models? = null
+
+  /** Unload this long after the last read (a burst of photos or PDF pages keeps it loaded). */
+  const val IDLE_MS = 60_000L
+  private val idle = IdleToken()
+  private val reaper =
+    Executors.newSingleThreadScheduledExecutor { r -> Thread(r, "ocr-idle").apply { isDaemon = true } }
 
   /** Longest edge the photo is decoded at (crops for recognition come from this). */
   private const val DECODE_EDGE = 2048
@@ -43,20 +52,49 @@ object Ocr {
     val m = load(detPath, recPath, dictPath)
     val img = ModelImage.decodeUpright(photoPath, DECODE_EDGE) ?: return emptyList()
     try {
-      val boxes = detect(m.det, img)
-      val out = ArrayList<Line>()
-      for (b in sortBoxes(boxes)) {
-        val crop = cropBox(img, b) ?: continue
-        val line = recognize(m.rec, m.chars, crop)
-        crop.recycle()
-        if (line != null && line.score >= MIN_SCORE && line.text.isNotBlank()) out.add(line)
-      }
-      return out
+      return readImage(m, img)
     } finally {
       img.recycle()
+      scheduleIdleUnload()
     }
   }
 
+  /** Same for an image already in memory (a rendered PDF page); [img] is not recycled. */
+  @Synchronized
+  fun readBitmap(detPath: String, recPath: String, dictPath: String, img: Bitmap): List<Line> =
+    try {
+      readImage(load(detPath, recPath, dictPath), img)
+    } finally {
+      scheduleIdleUnload()
+    }
+
+  /** Called with the lock held, after each read. */
+  private fun scheduleIdleUnload() {
+    val token = idle.used()
+    reaper.schedule({ unloadIfIdle(token) }, IDLE_MS, TimeUnit.MILLISECONDS)
+  }
+
+  @Synchronized
+  private fun unloadIfIdle(token: Long) {
+    if (idle.isLatest(token) && models != null) {
+      unload()
+      android.util.Log.i("Sidekick", "ocr unloaded (idle)")
+    }
+  }
+
+  private fun readImage(m: Models, img: Bitmap): List<Line> {
+    val boxes = detect(m.det, img)
+    val out = ArrayList<Line>()
+    for (b in sortBoxes(boxes)) {
+      val crop = cropBox(img, b) ?: continue
+      val line = recognize(m.rec, m.chars, crop)
+      crop.recycle()
+      if (line != null && line.score >= MIN_SCORE && line.text.isNotBlank()) out.add(line)
+    }
+    return out
+  }
+
+  /** Frees the OCR sessions now (also called before the chat model or the embedder loads). */
   @Synchronized
   fun unload() {
     models?.let {
@@ -372,4 +410,11 @@ object Ocr {
     }
     return Line(sb.toString(), if (n == 0) 0f else sum / n)
   }
+}
+
+/** Which read was the last one: a delayed idle check only acts if no read happened since. Not thread-safe; guard it. */
+class IdleToken {
+  private var latest = 0L
+  fun used(): Long = ++latest
+  fun isLatest(token: Long) = token == latest
 }

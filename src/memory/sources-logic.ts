@@ -73,11 +73,79 @@ export const FILE_LIMITS = {
   maxChunks: 50,
 };
 
-/** Plain-text files only. PDFs are skipped: no small, commercial-safe on-device extractor. */
-export function isIndexableFile(name: string, size: number | null): boolean {
-  if (name.startsWith('.')) return false;
-  if (size != null && size > FILE_LIMITS.maxBytes) return false;
-  return /\.(txt|md|markdown|text)$/i.test(name);
+/** Plain-text files, and PDFs where the phone can read them ([pdf]: Android only). */
+export function isIndexableFile(name: string, size: number | null, pdf = false): boolean {
+  return indexableKind(name, size, pdf) != null;
+}
+
+/** "text" / "pdf" for files a folder source reads, null for everything else. */
+export function indexableKind(
+  name: string,
+  size: number | null,
+  pdf = false,
+): 'text' | 'pdf' | null {
+  if (name.startsWith('.')) return null;
+  if (pdf && /\.pdf$/i.test(name)) {
+    return size != null && size > PDF_LIMITS.maxBytes ? null : 'pdf';
+  }
+  if (size != null && size > FILE_LIMITS.maxBytes) return null;
+  return /\.(txt|md|markdown|text)$/i.test(name) ? 'text' : null;
+}
+
+// --- PDFs ---
+
+export const PDF_LIMITS = {
+  /** Pages read per PDF (the first ones). */
+  maxPages: 30,
+  maxBytes: 50_000_000,
+  /** 30 pages of ~3,000 characters would overflow the text-file cap of 50 passages. */
+  maxChunks: 100,
+  /** No new PDF is started once a folder scan has OCR'd this many pages; the rest wait for the next scan. */
+  ocrPagesPerScan: 60,
+  /** A page with fewer letters/digits than this in its embedded text is treated as a scan. */
+  minTextChars: 20,
+};
+
+/** Pages to read from a PDF of [pageCount] pages. */
+export const pdfPagesToRead = (pageCount: number) =>
+  Math.max(0, Math.min(pageCount, PDF_LIMITS.maxPages));
+
+/** Embedded page text with too little in it (a scan, or only a page number) is OCR'd instead. */
+export function pageNeedsOcr(embedded: string | null): boolean {
+  return (embedded?.match(/[\p{L}\p{N}]/gu)?.length ?? 0) < PDF_LIMITS.minTextChars;
+}
+
+/** Tidies one page's text: no trailing spaces or runs of blank lines. */
+export function cleanPageText(text: string): string {
+  return text
+    .replace(/\r\n?/g, '\n')
+    .replace(/[ \t\f\v\u00a0]+/g, ' ')
+    .replace(/ *\n */g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
+/** A whole PDF's text: its pages, in order, separated by blank lines (so chunks break there). */
+export function pdfText(pages: (string | null)[]): string {
+  return pages
+    .map((p) => cleanPageText(p ?? ''))
+    .filter(Boolean)
+    .join('\n\n');
+}
+
+/**
+ * The version stored for a PDF's passages. Read without OCR (models not downloaded yet), it
+ * differs, so the PDF is read again once OCR is there.
+ */
+export const pdfVer = (modified: number, complete: boolean) =>
+  complete ? String(modified) : `${modified}:no-ocr`;
+
+/** A stored PDF need not be read again: same file, and not waiting for OCR that is now there. */
+export function pdfUnchanged(storedVers: (string | null)[], modified: number, ocrReady: boolean) {
+  if (!storedVers.length) return false;
+  return storedVers.every(
+    (v) => v === pdfVer(modified, true) || (!ocrReady && v === pdfVer(modified, false)),
+  );
 }
 
 /**
@@ -127,17 +195,19 @@ export const folderKeyPrefix = (folderUri: string) => `file:${folderUri}|`;
 export const fileKeyPrefix = (folderUri: string, fileUri: string) =>
   `${folderKeyPrefix(folderUri)}${fileUri}#`;
 
-/** Moments for one text file: one per chunk, keyed by file and chunk number. */
+/** Moments for one text file (or PDF): one per chunk, keyed by file and chunk number. */
 export function fileItems(
   folderUri: string,
   fileUri: string,
   path: string,
   modified: number,
   text: string,
+  ver = String(modified),
+  maxChunks = FILE_LIMITS.maxChunks,
 ): SourceItem[] {
-  return chunkText(text).map((chunk, i) => ({
+  return chunkText(text, FILE_LIMITS.chunkChars, maxChunks).map((chunk, i) => ({
     key: `${fileKeyPrefix(folderUri, fileUri)}${i}`,
-    ver: String(modified),
+    ver,
     at: modified,
     text: `File ${path}${i ? ` (part ${i + 1})` : ''}:\n${chunk}`,
   }));

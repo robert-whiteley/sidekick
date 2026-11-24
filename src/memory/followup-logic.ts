@@ -372,3 +372,63 @@ export function followupContext(items: Followup[], now: Date, limit = 12): strin
   });
   return `My follow-ups (approved by me):\n${lines.join('\n')}\n\n`;
 }
+
+// --- Spoken "remind me …" ---
+
+const TIME_WORDS = [
+  /\bin (half an|a|an|\d+|[a-z-]+) (minute|min|hour|hr|day|week|month)s?\b/g,
+  /\b(the )?day after tomorrow\b/g,
+  /\b(tomorrow|tmrw|today|tonight)( (morning|afternoon|evening|night))?\b/g,
+  /\bthis (morning|afternoon|evening|weekend)\b/g,
+  /\b(next|this|on) (week|weekend|monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/g,
+  /\b(on )?(monday|tuesday|wednesday|thursday|friday|saturday|sunday)s?\b/g,
+  /\b(on )?(the )?\d{1,2}(st|nd|rd|th)?( of)? (jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*( \d{4})?\b/g,
+  /\b(on )?(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]* (the )?\d{1,2}(st|nd|rd|th)?( \d{4})?\b/g,
+  /\b(at|by|around) (noon|midday|midnight|lunchtime|lunch)\b/g,
+  /\b(at|by|around) (half|quarter) (past|to) (\d{1,2}|[a-z]+)\b/g,
+  /\b(at|by|around) \d{1,2}([:h]\d{2})? ?(am|pm|a m|p m|o'?clock)?\b/g,
+  /\b(at|by|around) (one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve)( (am|pm|o'?clock))?\b/g,
+  /\b\d{1,2}([:h]\d{2})? ?(am|pm|a m|p m)\b/g,
+  /\b(in the )?(morning|afternoon|evening)\b/g,
+];
+
+/**
+ * "Remind me to call the dentist tomorrow at nine" / "remind me in 20 minutes to check the oven":
+ * the reminder's title and time, worked out without the model so it is really scheduled. No time
+ * found → an undated to-do. Null when the words aren't a reminder request.
+ */
+export function parseReminderRequest(
+  q: string,
+  now: Date,
+): Pick<Followup, 'kind' | 'title' | 'dueAt' | 'allDay' | 'whenText'> | null {
+  const m =
+    /^(?:hey )?(?:sidekick,? )?(?:please )?(?:(?:can|could|will) you )?remind me (.+?)[.!?]*$/i.exec(
+      q.trim(),
+    );
+  if (!m) return null;
+  const rest = m[1].replace(/\s+/g, ' ');
+  // "Remind me what Sam said" / "remind me where I parked" are questions about memory.
+  if (/^(what|where|who|whom|whose|when|how|which|why|if|whether|again)\b/i.test(rest)) return null;
+  // A request: "to …", "about …", "that …", or a time first ("in 20 minutes to …").
+  if (!/^(to|about|that|of)\b/i.test(rest) && !/\b(to|about|that)\b/i.test(rest)) return null;
+  const when = parseWhen(rest, now);
+  let title = ` ${rest} `;
+  let whenText = '';
+  for (const re of TIME_WORDS) {
+    title = title.replace(new RegExp(re.source, 'gi'), (w) => {
+      whenText += `${whenText ? ' ' : ''}${w.trim()}`;
+      return ' ';
+    });
+  }
+  title = title
+    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(/^(to|about|that|of)\s+/i, '')
+    .replace(/\s+(to|about|that|and|please)$/i, '')
+    .replace(/[,.!]+$/, '')
+    .trim();
+  if (!title) return null;
+  title = cleanTitle(title);
+  if (!when) return { kind: 'todo', title, dueAt: null, allDay: false, whenText: '' };
+  return { kind: 'reminder', title, dueAt: when.at, allDay: when.allDay, whenText };
+}

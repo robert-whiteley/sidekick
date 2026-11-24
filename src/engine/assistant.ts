@@ -13,8 +13,13 @@ import { asksAboutSomethingSeen } from '@/memory/search-logic';
 import { ocrPromptLine } from '@/memory/photo-text';
 import { photoTextOrNull } from './photo-ocr';
 import { answerLocally } from '@/memory/sources';
-import { asksAboutFollowups, followupContext } from '@/memory/followup-logic';
-import { listFollowups } from '@/memory/followups';
+import {
+  asksAboutFollowups,
+  followupContext,
+  formatDue,
+  parseReminderRequest,
+} from '@/memory/followup-logic';
+import { addFollowup, listFollowups } from '@/memory/followups';
 import { personPromptContext } from '@/memory/people';
 import { askWithLookup, type WebSource } from '@/web/lookup';
 
@@ -34,6 +39,8 @@ export type AnswerResult = {
   web?: WebSource[];
   /** The search words sent, when a lookup ran (reused by the browser link). */
   webQuery?: string;
+  /** Answered here without the model (a saved fact, reminder or contact); no web link. */
+  local?: boolean;
 };
 
 /**
@@ -52,14 +59,28 @@ export async function answer(
     await saveFact(remember[2].replace(/[.!]+$/, ''));
     const text = "Got it, I'll remember that.";
     onText(text);
-    return { text, usedPhoto: null, sources: [], ms: 0, ttftMs: 0 };
+    return { text, usedPhoto: null, sources: [], ms: 0, ttftMs: 0, local: true };
+  }
+
+  // "Remind me to … at …": scheduled for real, here, so the reply never claims what didn't happen.
+  const reminder = photoNow ? null : parseReminderRequest(question, new Date());
+  if (reminder) {
+    await addFollowup(reminder);
+    // "tomorrow 09:00" → "tomorrow at 09:00"
+    const due = formatDue(reminder, new Date()).replace(/ (\d{1,2}[:.]\d{2}\D*)$/, ' at $1');
+    const what = reminder.title.charAt(0).toLowerCase() + reminder.title.slice(1);
+    const text = due
+      ? `OK, I'll remind you to ${what} ${due}.`
+      : `I've added "${reminder.title}" to your to-dos. Say a time if you want a reminder.`;
+    onText(text);
+    return { text, usedPhoto: null, sources: [], ms: 0, ttftMs: 0, local: true };
   }
 
   // "What's Sam's number": straight from contacts (when on), no model needed.
   const local = photoNow ? null : await answerLocally(question).catch(() => null);
   if (local) {
     onText(local);
-    return { text: local, usedPhoto: null, sources: [], ms: 0, ttftMs: 0 };
+    return { text: local, usedPhoto: null, sources: [], ms: 0, ttftMs: 0, local: true };
   }
 
   let sources: Moment[] = [];
@@ -101,8 +122,12 @@ export async function answer(
     !!image,
     (webPart) =>
       `${agenda}${person}${webPart}${memoryContext(sources, facts, sources.length, question)}${seenText}Question: ${question}`,
-    (prompt, t) =>
-      askLlm(prompt, image, t, { system: SYSTEM_PROMPT, keepHistory: opts?.keepHistory ?? false }),
+    (prompt, t, o) =>
+      askLlm(prompt, image, t, {
+        system: SYSTEM_PROMPT,
+        keepHistory: opts?.keepHistory ?? false,
+        undoable: o?.undoable,
+      }),
     onText,
   );
 

@@ -183,6 +183,12 @@ export const MIGRATIONS: { table: string; column: string; ddl: string; after?: s
     column: 'person_id',
     ddl: 'ALTER TABLE followups ADD COLUMN person_id INTEGER REFERENCES speakers(id) ON DELETE SET NULL',
   },
+  // What an unnamed voice seems to be from context ("Waiter", "Bus driver"), set by the model.
+  {
+    table: 'speakers',
+    column: 'description',
+    ddl: 'ALTER TABLE speakers ADD COLUMN description TEXT',
+  },
 ];
 
 function migrate(d: DB) {

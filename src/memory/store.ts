@@ -20,10 +20,28 @@ import {
   mentionedName,
   timeWindow,
 } from './search-logic';
-import { addresseeOf, findNameCues, fullNameFromContacts, ADDRESS_WINDOW_MS } from './names';
-import { addToCentroid, canStartNewVoice, cosine, matchSpeaker, type Speaker } from './voices';
+import {
+  addEvidence,
+  addresseeOf,
+  findNameCues,
+  fullNameFromContacts,
+  ADDRESS_WINDOW_MS,
+} from './names';
+import {
+  addToCentroid,
+  canStartNewVoice,
+  claimPending,
+  cosine,
+  matchShortClip,
+  matchSpeaker,
+  ownerCentroid,
+  ownerClaimHolds,
+  type PendingClip,
+  RELIABLE_VOICE_MS,
+  type Speaker,
+} from './voices';
 import { applyAutoName, assignLabel, collectPersonInfo, type KeptLine } from './people';
-import { speakerLabel } from './people-logic';
+import { CONVERSATION_GAP_MS, speakerLabel } from './people-logic';
 import { liveTranscript } from '@/engine/live-transcript';
 
 export type Moment = {
@@ -69,6 +87,15 @@ async function tagPlace(id: number, p: { lat: number; lon: number } | null) {
 const entryPlace = (e: { lat?: number; lon?: number }) =>
   e.lat != null && e.lon != null ? { lat: e.lat, lon: e.lon } : null;
 
+/** Tells the native listener the owner's voice (barge-in is owner-only). Older builds: no-op. */
+const pushOwnerVoice = (centroid: number[] | null) =>
+  SidekickNative.listenSetOwnerVoice?.(centroid);
+
+/** Sends the owner's current voice to the native listener (at start and after deletions). */
+export async function syncOwnerVoice() {
+  pushOwnerVoice(ownerCentroid(await speakers()));
+}
+
 async function speakers(): Promise<Speaker[]> {
   const db = await getDb();
   const r = await db.execute('SELECT id, centroid, count, is_owner FROM speakers');
@@ -80,41 +107,82 @@ async function speakers(): Promise<Speaker[]> {
   }));
 }
 
-/** Finds (and learns) who is speaking. Owner clips teach the owner's voice. */
+/**
+ * Finds (and learns) who is speaking. Owner clips teach the owner's voice. Also says whether the
+ * line counts as the owner's: a wake-word clip that doesn't sound like the owner does not.
+ */
 async function assignSpeaker(
   voice: number[] | null,
   owner: boolean,
   durationMs?: number,
-): Promise<Speaker | null> {
-  if (!voice) return null;
+  /** Push-to-talk: certainly the owner. */
+  trusted = false,
+): Promise<{ speaker: Speaker | null; owner: boolean }> {
+  if (!voice) return { speaker: null, owner };
   const db = await getDb();
   const all = await speakers();
   console.log(
     `[voice] ${owner ? 'owner clip' : 'clip'} sims: ${all.map((x) => `${x.id}${x.isOwner ? '*' : ''}=${cosine(voice, x.centroid).toFixed(2)}`).join(' ')}`,
   );
-  let s = owner ? (all.find((x) => x.isOwner) ?? null) : matchSpeaker(voice, all);
+  const known = all.find((x) => x.isOwner) ?? null;
+  if (!trusted && durationMs != null && durationMs < RELIABLE_VOICE_MS) {
+    // Too short to trust: nothing is learned. A short wake-word line stays the owner's as before
+    // (no voice); anyone else's only joins a clearly closest known voice.
+    if (owner) return { speaker: null, owner: true };
+    return { speaker: matchShortClip(voice, all), owner: false };
+  }
+  if (owner && !trusted && !ownerClaimHolds(voice, known)) owner = false;
+  let s = owner ? known : matchSpeaker(voice, all);
   if (s) {
     const c = addToCentroid(s, voice);
     await db.execute('UPDATE speakers SET centroid = ?, count = count + 1 WHERE id = ?', [
       JSON.stringify(c),
       s.id,
     ]);
-    return s;
+    if (s.isOwner) pushOwnerVoice(c);
+    return { speaker: s, owner: s.isOwner };
   }
-  if (!owner && !canStartNewVoice(durationMs)) return null;
+  if (!owner && !canStartNewVoice(durationMs)) {
+    // Too short to start a person: join a clearly closest known voice, else wait for one.
+    return { speaker: matchShortClip(voice, all), owner: false };
+  }
   const r = await db.execute('INSERT INTO speakers (is_owner, centroid) VALUES (?, ?)', [
     owner ? 1 : 0,
     JSON.stringify(voice),
   ]);
   s = { id: r.insertId!, centroid: voice, count: 1, isOwner: owner };
+  if (owner) pushOwnerVoice(voice);
   // Every new voice is "Person N" right away, stable for that voice.
-  if (!owner) await assignLabel(s.id);
-  return s;
+  if (!owner) {
+    await assignLabel(s.id);
+    await claimWaitingClips(s, [...all, s]);
+  }
+  return { speaker: s, owner };
+}
+
+/** Short clips nobody matched yet (in memory only), re-checked when a new voice appears. */
+let pendingClips: PendingClip[] = [];
+
+/** Relabels earlier "Someone" lines that clearly belong to a voice that just became known. */
+async function claimWaitingClips(joined: Speaker, all: Speaker[]) {
+  const { claimed, waiting } = claimPending(pendingClips, joined, all, Date.now());
+  pendingClips = waiting;
+  if (!claimed.length) return;
+  const db = await getDb();
+  for (const c of claimed) {
+    if (c.momentId != null)
+      await db.execute('UPDATE moments SET speaker_id = ? WHERE id = ? AND speaker_id IS NULL', [
+        joined.id,
+        c.momentId,
+      ]);
+    liveTranscript.relabel(c.at, joined.id);
+  }
+  console.log(`[voice] ${claimed.length} earlier short line(s) now voice ${joined.id}`);
 }
 
 /** A push-to-talk clip is always the owner: use it to learn their voice. */
 export async function learnOwnerVoice(voice: number[]) {
-  await assignSpeaker(voice, true);
+  await assignSpeaker(voice, true, undefined, true);
 }
 
 let lastConsentAsk = 0;
@@ -159,8 +227,7 @@ async function ingestJournalNow(): Promise<number> {
       added++;
       continue;
     }
-    const s = await assignSpeaker(e.voice, e.owner, e.durationMs);
-    const isOwner = e.owner || s?.isOwner === true;
+    const { speaker: s, owner: isOwner } = await assignSpeaker(e.voice, e.owner, e.durationMs);
     if (isOwner && isConsentQuestion(e.text)) lastConsentAsk = e.at;
     if (!isOwner) {
       let consented = false;
@@ -173,6 +240,7 @@ async function ingestJournalNow(): Promise<number> {
         }
       }
       if (!keepOtherSpeech({ consentMode, speakerConsented: consented })) {
+        if (!s && e.voice) pendingClips.push({ at: e.at, voice: e.voice, momentId: null });
         liveTranscript.put({
           at: e.at,
           text: e.text,
@@ -188,6 +256,8 @@ async function ingestJournalNow(): Promise<number> {
       [e.kind, e.at, e.text, s?.id ?? null],
     );
     await tagPlace(ins.insertId!, entryPlace(e));
+    if (!s && !isOwner && e.voice)
+      pendingClips.push({ at: e.at, voice: e.voice, momentId: ins.insertId! });
     kept.push({ id: ins.insertId!, at: e.at, speakerId: s?.id ?? null, isOwner, text: e.text });
     liveTranscript.put({ at: e.at, text: e.text, speakerId: s?.id ?? null, isOwner, saved: true });
     added++;
@@ -230,6 +300,7 @@ async function suggestNamesFrom(lines: KeptLine[]) {
             speakerId: x.speaker_id as number,
             isOwner: x.is_owner === 1,
           })),
+          cue.replyExpected,
         );
       }
       if (target == null) continue;
@@ -250,7 +321,12 @@ async function expandName(name: string): Promise<string> {
   );
 }
 
-async function suggestName(speakerId: number, name: string) {
+/**
+ * Adds evidence that voice [speakerId] is called [name] ([weight] cues). Shown as "Is this Sam?";
+ * once the evidence adds up (several cues, or context plus a cue), applied as an auto name the
+ * user can undo. Never for the owner, a named voice, or a name the user said no to.
+ */
+export async function suggestName(speakerId: number, name: string, weight = 1) {
   const db = await getDb();
   const r = await db.execute(
     'SELECT name, is_owner, suggested_name, suggested_count, dismissed_names FROM speakers WHERE id = ?',
@@ -258,19 +334,24 @@ async function suggestName(speakerId: number, name: string) {
   );
   const row = r.rows[0];
   if (!row || row.name || row.is_owner === 1) return;
-  const dismissed = String(row.dismissed_names ?? '').split('|');
-  if (dismissed.includes(name)) return;
-  if (row.suggested_name === name) {
-    await db.execute('UPDATE speakers SET suggested_count = suggested_count + 1 WHERE id = ?', [
-      speakerId,
-    ]);
-  } else if (!row.suggested_name || (row.suggested_count as number) <= 1) {
-    // A different name with as much evidence replaces a one-off guess.
-    await db.execute('UPDATE speakers SET suggested_name = ?, suggested_count = 1 WHERE id = ?', [
-      name,
-      speakerId,
-    ]);
-  }
+  if (
+    String(row.dismissed_names ?? '')
+      .split('|')
+      .includes(name)
+  )
+    return;
+  const next = addEvidence(
+    { name: (row.suggested_name as string | null) ?? null, count: row.suggested_count as number },
+    name,
+    weight,
+  );
+  if (!next) return;
+  if (next.apply && (await applyAutoName(speakerId, name))) return;
+  await db.execute('UPDATE speakers SET suggested_name = ?, suggested_count = ? WHERE id = ?', [
+    name,
+    next.count,
+    speakerId,
+  ]);
 }
 
 /** "Is this Sam?" → yes. */
@@ -288,6 +369,70 @@ export async function dismissSuggestedName(speakerId: number) {
   await db.execute(
     "UPDATE speakers SET dismissed_names = dismissed_names || '|' || suggested_name, suggested_name = NULL, suggested_count = 0 WHERE id = ? AND suggested_name IS NOT NULL",
     [speakerId],
+  );
+}
+
+// --- Names from context ---
+
+export type NameConversation = {
+  /** The newest line read (a later read only runs once there is a newer one). */
+  lastId: number;
+  /** The conversation's first line: one model reading per voice per conversation counts. */
+  startId: number;
+  lines: { who: string; text: string }[];
+  /** "Person 3" → speaker id, for unnamed voices only. */
+  labels: Map<string, number>;
+};
+
+/**
+ * The conversation going on now (or the latest one): its last [limit] heard lines, back to a
+ * 10-minute gap. Null if nothing new since [afterId] or no unnamed voice in it.
+ */
+export async function currentConversationForNames(
+  limit: number,
+  afterId: number,
+): Promise<NameConversation | null> {
+  const db = await getDb();
+  const r = await db.execute(
+    `SELECT m.id, m.at, m.text, m.speaker_id, s.name, s.is_owner, s.label_no FROM moments m
+     LEFT JOIN speakers s ON s.id = m.speaker_id
+     WHERE m.kind = 'speech' AND length(m.text) > 0 ORDER BY m.at DESC LIMIT ?`,
+    [limit],
+  );
+  const rows = r.rows;
+  if (!rows.length || (rows[0].id as number) <= afterId) return null;
+  let cut = rows.length;
+  for (let k = 1; k < rows.length; k++) {
+    if ((rows[k - 1].at as number) - (rows[k].at as number) > CONVERSATION_GAP_MS) {
+      cut = k;
+      break;
+    }
+  }
+  const convo = rows.slice(0, cut).reverse();
+  const lines: { who: string; text: string }[] = [];
+  const labels = new Map<string, number>();
+  for (const x of convo) {
+    const id = x.speaker_id as number | null;
+    let who: string;
+    if (id == null) who = 'Someone';
+    else if (x.is_owner === 1) who = 'Me';
+    else if (x.name) who = x.name as string;
+    else {
+      who = `Person ${(x.label_no as number | null) ?? id}`;
+      labels.set(who, id);
+    }
+    lines.push({ who, text: (x.text as string).slice(0, 300) });
+  }
+  if (!labels.size) return null;
+  return { lastId: rows[0].id as number, startId: convo[0].id as number, lines, labels };
+}
+
+/** What an unnamed voice seems to be ("Waiter"); the latest reading, with more context, wins. */
+export async function setSpeakerDescription(speakerId: number, description: string) {
+  const db = await getDb();
+  await db.execute(
+    'UPDATE speakers SET description = ? WHERE id = ? AND name IS NULL AND is_owner = 0',
+    [description, speakerId],
   );
 }
 
@@ -383,7 +528,7 @@ export async function capturePhoto(
 export async function peopleAround(momentId: number): Promise<string[]> {
   const db = await getDb();
   const r = await db.execute(
-    `SELECT s.id, s.name, s.is_owner, s.label_no FROM moment_people p JOIN speakers s ON s.id = p.speaker_id
+    `SELECT s.id, s.name, s.is_owner, s.label_no, s.description FROM moment_people p JOIN speakers s ON s.id = p.speaker_id
      WHERE p.moment_id = ? ORDER BY s.is_owner DESC, s.id`,
     [momentId],
   );
@@ -393,6 +538,7 @@ export async function peopleAround(momentId: number): Promise<string[]> {
       name: (x.name as string | null) ?? null,
       isOwner: x.is_owner === 1,
       labelNo: (x.label_no as number | null) ?? null,
+      description: (x.description as string | null) ?? null,
     }),
   );
 }
@@ -535,7 +681,7 @@ export async function countPendingEmbeds(): Promise<number> {
 
 const MOMENT_SELECT =
   // Unnamed voices show as their automatic label ("Person 3") in lists and prompts.
-  "SELECT m.*, COALESCE(s.name, 'Person ' || s.label_no) AS name, s.is_owner FROM moments m LEFT JOIN speakers s ON s.id = m.speaker_id";
+  "SELECT m.*, COALESCE(s.name, s.description, 'Person ' || s.label_no) AS name, s.is_owner FROM moments m LEFT JOIN speakers s ON s.id = m.speaker_id";
 
 /** Hybrid search: meaning (vectors) + exact words (FTS5), narrowed by time words in the question. */
 export async function searchMemory(question: string, k = 8, now = new Date()): Promise<Moment[]> {
@@ -673,7 +819,7 @@ export async function savedFacts(): Promise<{ id: number; text: string; status: 
 export async function listSpeakers() {
   const db = await getDb();
   const r = await db.execute(
-    'SELECT s.id, s.name, s.is_owner, s.consented_at, s.suggested_name, s.label_no, s.name_auto, s.notes, COUNT(m.id) AS n FROM speakers s LEFT JOIN moments m ON m.speaker_id = s.id GROUP BY s.id ORDER BY n DESC',
+    'SELECT s.id, s.name, s.is_owner, s.consented_at, s.suggested_name, s.label_no, s.description, s.name_auto, s.notes, COUNT(m.id) AS n FROM speakers s LEFT JOIN moments m ON m.speaker_id = s.id GROUP BY s.id ORDER BY n DESC',
   );
   return r.rows.map((x) => ({
     id: x.id as number,
@@ -682,6 +828,7 @@ export async function listSpeakers() {
     consented: x.consented_at != null,
     suggestedName: (x.suggested_name as string | null) ?? null,
     labelNo: (x.label_no as number | null) ?? null,
+    description: (x.description as string | null) ?? null,
     /** Named automatically from "my name is …" (not yet confirmed by the user). */
     nameAuto: x.name_auto === 1,
     notes: (x.notes as string | null) ?? '',
@@ -745,6 +892,7 @@ export async function deleteSpeaker(id: number) {
   await deleteMoments('speaker_id = ?', [id]);
   const db = await getDb();
   await db.execute('DELETE FROM speakers WHERE id = ?', [id]);
+  await syncOwnerVoice();
 }
 
 export async function deleteFact(id: number) {
@@ -757,6 +905,7 @@ export async function deleteEverything() {
   await deleteMoments('1 = 1', []);
   const db = await getDb();
   await db.execute('DELETE FROM speakers');
+  pushOwnerVoice(null);
   await db.execute('DELETE FROM facts');
   await db.execute('DELETE FROM followups');
   await db.execute('DELETE FROM contacts');
@@ -776,7 +925,9 @@ export async function exportEverything(): Promise<string> {
     await db.execute('SELECT id, kind, at, text, speaker_id, photo_path FROM moments ORDER BY at')
   ).rows;
   const people = (
-    await db.execute('SELECT id, name, is_owner, consented_at, label_no, notes FROM speakers')
+    await db.execute(
+      'SELECT id, name, is_owner, consented_at, label_no, description, notes FROM speakers',
+    )
   ).rows;
   const facts = (await db.execute('SELECT id, text, status, at, speaker_id FROM facts')).rows;
   const followups = (

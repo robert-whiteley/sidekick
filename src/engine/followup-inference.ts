@@ -1,5 +1,5 @@
 import SidekickNative from '../../modules/sidekick-native';
-import { askLlm, cancelLlm } from './llm';
+import { askLlmInBackground, cancelLlm } from './llm';
 import { getSettings } from './settings';
 import { followupPrompt, MAX_FOLLOWUP_LINES, parseFollowups } from '@/memory/followup-logic';
 import { linesForFollowups, markFollowupsScanned, suggestFollowups } from '@/memory/followups';
@@ -20,7 +20,7 @@ export function inferFollowupsIfIdle(): Promise<void> {
   running = (async () => {
     const lines = await linesForFollowups(MAX_FOLLOWUP_LINES);
     if (!lines.length) return;
-    const { text } = await askLlm(followupPrompt(lines), null, () => {}, { maxTokens: 160 });
+    const { text } = await askLlmInBackground(followupPrompt(lines), null, { maxTokens: 160 });
     if (cancelled) return; // partial output: try these lines again later
     await suggestFollowups(parseFollowups(text, lines));
     await markFollowupsScanned(lines.map((l) => l.id));

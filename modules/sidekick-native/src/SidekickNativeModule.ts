@@ -64,6 +64,11 @@ declare class SidekickNativeModule extends NativeModule<SidekickNativeModuleEven
    * spoken follow-up, or for push-to-talk; everything else is dropped untranscribed.
    */
   listenCommandsOnly?(on: boolean): void;
+  /**
+   * Android: the owner's voiceprint centroid (null if not known yet). Only that voice may
+   * interrupt a spoken answer (or anyone saying the wake word); kept natively for the service.
+   */
+  listenSetOwnerVoice?(centroid: number[] | null): void;
   /** Starts the background listening service. Only call while the app is on screen. */
   listenStart(): void;
   listenStop(): void;
@@ -120,7 +125,21 @@ declare class SidekickNativeModule extends NativeModule<SidekickNativeModuleEven
     photoPath: string,
   ): Promise<{ lines: string[]; scores: number[]; ms: number }>;
   ocrUnload(): Promise<void>;
+  /** Android: whether this phone can read a PDF's embedded text (else every page needs OCR). */
+  pdfCanReadText(): boolean;
+  /** Android: a PDF's page count and page [index]'s embedded text (null if unreadable here). */
+  pdfPageText(uri: string, index: number): Promise<{ pages: number; text: string | null }>;
+  /** Android: page [index] rendered at 1600 px and OCR'd (PP-OCRv6), lines top to bottom. */
+  pdfPageOcr(
+    uri: string,
+    index: number,
+    detPath: string,
+    recPath: string,
+    dictPath: string,
+  ): Promise<{ lines: string[]; ms: number }>;
   llmCancel(): void;
+  /** Drops the last turn sent with `undoable` from the chat; false when there is none. */
+  llmUndoLast(): boolean;
   llmIsLoaded(): boolean;
   llmUnload(): Promise<void>;
   /** Android: whether the user allowed Sidekick's notification listener in system settings. */

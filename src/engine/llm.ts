@@ -1,4 +1,6 @@
 import SidekickNative from '../../modules/sidekick-native';
+import { ForegroundGate } from './foreground-gate';
+import { LlmQueue } from './llm-queue';
 import type {
   GenerateOptions,
   LlmBackend,
@@ -104,11 +106,17 @@ export async function unloadLlm() {
 }
 
 let seq = 0;
-let active = 0;
+const queue = new LlmQueue(() => SidekickNative.llmCancel());
+
+const foreground = new ForegroundGate();
+/** The owner is being answered (written or spoken): background passes wait. */
+export const holdBackground = () => foreground.hold();
+/** The answer is over: background passes may run again. */
+export const releaseBackground = () => foreground.release();
 
 /** Something (an answer, fact pass, photo description…) is using the model right now. */
 export function llmBusy(): boolean {
-  return active > 0;
+  return queue.busy;
 }
 
 /** Asks the model; streams text through [onText] and resolves with timing stats. */
@@ -117,8 +125,30 @@ export async function askLlm(
   imagePath: string | null,
   onText: (full: string) => void,
   opts?: GenerateOptions,
+  background = false,
 ): Promise<{ text: string; stats: LlmStats }> {
   await ensureLlm();
+  return queue.run(background, () => generate(prompt, imagePath, onText, opts));
+}
+
+/** A background pass (facts, follow-ups, photo descriptions): waits its turn, yields to questions. */
+export async function askLlmInBackground(
+  prompt: string,
+  imagePath: string | null,
+  opts?: GenerateOptions,
+): Promise<{ text: string; stats: LlmStats }> {
+  // Not while an answer is written or spoken: it would slow the answer's first spoken word.
+  await foreground.idle();
+  // Its own throwaway chat: a spoken follow-up must never continue a background prompt's chat.
+  return askLlm(prompt, imagePath, () => {}, { ...opts, scratch: true }, true);
+}
+
+async function generate(
+  prompt: string,
+  imagePath: string | null,
+  onText: (full: string) => void,
+  opts?: GenerateOptions,
+): Promise<{ text: string; stats: LlmStats }> {
   const id = `ask-${++seq}`;
   let text = '';
   const sub = SidekickNative.addListener('onLlmText', (e) => {
@@ -126,12 +156,10 @@ export async function askLlm(
     text += e.text;
     onText(text);
   });
-  active++;
   try {
     const stats = await SidekickNative.llmGenerate(id, prompt, imagePath, opts);
     return { text, stats };
   } finally {
-    active--;
     sub.remove();
   }
 }
@@ -142,13 +170,18 @@ export async function askLlm(
  * is already loaded and idle; otherwise it fails at once.
  */
 export async function askLlmAside(prompt: string, maxTokens: number): Promise<string> {
-  if (!SidekickNative.llmIsLoaded() || active > 0) throw new Error('model busy or not loaded');
+  if (!SidekickNative.llmIsLoaded() || queue.busy) throw new Error('model busy or not loaded');
   const { text } = await askLlm(prompt, null, () => {}, {
     system: SYSTEM_PROMPT,
     maxTokens,
     scratch: true,
   });
   return text;
+}
+
+/** Drops the last chat turn sent with `undoable` (e.g. a "LOOKUP" reply); false if none. */
+export function undoLastTurn(): boolean {
+  return SidekickNative.llmUndoLast();
 }
 
 export function cancelLlm() {
