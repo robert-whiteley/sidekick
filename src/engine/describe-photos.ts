@@ -2,7 +2,7 @@ import SidekickNative from '../../modules/sidekick-native';
 import { DESCRIBE_PROMPT, parseDescription, shouldDescribeNow } from '@/memory/photo-text';
 import { nextUndescribedPhoto, savePhotoDescription } from '@/memory/store';
 import { batteryState } from './battery';
-import { askLlm, cancelLlm } from './llm';
+import { askLlmInBackground, cancelLlm } from './llm';
 
 let running: Promise<void> | null = null;
 let cancelled = false;
@@ -28,7 +28,7 @@ export async function describeOnePhoto(busy: boolean): Promise<boolean> {
       await savePhotoDescription(next.id, null);
       return;
     }
-    const { text } = await askLlm(DESCRIBE_PROMPT, next.photoPath, () => {}, { maxTokens: 120 });
+    const { text } = await askLlmInBackground(DESCRIBE_PROMPT, next.photoPath, { maxTokens: 120 });
     if (cancelled) return; // a question interrupted: try this photo again later
     await savePhotoDescription(next.id, parseDescription(text));
     console.log(`[photos] described ${next.id}`);

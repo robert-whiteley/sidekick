@@ -49,3 +49,4 @@ local.properties
 coverage/
 /.models/
 modules/sidekick-native/android/build/
+modules/sidekick-native/android/.cxx/

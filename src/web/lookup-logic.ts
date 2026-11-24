@@ -25,6 +25,8 @@ export type WebSource = {
 export type LookupDecision = 'lookup' | 'ask-model' | 'none';
 
 export const LOOKUP_TIMEOUT_MS = 4000;
+/** GDELT often takes 5–9 s to answer (seen from the UK, Nov 2026): news questions wait longer. */
+export const NEWS_TIMEOUT_MS = 9000;
 /** Wikimedia asks for a descriptive User-Agent; this one names the app only (no personal info). */
 export const USER_AGENT = 'SidekickApp/1.0 (on-device assistant app; online lookup)';
 /** Each source's text in the prompt; every prompt token delays the first word on a phone. */

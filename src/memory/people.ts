@@ -85,12 +85,15 @@ export async function setPersonNotes(speakerId: number, notes: string) {
 
 async function people(): Promise<(PersonRef & { notes: string })[]> {
   const db = await getDb();
-  const r = await db.execute('SELECT id, name, is_owner, label_no, notes FROM speakers');
+  const r = await db.execute(
+    'SELECT id, name, is_owner, label_no, description, notes FROM speakers',
+  );
   return r.rows.map((x) => ({
     id: x.id as number,
     name: (x.name as string | null) ?? null,
     isOwner: x.is_owner === 1,
     labelNo: (x.label_no as number | null) ?? null,
+    description: (x.description as string | null) ?? null,
     notes: (x.notes as string | null) ?? '',
   }));
 }

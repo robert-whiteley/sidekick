@@ -8,7 +8,16 @@
  * strong: a clear self-introduction ("my name is Sam", "hi, I'm Sam"), applied to the voice
  * automatically (marked auto, with undo); weak cues only become an "Is this Sam?" suggestion.
  */
-export type NameCue = { name: string; who: 'speaker' | 'addressee'; strong: boolean };
+export type NameCue = {
+  name: string;
+  who: 'speaker' | 'addressee';
+  strong: boolean;
+  /**
+   * Addressee only: the named person is expected to answer ("Sam, can you…", "hi Sam"), so the
+   * next voice is theirs; otherwise ("thanks, Sam") it is the voice that just spoke.
+   */
+  replyExpected?: boolean;
+};
 
 /** Capitalised words that follow these patterns but are not names. */
 const NOT_NAMES = new Set(
@@ -40,16 +49,29 @@ const SELF: [RegExp, boolean][] = [
   [new RegExp(`\\bcall me ${NAME}\\b`, 'i'), false],
 ];
 
-const ADDRESS = [
-  new RegExp(
-    `\\b(?:thanks|thank you|cheers|hi|hello|hey|bye|morning|night|sorry)[,\\s]+${NAME}\\s*(?:[,.!?]|$)`,
-    'i',
-  ),
-  new RegExp(
-    `^${NAME}\\s*,\\s*(?:can|could|would|will|do|did|are|have|what|where|when|how|why|please|you)\\b`,
-    'i',
-  ),
-  new RegExp(`\\b(?:what do you think|what about you|right|okay|ok)[,\\s]+${NAME}\\s*[?.!]`, 'i'),
+/** Ways of calling someone by name; the flag: whether they are expected to answer. */
+const ADDRESS: [RegExp, boolean][] = [
+  [
+    new RegExp(`\\b(?:thanks|thank you|cheers|bye|night|sorry)[,\\s]+${NAME}\\s*(?:[,.!?]|$)`, 'i'),
+    false,
+  ],
+  [new RegExp(`\\b(?:hi|hello|hey|morning)[,\\s]+${NAME}\\s*(?:[,.!?]|$)`, 'i'), true],
+  [
+    new RegExp(
+      `^${NAME}\\s*,\\s*(?:can|could|would|will|do|did|are|have|what|where|when|how|why|please|you)\\b`,
+      'i',
+    ),
+    true,
+  ],
+  [
+    new RegExp(
+      `\\b(?:what do you think|what about you|right|okay|ok|how are you|how about you)[,\\s]+${NAME}\\s*[?.!]`,
+      'i',
+    ),
+    true,
+  ],
+  // "…, Sam?" at the end of a question.
+  [new RegExp(`,\\s*${NAME}\\s*\\?\\s*$`, 'i'), true],
 ];
 
 /** A heard word as a name ("sam" → "Sam"), or null if it is a common word, not a name. */
@@ -74,10 +96,11 @@ export function findNameCues(text: string): NameCue[] {
     if (seen) seen.strong ||= strong;
     else if (n) out.push({ name: n, who: 'speaker', strong });
   }
-  for (const re of ADDRESS) {
+  for (const [re, replyExpected] of ADDRESS) {
     const m = t.match(re);
     const n = m && clean(m[1]);
-    if (n && !out.some((c) => c.name === n)) out.push({ name: n, who: 'addressee', strong: false });
+    if (n && !out.some((c) => c.name === n))
+      out.push({ name: n, who: 'addressee', strong: false, replyExpected });
   }
   return out;
 }
@@ -86,11 +109,33 @@ export const ADDRESS_WINDOW_MS = 20_000;
 
 export type Utterance = { at: number; speakerId: number | null; isOwner: boolean };
 
+export const REPLY_WINDOW_MS = 10_000;
+
 /**
- * Who a name addressed in [line] refers to: the nearest other non-owner voice that spoke within
- * 20 s (before or after). Null if there is no clear single candidate.
+ * Who a name addressed in [line] refers to. With [replyExpected] ("Sam, can you…"): the first
+ * other voice to speak within 10 s after it, the one answering. Without ("thanks, Sam"): the
+ * last other voice within 10 s before it. Otherwise, or if neither is found: the nearest other
+ * voice within 20 s, only when it is the only one around. Never the owner or the line's speaker.
  */
-export function addresseeOf(line: Utterance, nearby: Utterance[]): number | null {
+export function addresseeOf(
+  line: Utterance,
+  nearby: Utterance[],
+  replyExpected?: boolean,
+): number | null {
+  const others = nearby
+    .filter((u) => u.speakerId != null && !u.isOwner && u.speakerId !== line.speakerId)
+    .sort((a, b) => a.at - b.at);
+  if (replyExpected === true) {
+    const reply = others.find((u) => u.at > line.at && u.at - line.at <= REPLY_WINDOW_MS);
+    if (reply) return reply.speakerId;
+  } else if (replyExpected === false) {
+    const before = others.filter((u) => u.at < line.at && line.at - u.at <= REPLY_WINDOW_MS);
+    if (before.length) return before[before.length - 1].speakerId;
+  }
+  return nearestOnly(line, others);
+}
+
+function nearestOnly(line: Utterance, nearby: Utterance[]): number | null {
   let best: { id: number; gap: number } | null = null;
   const ids = new Set<number>();
   for (const u of nearby) {
@@ -136,4 +181,95 @@ export function contactNameMatches(typed: string, contactNames: string[], limit 
     if (out.length >= limit) break;
   }
   return out;
+}
+
+// --- Names from context (the model reads a whole conversation) ---
+
+export const MAX_NAME_LINES = 30;
+
+/** Several cues for the same name and voice add up; at this much it is applied (auto, undoable). */
+export const AUTO_NAME_AT = 3;
+/** The model's reading of a whole conversation counts as two cues: one more confirms it. */
+export const CONTEXT_WEIGHT = 2;
+
+/**
+ * Asks the model who is who in the conversation going on ("Me" is the phone's owner; others by
+ * label): first names from context (who answers to a name, who is introduced or spoken to), and
+ * otherwise what each person seems to be from what is said ("would you like to order?" → waiter).
+ */
+export function namePrompt(lines: { who: string; text: string }[]): string {
+  return (
+    'Here is a conversation my phone is hearing. "Me" is me; the others are labelled Person 1, ' +
+    'Person 2 and so on. Work out who each labelled person is from what THEY say and what is ' +
+    'said to them. For example, a person who asks "would you like to order?" or brings the food ' +
+    'is a waiter, and the person ordering is the customer; a person who says "tickets please" ' +
+    'or "next stop" is a bus driver or conductor.\n' +
+    'For each labelled person write one line exactly as: label | first name | description\n' +
+    'First name: only if it is clear (someone calls them by it, introduces them, or they ' +
+    'answer to it), else -.\n' +
+    'Description: the most precise thing the conversation shows they are, in 1 to 3 words ' +
+    '(waiter, bus driver, doctor, my colleague, shop assistant), or man, woman or child if that ' +
+    'is all that is clear, else -. Do not guess.\n\n' +
+    lines.map((l) => `${l.who}: ${l.text}`).join('\n')
+  );
+}
+
+export type WhoGuess = { label: string; name: string | null; description: string | null };
+
+const NOT_DESCRIPTIONS = new Set([
+  '-',
+  'none',
+  'unknown',
+  'n/a',
+  'unclear',
+  'person',
+  'speaker',
+  'someone',
+  'me',
+  'i',
+]);
+
+/**
+ * The model's "Person 3 | Sam | waiter" lines, kept only for labels in [labels]. A name only if
+ * it is a real name that was said in [heard] (nothing invented) and no one else got it; a
+ * description only if short and plain.
+ */
+export function parseWhoGuesses(text: string, labels: string[], heard: string): WhoGuess[] {
+  const said = new Set(heard.toLowerCase().match(/[a-z][a-z'-]+/g) ?? []);
+  const out: WhoGuess[] = [];
+  for (const raw of text.split('\n')) {
+    const parts = raw
+      .replace(/^\s*[-*]\s*/, '')
+      .split('|')
+      .map((x) => x.trim());
+    if (parts.length < 2) continue;
+    const label = labels.find((l) => l.toLowerCase() === parts[0].toLowerCase());
+    if (!label || out.some((g) => g.label === label)) continue;
+    let name = /^[A-Za-z][A-Za-z'-]+$/.test(parts[1]) ? clean(parts[1]) : null;
+    if (name && (!said.has(name.toLowerCase()) || out.some((g) => g.name === name))) name = null;
+    const d = (parts[2] ?? '')
+      .toLowerCase()
+      .replace(/[.!]+$/, '')
+      .trim();
+    const description =
+      /^[a-z][a-z' -]{1,29}$/.test(d) && d.split(/\s+/).length <= 3 && !NOT_DESCRIPTIONS.has(d)
+        ? d
+        : null;
+    if (name || description) out.push({ label, name, description });
+  }
+  return out;
+}
+
+/** A suggestion's new evidence count, and whether it is now enough to apply the name. */
+export function addEvidence(
+  current: { name: string | null; count: number },
+  name: string,
+  weight: number,
+): { name: string; count: number; apply: boolean } | null {
+  let count: number;
+  if (current.name === name) count = current.count + weight;
+  // A different name replaces a guess only with at least as much evidence.
+  else if (!current.name || current.count <= weight) count = weight;
+  else return null;
+  return { name, count, apply: count >= AUTO_NAME_AT };
 }

@@ -43,18 +43,27 @@ object Ocr {
     val m = load(detPath, recPath, dictPath)
     val img = ModelImage.decodeUpright(photoPath, DECODE_EDGE) ?: return emptyList()
     try {
-      val boxes = detect(m.det, img)
-      val out = ArrayList<Line>()
-      for (b in sortBoxes(boxes)) {
-        val crop = cropBox(img, b) ?: continue
-        val line = recognize(m.rec, m.chars, crop)
-        crop.recycle()
-        if (line != null && line.score >= MIN_SCORE && line.text.isNotBlank()) out.add(line)
-      }
-      return out
+      return readImage(m, img)
     } finally {
       img.recycle()
     }
+  }
+
+  /** Same for an image already in memory (a rendered PDF page); [img] is not recycled. */
+  @Synchronized
+  fun readBitmap(detPath: String, recPath: String, dictPath: String, img: Bitmap): List<Line> =
+    readImage(load(detPath, recPath, dictPath), img)
+
+  private fun readImage(m: Models, img: Bitmap): List<Line> {
+    val boxes = detect(m.det, img)
+    val out = ArrayList<Line>()
+    for (b in sortBoxes(boxes)) {
+      val crop = cropBox(img, b) ?: continue
+      val line = recognize(m.rec, m.chars, crop)
+      crop.recycle()
+      if (line != null && line.score >= MIN_SCORE && line.text.isNotBlank()) out.add(line)
+    }
+    return out
   }
 
   @Synchronized

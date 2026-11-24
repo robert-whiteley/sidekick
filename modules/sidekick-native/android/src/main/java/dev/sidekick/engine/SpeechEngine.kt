@@ -149,17 +149,20 @@ class SpeechEngine(private val paths: SpeechPaths, keywordsFile: File) {
     }
   }
 
+  private val speakerLock = Any()
+
   /** Voice fingerprint for clustering speakers; null if the clip is too short. */
-  fun voiceprint(samples: FloatArray): FloatArray? {
-    val s = speaker.createStream()
-    try {
-      s.acceptWaveform(samples, SAMPLE_RATE)
-      s.inputFinished()
-      return if (speaker.isReady(s)) speaker.compute(s) else null
-    } finally {
-      s.release()
+  fun voiceprint(samples: FloatArray): FloatArray? =
+    synchronized(speakerLock) { // the speech worker and the barge-in check both call it
+      val s = speaker.createStream()
+      try {
+        s.acceptWaveform(samples, SAMPLE_RATE)
+        s.inputFinished()
+        if (speaker.isReady(s)) speaker.compute(s) else null
+      } finally {
+        s.release()
+      }
     }
-  }
 
   companion object {
     const val VAD_WINDOW = 512

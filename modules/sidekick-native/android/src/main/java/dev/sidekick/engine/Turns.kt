@@ -70,6 +70,10 @@ class Turns(private val followUpMs: Long = FOLLOW_UP_MS) {
     since = Long.MAX_VALUE
   }
 
+  /** Whether Sidekick said [word] in this exchange (its own voice may then set off the wake word). */
+  @Synchronized
+  fun hasSaid(word: String): Boolean = said.any { it.lowercase().contains(word.lowercase()) }
+
   /** Whether [transcript] is just Sidekick's own voice picked up by the mic. */
   @Synchronized
   fun isEcho(transcript: String): Boolean = isEcho(transcript, said.joinToString(" "))
@@ -189,5 +193,223 @@ class SentenceSplitter {
 
   companion object {
     private val END = Regex("\\n|[.!?]+[\"')\\]]*(?=\\s)")
+  }
+}
+
+/**
+ * Ends a spoken question early (Smart Turn), fed one VAD speech probability per 32 ms chunk. The
+ * VAD alone ends a segment after [limitMs] of quiet; after [checkAfterMs] of quiet this asks once
+ * (CHECK) whether the turn sounds finished. If speech resumes, the next pause asks again.
+ */
+class TurnEnd(
+  private val checkAfterMs: Int = CHECK_AFTER_MS,
+  private val limitMs: Int = LIMIT_MS,
+  private val chunkMs: Int = BargeIn.CHUNK_MS,
+) {
+  enum class Step { NONE, CHECK }
+
+  private var turnMs = 0
+  private var speechMs = 0
+  private var quietMs = 0
+  private var asked = false
+  /** Numbers each CHECK, so a late answer about an earlier pause is ignored. */
+  var pause = 0
+    private set
+
+  fun feed(speechProbability: Float): Step {
+    if (turnMs == 0 && speechProbability < SPEECH) return Step.NONE
+    turnMs += chunkMs
+    when {
+      speechProbability >= SPEECH -> {
+        speechMs += chunkMs
+        quietMs = 0
+        asked = false
+      }
+      // Like Silero: in between neither starts nor stops a pause.
+      speechProbability < QUIET || quietMs > 0 -> quietMs += chunkMs
+    }
+    if (quietMs >= limitMs) {
+      reset() // the VAD ends this segment itself
+      return Step.NONE
+    }
+    if (!asked && quietMs >= checkAfterMs && speechMs >= MIN_SPEECH_MS) {
+      asked = true
+      pause++
+      return Step.CHECK
+    }
+    return Step.NONE
+  }
+
+  /** Whether the pause numbered [id] is still going on (nothing said since). */
+  fun stillPaused(id: Int): Boolean = asked && id == pause && quietMs > 0
+
+  /** How much audio belongs to this turn (for the model), in ms. */
+  fun turnMs(): Int = turnMs
+
+  fun reset() {
+    turnMs = 0
+    speechMs = 0
+    quietMs = 0
+    asked = false
+  }
+
+  companion object {
+    /** Pipecat pairs Smart Turn with 0.2 s of VAD silence; one more 32 ms chunk for the hand-off. */
+    const val CHECK_AFTER_MS = 256
+    /** SpeechEngine's minSilenceDuration: today's end of a turn. */
+    const val LIMIT_MS = 600
+    /** SpeechEngine's minSpeechDuration: shorter blips are not a turn. */
+    const val MIN_SPEECH_MS = 300
+    const val SPEECH = 0.5f
+    const val QUIET = 0.35f
+  }
+}
+
+/**
+ * Only the owner may talk over Sidekick. Once [BargeIn] confirms speech, the audio since the voice
+ * was turned down is collected until it is [minSamples] long (a voiceprint of shorter clips is
+ * unreliable), then the caller compares its voiceprint with the owner's (VERIFY, then [verified]).
+ * With no owner voice known yet, BargeIn's STOP passes straight through, as before. The wake word
+ * is always accepted (MicLoop), so short interruptions still work with it.
+ */
+class OwnerBarge(
+  private val minSamples: Int = (MIN_VOICEPRINT_SEC * SAMPLE_RATE).toInt(),
+  private val giveUpQuietMs: Int = TurnEnd.LIMIT_MS,
+  private val chunkMs: Int = BargeIn.CHUNK_MS,
+) {
+  enum class Step { NONE, STOP, VERIFY, REJECT }
+
+  private val clip = ArrayList<FloatArray>()
+  private var size = 0
+  private var confirmed = false
+  private var verifying = false
+  private var done = false
+  private var quietMs = 0
+
+  /** One mic chunk while Sidekick speaks, with BargeIn's decision and state for it. */
+  fun feed(action: BargeIn.Action, ducked: Boolean, speech: Boolean, samples: FloatArray, ownerKnown: Boolean): Step {
+    if (done || verifying) return Step.NONE
+    if (action == BargeIn.Action.STOP) {
+      if (!ownerKnown) {
+        done = true
+        return Step.STOP
+      }
+      confirmed = true
+    }
+    if (!confirmed && !ducked) {
+      clear() // a blip, not someone talking
+      return Step.NONE
+    }
+    clip.add(samples)
+    size += samples.size
+    if (confirmed) {
+      quietMs = if (speech) 0 else quietMs + chunkMs
+      // Stopped talking before there was enough to tell who it was: not accepted (wake word works).
+      if (quietMs >= giveUpQuietMs) {
+        clear()
+        return Step.REJECT
+      }
+      if (size >= minSamples) {
+        verifying = true
+        return Step.VERIFY
+      }
+    }
+    return Step.NONE
+  }
+
+  /** The audio to check (after VERIFY). */
+  fun clip(): FloatArray {
+    val out = FloatArray(size)
+    var i = 0
+    for (c in clip) {
+      c.copyInto(out, i)
+      i += c.size
+    }
+    return out
+  }
+
+  /** The voiceprint check's answer; true if Sidekick should stop. */
+  fun verified(isOwner: Boolean): Boolean {
+    if (!verifying) return false
+    verifying = false
+    if (isOwner) done = true else clear()
+    return isOwner
+  }
+
+  /** True while the voice should stay turned down (collecting or checking). */
+  fun holding(): Boolean = !done && (confirmed || verifying)
+
+  fun reset() {
+    clear()
+    done = false
+  }
+
+  private fun clear() {
+    clip.clear()
+    size = 0
+    confirmed = false
+    verifying = false
+    quietMs = 0
+  }
+
+  companion object {
+    /** Same as MicLoop: CAM++ voiceprints of shorter clips are unreliable. */
+    const val MIN_VOICEPRINT_SEC = 1.5f
+    /** Same-voice threshold, as src/memory/voices.ts (SAME_VOICE). */
+    const val SAME_VOICE = 0.55f
+
+    fun isOwner(voice: FloatArray?, owner: FloatArray): Boolean =
+      voice != null && Turns.cosine(voice, owner) >= SAME_VOICE
+  }
+}
+
+/** The last [capacity] samples fed to the VAD, for Smart Turn. */
+class AudioRing(private val capacity: Int) {
+  private val buf = FloatArray(capacity)
+  private var written = 0L
+
+  fun write(samples: FloatArray) {
+    for (x in samples) {
+      buf[(written % capacity).toInt()] = x
+      written++
+    }
+  }
+
+  /** The newest [n] samples (fewer if not that many were written). */
+  fun last(n: Int): FloatArray {
+    val k = minOf(n.toLong(), written, capacity.toLong()).toInt()
+    val out = FloatArray(k)
+    val start = written - k
+    for (i in 0 until k) out[i] = buf[((start + i) % capacity).toInt()]
+    return out
+  }
+
+  fun clear() {
+    written = 0
+  }
+}
+
+/**
+ * Silero v5/v6 scores 512 new samples only with the 64 before them in front (576 in all), which
+ * sherpa's streaming VAD adds itself but its one-shot `compute` does not. Without them the speech
+ * probability stays near 0, so barge-in and Smart Turn never fired.
+ */
+class SileroWindow(private val context: Int = CONTEXT) {
+  private var last = FloatArray(context)
+
+  fun next(samples: FloatArray): FloatArray {
+    val out = FloatArray(context + samples.size)
+    last.copyInto(out)
+    samples.copyInto(out, context)
+    last = out.copyOfRange(out.size - context, out.size)
+    return out
+  }
+
+  fun reset() {
+    last = FloatArray(context)
+  }
+
+  companion object {
+    const val CONTEXT = 64
   }
 }

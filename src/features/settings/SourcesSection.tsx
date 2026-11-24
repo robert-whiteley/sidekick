@@ -149,12 +149,14 @@ export function SourcesSection({ onChanged }: { onChanged: () => void }) {
 
       <Row
         label="Folders"
-        hint={`Text files (.txt, .md) in folders you pick; re-read every 15 minutes while Sidekick is open. PDFs are not read yet. ${counts.file} passages indexed.`}
+        hint={`${isAndroid ? 'Text files (.txt, .md) and PDFs (first 30 pages; scans are read with on-device OCR)' : 'Text files (.txt, .md)'} in folders you pick; re-read every 15 minutes while Sidekick is open. ${counts.file} passages indexed.`}
         value={s.sourceFolders}
         onChange={(v) => {
           updateSettings({ sourceFolders: v });
           if (v && !s.folderUris.length)
-            void run('Adding folder', async () => void (await pickFolder()));
+            void run('Adding folder', async () => {
+              if (await pickFolder()) await syncNow('folders');
+            });
         }}
       />
       {s.sourceFolders && (

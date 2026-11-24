@@ -15,6 +15,7 @@ Every model and library shipped with or downloaded by Sidekick, with its licence
 | PaddleOCR PP-OCRv6 small det + rec (PaddlePaddle ONNX exports)               | Apache-2.0                                              |
 | Kyutai Pocket TTS 100M (sherpa-onnx int8 export)                             | CC BY 4.0 (weights, © Kyutai), Apache-2.0 (ONNX export) |
 | Pocket TTS reference voice `bria.wav` (kyutai-labs/delayed-streams-modeling) | Apache-2.0                                              |
+| Smart Turn v3.2 (pipecat-ai/smart-turn-v3, fp32 ONNX)                        | BSD-2-Clause (© Daily)                                  |
 
 ## Data
 

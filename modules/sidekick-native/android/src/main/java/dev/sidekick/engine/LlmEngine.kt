@@ -67,9 +67,9 @@ data class LlmStats(
 @OptIn(ExperimentalApi::class)
 class LlmEngine(private val cacheDir: String, private val nativeLibDir: String) {
   private var engine: Engine? = null
-  private var conversation: Conversation? = null
+  @Volatile private var conversation: Conversation? = null
   /** The last side task's conversation; closed at the next generate (not inside its own callback). */
-  private var scratch: Conversation? = null
+  @Volatile private var scratch: Conversation? = null
   /** A conversation with only the system prompt read in; fresh questions start from a clone of it. */
   private var base: Conversation? = null
   private var baseSystem: String? = null
@@ -125,6 +125,7 @@ class LlmEngine(private val cacheDir: String, private val nativeLibDir: String) 
    * Streams the answer to [prompt] (optionally about [imagePath]) through [onText]. With
    * [keepHistory] the previous turns stay in context (chat); otherwise a fresh conversation starts.
    */
+  @Synchronized
   fun generate(
     prompt: String,
     imagePath: String?,
@@ -134,6 +135,13 @@ class LlmEngine(private val cacheDir: String, private val nativeLibDir: String) 
     onFail: (Throwable) -> Unit,
   ) {
     val e = engine ?: return onFail(IllegalStateException("Model not loaded"))
+    // A conversation must never be closed while it is still generating: LiteRT-LM's callback
+    // thread then uses freed memory and the app dies (SIGSEGV seen on the Pixel 5 when a background
+    // task and a question overlapped). Stop the running answer and wait for it to end first.
+    stopRunning()
+    val done = java.util.concurrent.CountDownLatch(1)
+    running = done
+    val finish = { done.countDown() }
     closeScratch()
     val conv =
       try {
@@ -148,6 +156,7 @@ class LlmEngine(private val cacheDir: String, private val nativeLibDir: String) 
             }
         }
       } catch (t: Throwable) {
+        finish()
         return onFail(t)
       }
     val parts = buildList {
@@ -165,26 +174,50 @@ class LlmEngine(private val cacheDir: String, private val nativeLibDir: String) 
           }
 
           override fun onDone() {
-            val b = conv.getBenchmarkInfo()
-            onFinish(
-              LlmStats(
-                ttftMs = b.timeToFirstTokenInSecond * 1000,
-                prefillTokens = b.lastPrefillTokenCount,
-                prefillTokensPerSec = b.lastPrefillTokensPerSecond,
-                decodeTokens = b.lastDecodeTokenCount,
-                decodeTokensPerSec = b.lastDecodeTokensPerSecond,
-                totalMs = (System.nanoTime() - start) / 1_000_000,
+            val b = runCatching { conv.getBenchmarkInfo() }.getOrNull()
+            // Free the next generate only after the callbacks have run (it may close [conv]).
+            try {
+              if (b == null) return onFinish(LlmStats(0.0, 0, 0.0, 0, 0.0, (System.nanoTime() - start) / 1_000_000))
+              onFinish(
+                LlmStats(
+                  ttftMs = b.timeToFirstTokenInSecond * 1000,
+                  prefillTokens = b.lastPrefillTokenCount,
+                  prefillTokensPerSec = b.lastPrefillTokensPerSecond,
+                  decodeTokens = b.lastDecodeTokenCount,
+                  decodeTokensPerSec = b.lastDecodeTokensPerSecond,
+                  totalMs = (System.nanoTime() - start) / 1_000_000,
+                )
               )
-            )
+            } finally {
+              finish()
+            }
           }
 
-          override fun onError(throwable: Throwable) = onFail(throwable)
+          override fun onError(throwable: Throwable) {
+            try {
+              onFail(throwable)
+            } finally {
+              finish()
+            }
+          }
         },
         maxOutputToken = opts.maxTokens,
       )
     } catch (t: Throwable) {
+      finish()
       onFail(t)
     }
+  }
+
+  /** Signalled when the current generation has fully ended (done, failed or cancelled). */
+  @Volatile private var running: java.util.concurrent.CountDownLatch? = null
+
+  /** Cancels any generation still running and waits until LiteRT-LM has let go of it. */
+  private fun stopRunning() {
+    val r = running ?: return
+    if (r.count == 0L) return
+    cancel()
+    if (!r.await(15, java.util.concurrent.TimeUnit.SECONDS)) Log.w(TAG, "previous answer did not stop in 15 s")
   }
 
   /**
@@ -254,13 +287,15 @@ class LlmEngine(private val cacheDir: String, private val nativeLibDir: String) 
     }
   }
 
+  /** Not locked (it must reach a running answer); a conversation closed meanwhile is ignored. */
   fun cancel() {
-    conversation?.cancelProcess()
-    scratch?.cancelProcess()
+    runCatching { conversation?.cancelProcess() }
+    runCatching { scratch?.cancelProcess() }
   }
 
   @Synchronized
   fun unload() {
+    stopRunning()
     closeScratch()
     conversation?.close()
     conversation = null

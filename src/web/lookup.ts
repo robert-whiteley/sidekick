@@ -11,6 +11,7 @@ import {
   LOOKUP_FAILED_NOTE,
   LOOKUP_HINT,
   LOOKUP_TIMEOUT_MS,
+  NEWS_TIMEOUT_MS,
   mergeSources,
   MAX_SOURCES,
   mightBeLookup,
@@ -114,11 +115,14 @@ export type SearchOptions = {
 };
 
 export type Getters = {
-  json: (url: string) => Promise<unknown>;
+  json: (url: string, timeoutMs?: number) => Promise<unknown>;
   text: (url: string) => Promise<string | null>;
 };
 
-const defaultGetters: Getters = { json: (u) => fetchJson(u), text: (u) => fetchText(u) };
+const defaultGetters: Getters = {
+  json: (u, t) => fetchJson(u, t),
+  text: (u) => fetchText(u),
+};
 
 /**
  * Wikipedia + DuckDuckGo Instant Answers (+ the user's SearXNG, if set), all at once. For news
@@ -161,7 +165,7 @@ export async function searchWeb(
       : [],
     gdelt
       ? get
-          .json(gdelt)
+          .json(gdelt, NEWS_TIMEOUT_MS)
           .then(parseGdelt)
           .catch(() => [])
       : [],
@@ -296,17 +300,24 @@ export async function askWithLookup<T extends Asked>(
   let webQuery: string | undefined;
   const lookup = async (): Promise<WebSource[]> => {
     if (!(await deps.online())) return [];
+    const t0 = Date.now();
     const fromModel = await deps.writeQuery(question, names).catch(() => null);
     const q = fromModel ?? buildQuery(question, names);
     if (!q) return [];
     webQuery = q;
+    const tWords = Date.now() - t0;
     const opts: SearchOptions = {
       searx: deps.searxUrl(),
       news: isNewsQuestion(question),
       feeds: deps.feeds(),
       now: deps.now(),
     };
-    return deps.search(q, opts).catch(() => []);
+    const found = await deps.search(q, opts).catch(() => [] as WebSource[]);
+    // Timings only (no question text) for checking budgets on a phone.
+    console.log(
+      `[lookup] words by ${fromModel ? 'model' : 'rules'} in ${tWords} ms; ${found.length} sources (${[...new Set(found.map((w) => w.name))].join(', ')}) in ${Date.now() - t0 - tWords} ms${opts.news ? ' · news' : ''}`,
+    );
+    return found;
   };
 
   if (decision === 'lookup') {

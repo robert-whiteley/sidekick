@@ -45,8 +45,22 @@ export function matchSpeaker(voice: number[], speakers: Speaker[]): Speaker | nu
   return best;
 }
 
+/** The owner's voice (only it may interrupt a spoken answer), or null while not known yet. */
+export const ownerCentroid = (speakers: Speaker[]): number[] | null =>
+  speakers.find((s) => s.isOwner)?.centroid ?? null;
+
 /** Running mean, so a speaker's centroid gets better with every clip. */
 export function addToCentroid(s: Speaker, voice: number[]): number[] {
   const n = Math.min(s.count, 50); // cap the weight so the voice can drift (colds, mics)
   return s.centroid.map((c, i) => (c * n + voice[i]) / (n + 1));
+}
+
+/**
+ * Whether a clip flagged as the owner (a question after the wake word) really is them. Anyone can
+ * say the wake word, so once the owner's voice is known, a clip that doesn't sound like them is
+ * matched like any other voice instead of being learned into the owner's voiceprint. Push-to-talk
+ * clips skip this: holding the button is the owner.
+ */
+export function ownerClaimHolds(voice: number[], owner: Speaker | null): boolean {
+  return !owner || cosine(voice, owner.centroid) >= SAME_VOICE;
 }

@@ -3,7 +3,7 @@ import { PermissionsAndroid, Platform } from 'react-native';
 
 import SidekickNative from '../../modules/sidekick-native';
 import { downloadFile, isDownloaded } from './downloads';
-import { MODEL_FILES, SPEECH_FILES } from './models';
+import { MODEL_FILES, OPTIONAL_SPEECH_FILES, SPEECH_FILES } from './models';
 import { modelsDir } from './paths';
 import { askLocationPermission, pushPauseRules } from './places';
 import { SYSTEM_PROMPT } from './prompts';
@@ -87,13 +87,17 @@ export const isListening = () => SidekickNative.listenActive();
 let voiceFetch: Promise<void> | null = null;
 
 /**
- * Fetches the neural voice once the required speech models are in (Wi-Fi only, in the
- * background). Until then, and if it fails, answers use the system voice.
+ * Fetches the neural voice and Smart Turn once the required speech models are in (Wi-Fi only, in
+ * the background, one at a time). Until then, and if it fails, answers use the system voice and
+ * turns end on silence alone.
  */
 export function fetchVoiceInBackground() {
   if (Platform.OS !== 'android' || voiceFetch || !speechReady()) return;
-  if (isDownloaded(MODEL_FILES.voice)) return;
-  voiceFetch = downloadFile(MODEL_FILES.voice, () => {}, true).catch((e) => {
+  const missing = OPTIONAL_SPEECH_FILES.filter((f) => !isDownloaded(f));
+  if (!missing.length) return;
+  voiceFetch = (async () => {
+    for (const f of missing) await downloadFile(f, () => {}, true);
+  })().catch((e) => {
     console.log(`[voice] download failed: ${String(e)}`);
     voiceFetch = null;
   });

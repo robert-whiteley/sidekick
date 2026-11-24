@@ -73,7 +73,19 @@ export const MODEL_FILES = {
     // Must match Voice.kt (DIR + the reference voice it reads).
     unpackedCheck: 'sherpa-onnx-pocket-tts-int8-2026-01-26/test_wavs/bria.wav',
   },
+  // End of a spoken turn: Smart Turn v3.2 (pipecat-ai, BSD-2-Clause), pinned to a commit. The fp32
+  // export (upstream names it "gpu"; it runs on the CPU). Optional: turns end on silence alone until
+  // it is downloaded (Wi-Fi only). Must match SmartTurn.kt (FILE).
+  smartTurn: {
+    name: 'smart-turn-v3.2-gpu.onnx',
+    url: 'https://huggingface.co/pipecat-ai/smart-turn-v3/resolve/f766f81d3cfdf7737ac64aad813d91bbfd56bf93/smart-turn-v3.2-gpu.onnx',
+    sha256: 'ab8dc64b88713f90b571c15b714bd1330e6c883cad8763dacf65c9376dc539be',
+    bytes: 32411198,
+  },
 } satisfies Record<string, ModelFile>;
+
+/** Fetched in the background once the speech models are in; the app works without them. */
+export const OPTIONAL_SPEECH_FILES: ModelFile[] = [MODEL_FILES.voice, MODEL_FILES.smartTurn];
 
 /**
  * EmbeddingGemma 2 text + vision: text and photos land in one vector space, so a typed question

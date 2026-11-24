@@ -14,6 +14,7 @@ import { type LiveLine, liveTranscript, ORPHAN_WAIT_MS } from '@/engine/live-tra
 import { configureListening } from '@/engine/listen';
 import { getSettings, onSettingsChange, updateSettings } from '@/engine/settings';
 import { labelFor, type PersonRef } from '@/memory/people-logic';
+import { inferNamesIfIdle } from '@/engine/name-inference';
 import { ingestJournal, listSpeakers, nameSpeaker } from '@/memory/store';
 
 type People = Map<number, PersonRef & { nameAuto: boolean }>;
@@ -54,6 +55,8 @@ export function LiveConversation({ listening }: { listening: boolean }) {
     // Each transcribed phrase: move it into memory now (assigns the voice), so it shows at once.
     const sub = SidekickNative.addListener('onTranscript', (e) => {
       void ingestJournal()
+        // Who is who, worked out live from what has just been said.
+        .then(() => inferNamesIfIdle())
         .catch((err) => console.log(`[live] ingest failed: ${String(err)}`))
         .finally(() => {
           // Not journaled (e.g. "Remember conversations" off): show it, with no voice, not saved.

@@ -35,7 +35,10 @@ const changed = () => listeners.forEach((l) => l());
 /** For changes made outside this file (e.g. requests saved from a person's words). */
 export const notifyFollowupsChanged = changed;
 
-/** Lines said, asked or noted on a photo that haven't been read for follow-ups (oldest first). */
+/**
+ * Lines said or noted on a photo that haven't been read for follow-ups (oldest first). Questions to
+ * Sidekick are not: they are requests to it, not to-dos ("remind me …" is handled directly).
+ */
 export async function linesForFollowups(
   limit: number,
   now = Date.now(),
@@ -44,7 +47,7 @@ export async function linesForFollowups(
   const r = await db.execute(
     `SELECT m.id, m.at, m.text, m.kind, s.name, s.is_owner FROM moments m
      LEFT JOIN speakers s ON s.id = m.speaker_id
-     WHERE m.followups_scanned = 0 AND m.kind IN ('speech', 'question', 'photo')
+     WHERE m.followups_scanned = 0 AND m.kind IN ('speech', 'photo')
        AND length(m.text) > 0 AND m.at > ? ORDER BY m.at LIMIT ?`,
     [now - SCAN_WINDOW_MS, limit],
   );
@@ -73,7 +76,7 @@ export async function markFollowupsScanned(ids: number[]) {
 export async function listFollowups(): Promise<Followup[]> {
   const db = await getDb();
   const r = await db.execute(
-    `SELECT f.*, COALESCE(s.name, 'Person ' || s.label_no) AS person_name FROM followups f
+    `SELECT f.*, COALESCE(s.name, s.description, 'Person ' || s.label_no) AS person_name FROM followups f
      LEFT JOIN speakers s ON s.id = f.person_id
      WHERE f.status != 'dismissed' ORDER BY f.status = 'done', f.due_at IS NULL, f.due_at, f.created_at DESC`,
   );
