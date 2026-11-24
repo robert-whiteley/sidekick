@@ -70,3 +70,15 @@ describe('parseFacts grounding', () => {
     ).toEqual(['My door code is 4321.', 'Sam starts school on Monday.']);
   });
 });
+
+describe('parseFacts rejects templates and made-up facts', () => {
+  const said = ['I have got the dentist on Friday', 'the door code is 4321'];
+  it('drops placeholders and facts that were not said', () => {
+    expect(
+      parseFacts(
+        'My birthday is [Date].\nMy name is [Name].\nMy preference is coffee.\nMy dentist appointment is on Friday.\nMy door code is 4321.',
+        said,
+      ),
+    ).toEqual(['My dentist appointment is on Friday.', 'My door code is 4321.']);
+  });
+});

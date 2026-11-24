@@ -3,6 +3,7 @@ import {
   digestText,
   type Followup,
   followupContext,
+  followupLineText,
   isDuplicate,
   newProposals,
   parseFollowups,
@@ -156,4 +157,31 @@ test('recognises follow-up questions', () => {
     expect(asksAboutFollowups(q)).toBe(true);
   for (const q of ['What is this?', 'Who did I meet yesterday?', 'What do you see?'])
     expect(asksAboutFollowups(q)).toBe(false);
+});
+
+describe('follow-ups never come from requests to Sidekick', () => {
+  it('reads only the answer part of a photo question', () => {
+    expect(
+      followupLineText('photo', 'Q: Look at the black keyboard\nA: A black keyboard on a desk.'),
+    ).toBe('A black keyboard on a desk.');
+    expect(followupLineText('photo', 'Q: what is this')).toBeNull();
+    expect(followupLineText('photo', 'Poster: concert Friday 8pm')).toBe(
+      'Poster: concert Friday 8pm',
+    );
+    expect(followupLineText('speech', 'I need to call Sam tomorrow')).toBe(
+      'I need to call Sam tomorrow',
+    );
+  });
+  it('drops commands to an assistant and titles not from the line', () => {
+    const lines = [
+      { at: 0, id: 1, text: 'Calculate 2 plus 2' },
+      { at: 0, id: 2, text: "I'll send the invoice to Sam on Friday" },
+    ];
+    const reply = [
+      '1 | todo | Calculate 2 plus 2 | -',
+      '2 | todo | Send the invoice to Sam | Friday',
+      '2 | todo | Book a holiday | -',
+    ].join('\n');
+    expect(parseFollowups(reply, lines).map((x) => x.title)).toEqual(['Send the invoice to Sam']);
+  });
 });

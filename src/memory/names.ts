@@ -214,6 +214,40 @@ export function namePrompt(lines: { who: string; text: string }[]): string {
   );
 }
 
+/**
+ * Roles that show from what a person says themselves (not what is said to them). They outrank
+ * the model's description: the small model sometimes swaps roles (a ticket seller as "customer").
+ */
+const ROLE_CUES: [RegExp, string][] = [
+  [
+    /\b(tickets? please|next stop|tap your card|fares?|the number \w+ (leaves|goes|is leaving)|mind the doors|single or return)\b/i,
+    'bus driver',
+  ],
+  [
+    /\b(ready to order|would you like to order|take your order|can i get you|any drinks|something to drink|looking after your table|your table|for starters|your starters|dessert menu|enjoy your meal)\b/i,
+    'waiter',
+  ],
+  [
+    /\b(do you need a bag|would you like a bag|next customer|card or cash|would you like (your|a) receipt)\b/i,
+    'shop assistant',
+  ],
+  [/\b(what seems to be the problem|any allergies to medication|take a deep breath)\b/i, 'doctor'],
+];
+
+/** The role a person's own lines show, or null. The role with the most cues wins. */
+export function roleFromLines(lines: string[]): string | null {
+  let best: string | null = null;
+  let bestN = 0;
+  for (const [re, role] of ROLE_CUES) {
+    const n = lines.filter((l) => re.test(l)).length;
+    if (n > bestN) {
+      best = role;
+      bestN = n;
+    }
+  }
+  return best;
+}
+
 export type WhoGuess = { label: string; name: string | null; description: string | null };
 
 const NOT_DESCRIPTIONS = new Set([

@@ -78,3 +78,10 @@ test('on Android the native voice speaks, tied to one answer id, and Stop stops 
     Platform.OS = os;
   }
 });
+
+test('a reply that replaces the first one is spoken from its start', () => {
+  const sp = new StreamingSpeaker(true);
+  sp.update('I do not know that. ');
+  sp.update('The fund changed in 2021. It moved ');
+  expect(mockSpoken).toEqual(['I do not know that.', 'The fund changed in 2021.']);
+});

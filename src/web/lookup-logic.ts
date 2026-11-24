@@ -269,7 +269,14 @@ export const LOOKUP_FAILED_NOTE =
 
 /** Gemma asked for a lookup (allowing for punctuation or a stray word after it). */
 export function requestsLookup(text: string): boolean {
-  return /^\W*lookup\b/i.test(text.trim()) && text.trim().length <= 40;
+  const t = text.trim();
+  // Also "I don't know about X. LOOKUP": the small model sometimes says why first.
+  return (/^\W*lookup\b/i.test(t) && t.length <= 40) || /\bLOOKUP\W*$/.test(t);
+}
+
+/** The streamed text without a trailing (maybe still partial) "LOOKUP", so it is never shown or spoken. */
+export function withoutLookupTail(text: string): string {
+  return text.replace(/\s*\bL(?:O(?:O(?:K(?:U(?:P)?)?)?)?)?\W*$/, '');
 }
 
 /** While the streamed reply could still turn out to be "LOOKUP", it isn't shown or spoken. */
@@ -283,6 +290,20 @@ export function mightBeLookup(text: string): boolean {
 export const MODEL_QUERY_BUDGET_MS = 1500;
 export const MODEL_QUERY_MAX_TOKENS = 24;
 const MODEL_QUERY_WORDS = 8;
+
+/** A follow-up that leans on the earlier question ("and when did that happen?"). */
+const DEPENDS =
+  /^(and|but|so|also|then|what about|how about)\b|\b(that|this|it|its|they|them|their|he|him|his|she|her|there|those|these)\b/i;
+
+/**
+ * What the search words are made from: on a spoken follow-up that leans on the earlier question,
+ * both questions (so "and when did that change happen?" still searches the earlier topic).
+ */
+export function searchTopic(question: string, previous?: string): string {
+  const p = previous?.trim();
+  if (!p || !DEPENDS.test(question.trim())) return question;
+  return `${p.replace(/[?.!]+$/, '')}; ${question.trim()}`;
+}
 
 export function modelQueryPrompt(question: string): string {
   return (

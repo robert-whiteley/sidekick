@@ -16,6 +16,21 @@ export function factPrompt(lines: string[]): string {
   );
 }
 
+const STOP = new Set(
+  'my our is are was were the a an to of in on at for with and or be has have had will would its it this that me i we'.split(
+    ' ',
+  ),
+);
+
+/** Most of the fact's own words (not "my", "is", …) must have been said. */
+function grounded(fact: string, said: Set<string>): boolean {
+  const words = (fact.toLowerCase().match(/[\p{L}\p{N}']+/gu) ?? [])
+    .map((w) => w.replace(/'s$/, ''))
+    .filter((w) => !STOP.has(w));
+  if (!words.length) return false;
+  return words.filter((w) => said.has(w)).length / words.length >= 0.5;
+}
+
 /** Replies about the task rather than facts ("Please provide the conversation…"). */
 const META =
   /^(please|sorry|i|i'm|i am|you|your|could|can|there|it|this|based|as an|unfortunately|no )\b/i;
@@ -46,7 +61,9 @@ export function parseFacts(reply: string, lines?: string[]): string[] {
     if (/\?$/.test(line)) continue;
     if (META.test(line)) continue;
     const first = (line.match(/^[\p{L}\p{N}']+/u)?.[0] ?? '').toLowerCase().replace(/'s$/, '');
+    if (/[[\]{}<>]|\.{3}|…/.test(line)) continue; // templates: "My birthday is [Date]."
     if (said && !/^(my|our)$/.test(first) && !said.has(first)) continue;
+    if (said && !grounded(line, said)) continue;
     const s = /[.!]$/.test(line) ? line : `${line}.`;
     if (!out.some((x) => x.toLowerCase() === s.toLowerCase())) out.push(s);
     if (out.length >= 5) break;

@@ -113,3 +113,26 @@ describe('who is who, from context', () => {
     expect(mentionedPerson('What did the man say?', people)).toBeNull();
   });
 });
+
+describe('roleFromLines', () => {
+  const { roleFromLines } = jest.requireActual('../src/memory/names');
+  it('reads a bus driver from their own lines', () => {
+    expect(
+      roleFromLines([
+        "Hi, I'm Clara. Where would you like to go today? The number twelve leaves in five minutes.",
+        "That's two pounds fifty. Please tap your card on the reader and take a seat.",
+      ]),
+    ).toBe('bus driver');
+  });
+  it('reads a waiter', () => {
+    expect(
+      roleFromLines([
+        "Good evening, I'm Maya, I'll be looking after your table tonight. Can I get you any drinks?",
+        'And are you ready to order your starters?',
+      ]),
+    ).toBe('waiter');
+  });
+  it('says nothing without a cue', () => {
+    expect(roleFromLines(['A single ticket to the station please, Clara.'])).toBeNull();
+  });
+});
