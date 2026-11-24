@@ -20,10 +20,10 @@ Read this before proposing any of these again. Each line says why.
 
 ## Known gaps (shipped without)
 
-- **Pocket TTS on the Pixel 5:** first sound 3.8–4.3 s per sentence while Gemma is still writing (laptop: 0.6 s; voice-sample length makes no difference). The app falls back to the system voice automatically when a short sentence takes over 2.5 s. Faster phones keep Pocket.
+- Fixed since: firebase-messaging is excluded from the APK by `plugins/without-firebase-messaging.js` (local notifications only; −132 KB; a 2-minute reminder still fired on the Pixel 5); OCR models unload after 60 s idle and before Gemma or the embedder loads.
 
-- **expo-notifications pulls in firebase-messaging:** it is inactive and makes no network connections. It is still in the APK.
-- **OCR models stay loaded once used:** ~31 MB, and nothing calls `ocrUnload` yet.
+- **Pocket TTS on the Pixel 5:** first sound 3.8–4.3 s per sentence while Gemma is still writing (laptop: 0.6 s; voice-sample length makes no difference). The app falls back to the system voice automatically when a short sentence takes over 2.5 s. Faster phones keep Pocket. Background model passes (names, follow-ups) now wait while Sidekick answers or speaks (`foreground-gate.ts`, max 3 min), so they no longer slow the first sound further.
+
 - **iOS:** deferred. No OCR, assistant role, tile or widget there yet.
 
 ## Later (not built yet)
@@ -54,7 +54,7 @@ Read this before proposing any of these again. Each line says why.
 - Names need evidence: a rule cue counts 1, the model's reading 2 (once per voice per conversation); at 3 the name is applied as an auto name (undo on the person's page, never re-applied after "no"). Below 3: "Is this Sam?". A model name is kept only if it was actually said.
 - Rejected: guessing man/woman (or age) from the voice itself: unreliable, and a sensitive inference from biometric data; only what is said is used. Applying the model's name guess alone (it can misread who answered). A pass only after the conversation ends (user wants it live).
 - Verified on the Pixel 5 (a restaurant scene, two laptop voices, consent asked and given): the other voice showed as "Waiter" live, during the conversation. The first prompt called them "Customer"; telling the model to judge each person by what they themselves say, with a waiter/customer example, fixed it.
-- Gap: lines under 2.5 s from a voice not yet known stay "Someone" (too short to start a voice; see voices.ts). Each reading takes seconds of CPU on the Pixel 5 while speech-to-text and the voice also run (Pocket's first sound rose to 3–6 s during these tests).
+- Short lines (under 2.5 s) join a known other voice when it is clearly closest (≥0.45 and 0.1 above every other voice; never the owner, centroid not updated). Unmatched ones wait up to 60 s and are relabelled when their voice becomes known; only a line with no clear voice stays "Someone". Lines from 0.5 s get a voiceprint for this (barge-in still needs 1.5 s); under 1.5 s nothing is learned and the owner is never matched loosely. Verified on the Pixel 5: three ~1 s lines from a known voice (0.62–0.64) were labelled with it instead of "Someone". Suggested facts must start with "My" or a word the owner said (a model remark had become a suggested fact). Ask box: the keyboard no longer covers the Ask button (Android edge-to-edge needs `padding`). Each reading takes seconds of CPU on the Pixel 5 while speech-to-text and the voice also run (Pocket's first sound rose to 3–6 s during these tests).
 
 ## Spoken reminders (2026-11-24)
 
@@ -68,7 +68,7 @@ Read this before proposing any of these again. Each line says why.
 - Questions to Sidekick are no longer read for follow-ups: they turned into to-dos ("Find capital of France") and re-suggested reminders already set. Only things said around you and photo notes are.
 - A screenshot from the assist key is used only for questions within 2 minutes, then dropped.
 - Turning the Folders source on now reads the picked folder at once (before: only "Add a folder" did).
-- Verified on the Pixel 5: a text PDF and a scanned (image-only) PDF in a folder source were both found and answered from (6.7 s / 5.4 s). Default assistant (assist key) and the Quick Settings tile open Sidekick; the widget is registered (not placed).
+- Verified on the Pixel 5: a text PDF and a scanned (image-only) PDF in a folder source were both found and answered from (6.7 s / 5.4 s). Default assistant (assist key) and the Quick Settings tile open Sidekick; the widget (placed later) opens Ask and Capture.
 
 ## Background model passes use a throwaway chat (2026-11-24)
 
@@ -96,6 +96,6 @@ Read this before proposing any of these again. Each line says why.
 - Rejected: automating Google or the browser, by scraping or an AccessibilityService (against Google's terms and Play policy).
 - Rejected: computing the link's words with Gemma after every answer (CPU contention with speech, wasted when not tapped).
 - Wikipedia User-Agent has no contact details (would be personal info); may be rate-limited harder if Wikimedia tightens.
-- Gap: the hidden "LOOKUP" turn stays in Gemma's history on spoken follow-ups.
+- The hidden "LOOKUP" turn is undone (the chat is cloned before it and restored) so follow-ups only see the real question and answer.
 - Gap: Gemma's search words on a Pixel-5-class CPU may often miss the 1.5 s budget (then rules are used); a `[lookup]` log line now shows which was used and the timings.
-- Measured on the Pixel 5 (Wi-Fi, UK): "who won the 2022 world cup?" answered from Wikipedia in 9.6 s (lookup ~2.5 s). GDELT took 9 s+ to answer at all (even its 429 "busy" reply), so with a 4 s limit news questions got no news source. News questions now wait up to 9 s for GDELT; others keep 4 s.
+- Measured on the Pixel 5 (Wi-Fi, UK): "who won the 2022 world cup?" answered from Wikipedia in 9.6 s (lookup ~2.5 s). GDELT took 9 s+ to answer at all (even its 429 "busy" reply), so with a 4 s limit news questions got no news source. A later test (24 Nov) waited 9 s and GDELT still only replied 429 after 10–11 s on every try (also from the laptop), so it is back to 4 s. Gap: GDELT is unreliable from here, so news on niche topics often falls back to Wikipedia facts or "no current information"; Wikipedia current events (0.3 s) and user-added RSS feeds work. No free, key-less, commercial-safe general news search was found to replace it. Widget verified on the Pixel 5: Ask opens Sidekick listening, Capture takes a photo.

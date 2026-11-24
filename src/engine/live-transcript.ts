@@ -43,6 +43,14 @@ export class LiveTranscript {
     this.listeners.forEach((l) => l(this.lines));
   }
 
+  /** Gives an unattributed line its voice once that voice becomes known. */
+  relabel(at: number, speakerId: number) {
+    const i = this.lines.findIndex((l) => l.at === at && l.speakerId == null);
+    if (i < 0) return;
+    this.lines = this.lines.map((l, j) => (j === i ? { ...l, speakerId } : l));
+    this.listeners.forEach((l) => l(this.lines));
+  }
+
   has(at: number): boolean {
     return this.lines.some((l) => l.at === at);
   }

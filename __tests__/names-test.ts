@@ -58,3 +58,15 @@ test('fact extraction parses model replies', () => {
     ),
   ).toEqual(['My locker code is 4512.', "My sister's birthday is 3 May."]);
 });
+
+describe('parseFacts grounding', () => {
+  const said = ['my door code is 4321', 'Sam starts school on Monday'];
+  it('drops remarks about the task', () => {
+    expect(parseFacts('Please provide the conversation you are referring to.', said)).toEqual([]);
+  });
+  it('keeps facts starting with My or a name that was said', () => {
+    expect(
+      parseFacts('My door code is 4321\nSam starts school on Monday\nBob likes tea', said),
+    ).toEqual(['My door code is 4321.', 'Sam starts school on Monday.']);
+  });
+});

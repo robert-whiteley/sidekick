@@ -1,4 +1,5 @@
 import SidekickNative from '../../modules/sidekick-native';
+import { ForegroundGate } from './foreground-gate';
 import { LlmQueue } from './llm-queue';
 import type {
   GenerateOptions,
@@ -107,6 +108,12 @@ export async function unloadLlm() {
 let seq = 0;
 const queue = new LlmQueue(() => SidekickNative.llmCancel());
 
+const foreground = new ForegroundGate();
+/** The owner is being answered (written or spoken): background passes wait. */
+export const holdBackground = () => foreground.hold();
+/** The answer is over: background passes may run again. */
+export const releaseBackground = () => foreground.release();
+
 /** Something (an answer, fact pass, photo description…) is using the model right now. */
 export function llmBusy(): boolean {
   return queue.busy;
@@ -125,11 +132,13 @@ export async function askLlm(
 }
 
 /** A background pass (facts, follow-ups, photo descriptions): waits its turn, yields to questions. */
-export function askLlmInBackground(
+export async function askLlmInBackground(
   prompt: string,
   imagePath: string | null,
   opts?: GenerateOptions,
 ): Promise<{ text: string; stats: LlmStats }> {
+  // Not while an answer is written or spoken: it would slow the answer's first spoken word.
+  await foreground.idle();
   // Its own throwaway chat: a spoken follow-up must never continue a background prompt's chat.
   return askLlm(prompt, imagePath, () => {}, { ...opts, scratch: true }, true);
 }
@@ -168,6 +177,11 @@ export async function askLlmAside(prompt: string, maxTokens: number): Promise<st
     scratch: true,
   });
   return text;
+}
+
+/** Drops the last chat turn sent with `undoable` (e.g. a "LOOKUP" reply); false if none. */
+export function undoLastTurn(): boolean {
+  return SidekickNative.llmUndoLast();
 }
 
 export function cancelLlm() {

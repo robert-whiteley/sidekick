@@ -22,12 +22,16 @@ data class LlmCandidate(val modelPath: String, val backend: String)
 
 data class LlmLoadResult(val modelPath: String, val backend: String, val initMs: Long, val failures: List<String>)
 
-/** [scratch]: run in a separate throwaway conversation, leaving the chat and its history as they are. */
+/**
+ * [scratch]: run in a separate throwaway conversation, leaving the chat and its history as they are.
+ * [undoable]: keep a copy of the chat from before this turn, so [LlmEngine.undoLast] can drop it.
+ */
 data class GenerateOptions(
   val maxTokens: Int? = null,
   val keepHistory: Boolean = false,
   val system: String? = null,
   val scratch: Boolean = false,
+  val undoable: Boolean = false,
 )
 
 /**
@@ -70,6 +74,8 @@ class LlmEngine(private val cacheDir: String, private val nativeLibDir: String) 
   @Volatile private var conversation: Conversation? = null
   /** The last side task's conversation; closed at the next generate (not inside its own callback). */
   @Volatile private var scratch: Conversation? = null
+  /** The chat as it was before the last undoable turn (see [undoLast]); dropped at the next chat turn. */
+  @Volatile private var before: Conversation? = null
   /** A conversation with only the system prompt read in; fresh questions start from a clone of it. */
   private var base: Conversation? = null
   private var baseSystem: String? = null
@@ -141,6 +147,7 @@ class LlmEngine(private val cacheDir: String, private val nativeLibDir: String) 
     stopRunning()
     val done = java.util.concurrent.CountDownLatch(1)
     running = done
+    chatRunning = !opts.scratch
     val finish = { done.countDown() }
     closeScratch()
     val conv =
@@ -148,12 +155,19 @@ class LlmEngine(private val cacheDir: String, private val nativeLibDir: String) 
         if (opts.scratch) {
           freshConversation(e, opts.system).also { scratch = it }
         } else {
-          conversation?.takeIf { opts.keepHistory }
-            ?: run {
-              conversation?.close()
-              conversation = null
-              freshConversation(e, opts.system).also { conversation = it }
+          (
+            conversation?.takeIf { opts.keepHistory }
+              ?: run {
+                conversation?.close()
+                conversation = null
+                freshConversation(e, opts.system).also { conversation = it }
+              }
+          ).also { chat ->
+            closeBefore()
+            if (opts.undoable) {
+              before = runCatching { chat.clone() }.onFailure { Log.w(TAG, "chat clone failed", it) }.getOrNull()
             }
+          }
         }
       } catch (t: Throwable) {
         finish()
@@ -211,6 +225,8 @@ class LlmEngine(private val cacheDir: String, private val nativeLibDir: String) 
 
   /** Signalled when the current generation has fully ended (done, failed or cancelled). */
   @Volatile private var running: java.util.concurrent.CountDownLatch? = null
+  /** Whether the current generation runs in the chat (not a scratch conversation). */
+  @Volatile private var chatRunning = false
 
   /** Cancels any generation still running and waits until LiteRT-LM has let go of it. */
   private fun stopRunning() {
@@ -287,6 +303,27 @@ class LlmEngine(private val cacheDir: String, private val nativeLibDir: String) 
     }
   }
 
+  private fun closeBefore() {
+    val b = before ?: return
+    before = null
+    runCatching { b.close() }.onFailure { Log.w(TAG, "undo copy close failed", it) }
+  }
+
+  /**
+   * Drops the last undoable turn (e.g. the model's "LOOKUP" reply) from the chat, so a follow-up
+   * never sees it. Returns false when there is nothing to undo.
+   */
+  @Synchronized
+  fun undoLast(): Boolean {
+    // Never close the chat mid-answer (see generate); a background pass in its scratch chat is fine.
+    if (chatRunning && (running?.count ?: 0L) != 0L) return false
+    val b = before ?: return false
+    before = null
+    runCatching { conversation?.close() }
+    conversation = b
+    return true
+  }
+
   /** Not locked (it must reach a running answer); a conversation closed meanwhile is ignored. */
   fun cancel() {
     runCatching { conversation?.cancelProcess() }
@@ -297,6 +334,7 @@ class LlmEngine(private val cacheDir: String, private val nativeLibDir: String) 
   fun unload() {
     stopRunning()
     closeScratch()
+    closeBefore()
     conversation?.close()
     conversation = null
     resetBase()

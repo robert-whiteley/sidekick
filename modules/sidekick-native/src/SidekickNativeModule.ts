@@ -138,6 +138,8 @@ declare class SidekickNativeModule extends NativeModule<SidekickNativeModuleEven
     dictPath: string,
   ): Promise<{ lines: string[]; ms: number }>;
   llmCancel(): void;
+  /** Drops the last turn sent with `undoable` from the chat; false when there is none. */
+  llmUndoLast(): boolean;
   llmIsLoaded(): boolean;
   llmUnload(): Promise<void>;
   /** Android: whether the user allowed Sidekick's notification listener in system settings. */

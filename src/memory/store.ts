@@ -30,10 +30,14 @@ import {
 import {
   addToCentroid,
   canStartNewVoice,
+  claimPending,
   cosine,
+  matchShortClip,
   matchSpeaker,
   ownerCentroid,
   ownerClaimHolds,
+  type PendingClip,
+  RELIABLE_VOICE_MS,
   type Speaker,
 } from './voices';
 import { applyAutoName, assignLabel, collectPersonInfo, type KeptLine } from './people';
@@ -121,6 +125,12 @@ async function assignSpeaker(
     `[voice] ${owner ? 'owner clip' : 'clip'} sims: ${all.map((x) => `${x.id}${x.isOwner ? '*' : ''}=${cosine(voice, x.centroid).toFixed(2)}`).join(' ')}`,
   );
   const known = all.find((x) => x.isOwner) ?? null;
+  if (!trusted && durationMs != null && durationMs < RELIABLE_VOICE_MS) {
+    // Too short to trust: nothing is learned. A short wake-word line stays the owner's as before
+    // (no voice); anyone else's only joins a clearly closest known voice.
+    if (owner) return { speaker: null, owner: true };
+    return { speaker: matchShortClip(voice, all), owner: false };
+  }
   if (owner && !trusted && !ownerClaimHolds(voice, known)) owner = false;
   let s = owner ? known : matchSpeaker(voice, all);
   if (s) {
@@ -132,7 +142,10 @@ async function assignSpeaker(
     if (s.isOwner) pushOwnerVoice(c);
     return { speaker: s, owner: s.isOwner };
   }
-  if (!owner && !canStartNewVoice(durationMs)) return { speaker: null, owner: false };
+  if (!owner && !canStartNewVoice(durationMs)) {
+    // Too short to start a person: join a clearly closest known voice, else wait for one.
+    return { speaker: matchShortClip(voice, all), owner: false };
+  }
   const r = await db.execute('INSERT INTO speakers (is_owner, centroid) VALUES (?, ?)', [
     owner ? 1 : 0,
     JSON.stringify(voice),
@@ -140,8 +153,31 @@ async function assignSpeaker(
   s = { id: r.insertId!, centroid: voice, count: 1, isOwner: owner };
   if (owner) pushOwnerVoice(voice);
   // Every new voice is "Person N" right away, stable for that voice.
-  if (!owner) await assignLabel(s.id);
+  if (!owner) {
+    await assignLabel(s.id);
+    await claimWaitingClips(s, [...all, s]);
+  }
   return { speaker: s, owner };
+}
+
+/** Short clips nobody matched yet (in memory only), re-checked when a new voice appears. */
+let pendingClips: PendingClip[] = [];
+
+/** Relabels earlier "Someone" lines that clearly belong to a voice that just became known. */
+async function claimWaitingClips(joined: Speaker, all: Speaker[]) {
+  const { claimed, waiting } = claimPending(pendingClips, joined, all, Date.now());
+  pendingClips = waiting;
+  if (!claimed.length) return;
+  const db = await getDb();
+  for (const c of claimed) {
+    if (c.momentId != null)
+      await db.execute('UPDATE moments SET speaker_id = ? WHERE id = ? AND speaker_id IS NULL', [
+        joined.id,
+        c.momentId,
+      ]);
+    liveTranscript.relabel(c.at, joined.id);
+  }
+  console.log(`[voice] ${claimed.length} earlier short line(s) now voice ${joined.id}`);
 }
 
 /** A push-to-talk clip is always the owner: use it to learn their voice. */
@@ -204,6 +240,7 @@ async function ingestJournalNow(): Promise<number> {
         }
       }
       if (!keepOtherSpeech({ consentMode, speakerConsented: consented })) {
+        if (!s && e.voice) pendingClips.push({ at: e.at, voice: e.voice, momentId: null });
         liveTranscript.put({
           at: e.at,
           text: e.text,
@@ -219,6 +256,8 @@ async function ingestJournalNow(): Promise<number> {
       [e.kind, e.at, e.text, s?.id ?? null],
     );
     await tagPlace(ins.insertId!, entryPlace(e));
+    if (!s && !isOwner && e.voice)
+      pendingClips.push({ at: e.at, voice: e.voice, momentId: ins.insertId! });
     kept.push({ id: ins.insertId!, at: e.at, speakerId: s?.id ?? null, isOwner, text: e.text });
     liveTranscript.put({ at: e.at, text: e.text, speakerId: s?.id ?? null, isOwner, saved: true });
     added++;

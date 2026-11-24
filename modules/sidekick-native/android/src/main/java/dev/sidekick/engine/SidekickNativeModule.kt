@@ -20,6 +20,7 @@ class GenerateOptionsRecord : Record {
   @Field val keepHistory: Boolean = false
   @Field val system: String? = null
   @Field val scratch: Boolean = false
+  @Field val undoable: Boolean = false
 }
 
 class LlmTuningRecord : Record {
@@ -80,6 +81,7 @@ class SidekickNativeModule : Module() {
     AsyncFunction("llmLoad") { candidates: List<LlmCandidateRecord> ->
       val cands = candidates.map { LlmCandidate(it.modelPath, it.backend) }
       Embedder.unloadIfLowRam(context)
+      Ocr.unload()
       val r = llm.load(cands)
       llm.rememberLoad(context, cands, r)
       mapOf("modelPath" to r.modelPath, "backend" to r.backend, "initMs" to r.initMs, "failures" to r.failures)
@@ -94,7 +96,7 @@ class SidekickNativeModule : Module() {
       llm.generate(
         prompt,
         imagePath,
-        GenerateOptions(opts?.maxTokens, opts?.keepHistory ?: false, opts?.system, opts?.scratch ?: false),
+        GenerateOptions(opts?.maxTokens, opts?.keepHistory ?: false, opts?.system, opts?.scratch ?: false, opts?.undoable ?: false),
         onText = { sendEvent("onLlmText", mapOf("requestId" to requestId, "text" to it)) },
         onFinish = { s ->
           promise.resolve(
@@ -410,6 +412,7 @@ class SidekickNativeModule : Module() {
     AsyncFunction("llmPrepare") { system: String? -> llm.prepare(system) }
 
     Function("llmCancel") { llm.cancel() }
+    Function("llmUndoLast") { llm.undoLast() }
 
     AsyncFunction("llmUnload") { llm.unload() }
 

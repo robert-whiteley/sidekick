@@ -122,8 +122,12 @@ export async function answer(
     !!image,
     (webPart) =>
       `${agenda}${person}${webPart}${memoryContext(sources, facts, sources.length, question)}${seenText}Question: ${question}`,
-    (prompt, t) =>
-      askLlm(prompt, image, t, { system: SYSTEM_PROMPT, keepHistory: opts?.keepHistory ?? false }),
+    (prompt, t, o) =>
+      askLlm(prompt, image, t, {
+        system: SYSTEM_PROMPT,
+        keepHistory: opts?.keepHistory ?? false,
+        undoable: o?.undoable,
+      }),
     onText,
   );
 

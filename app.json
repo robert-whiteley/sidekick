@@ -72,7 +72,8 @@
           "calendarPermission": "Sidekick reads your calendar so it can answer questions like \"when is my dentist\". Events stay on this phone."
         }
       ],
-      ["expo-notifications", { "enableRemoteNotifications": false }]
+      ["expo-notifications", { "enableRemoteNotifications": false }],
+      "./plugins/without-firebase-messaging"
     ],
     "scheme": "sidekick",
     "experiments": {

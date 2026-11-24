@@ -20,7 +20,12 @@ export function inferFactsIfIdle(): Promise<void> {
       maxTokens: 120,
     });
     if (cancelled) return; // partial output: try these lines again later
-    await suggestFacts(parseFacts(text));
+    await suggestFacts(
+      parseFacts(
+        text,
+        lines.map((l) => l.text),
+      ),
+    );
     await markFactsScanned(lines.map((l) => l.id));
   })()
     .catch((e) => {

@@ -87,6 +87,12 @@ object MicLoop {
   private const val MIN_TRANSCRIBE_DBFS = -80.0
   /** Voiceprints of shorter clips are unreliable (CAM++ EER 13% on noisy 1.5 s clips). */
   private const val MIN_VOICEPRINT_SEC = OwnerBarge.MIN_VOICEPRINT_SEC
+  /**
+   * Journal lines down to this length get a voiceprint too. JS only lets clips under
+   * MIN_VOICEPRINT_SEC join a clearly closest known voice (never the owner, never learned from),
+   * so short lines aren't all "Someone".
+   */
+  private const val MIN_LINE_VOICEPRINT_SEC = 0.5f
   /** Short replies that still get a voiceprint: consent needs to know which voice said yes. */
   private val AGREEMENT =
     Regex(
@@ -393,7 +399,7 @@ object MicLoop {
       val raw = engine.transcribe(audio)
       if (raw.isBlank()) return
       val voice =
-        if (audio.size >= MIN_VOICEPRINT_SEC * SAMPLE_RATE || AGREEMENT.containsMatchIn(raw.trim())) {
+        if (audio.size >= MIN_LINE_VOICEPRINT_SEC * SAMPLE_RATE || AGREEMENT.containsMatchIn(raw.trim())) {
           engine.voiceprint(audio)
         } else null
       val now = System.currentTimeMillis()

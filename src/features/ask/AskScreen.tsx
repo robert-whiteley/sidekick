@@ -39,7 +39,7 @@ import { inferFactsIfIdle, stopFactInference } from '@/engine/fact-inference';
 import { inferFollowupsIfIdle, stopFollowupInference } from '@/engine/followup-inference';
 import { inferNamesIfIdle, stopNameInference } from '@/engine/name-inference';
 import { startFollowupNotifications } from '@/engine/followup-notify';
-import { cancelLlm, ensureLlm } from '@/engine/llm';
+import { cancelLlm, ensureLlm, holdBackground, releaseBackground } from '@/engine/llm';
 import { getSettings, updateSettings } from '@/engine/settings';
 import { StreamingSpeaker } from '@/engine/speaker';
 import { Conversation } from '@/engine/conversation';
@@ -87,6 +87,8 @@ export function AskScreen({
   } | null>(null);
   const camera = useRef<CameraView>(null);
   const speaker = useRef<StreamingSpeaker | null>(null);
+  /** A spoken answer is still being said: background passes are held until the voice is idle. */
+  const awaitingVoiceRef = useRef(false);
   const busyRef = useRef(true);
   const askRef = useRef<(q: string, followUp?: boolean) => void>(() => {});
   // Spoken back-and-forth: follow-ups keep the chat; one heard mid-answer waits for it to stop.
@@ -124,7 +126,13 @@ export function AskScreen({
       SidekickNative.addListener('onWake', () => setStatus('Listening…')),
       SidekickNative.addListener('onQuestion', (e) => askRef.current(e.text, e.followUp)),
       SidekickNative.addListener('onBargeIn', () => setStatus('Listening…')),
-      SidekickNative.addListener('onVoiceIdle', () => conversation.current.answered(Date.now())),
+      SidekickNative.addListener('onVoiceIdle', () => {
+        conversation.current.answered(Date.now());
+        if (awaitingVoiceRef.current) {
+          awaitingVoiceRef.current = false;
+          releaseBackground();
+        }
+      }),
       SidekickNative.addListener('onListenError', (e) =>
         setStatus(`Listening stopped: ${e.message}`),
       ),
@@ -265,6 +273,8 @@ export function AskScreen({
     }
     if (!q || busyRef.current) return;
     busyRef.current = true;
+    holdBackground();
+    awaitingVoiceRef.current = false;
     const keepHistory = conversation.current.keepHistory(followUp, Date.now());
     await yieldToQuestion();
     if (spoken) setQuestion(spoken);
@@ -294,6 +304,8 @@ export function AskScreen({
         },
         { keepHistory },
       );
+      // Android's voice says when it has finished (onVoiceIdle); background passes wait for that.
+      awaitingVoiceRef.current = speak && Platform.OS === 'android' && r.text.trim().length > 0;
       sp.finish(r.text);
       setWeb(r.web ?? []);
       setWebAsk(
@@ -311,6 +323,8 @@ export function AskScreen({
       setStatus(`Something went wrong: ${e instanceof Error ? e.message : String(e)}`);
     } finally {
       busyRef.current = false;
+      // Spoken answers release on onVoiceIdle; nothing spoken (or an error) releases now.
+      if (!awaitingVoiceRef.current) releaseBackground();
       setPhase('idle');
       const next = queuedRef.current;
       queuedRef.current = null;
@@ -375,14 +389,13 @@ export function AskScreen({
   const stop = () => {
     cancelLlm();
     speaker.current?.stop();
+    awaitingVoiceRef.current = false;
+    releaseBackground();
   };
 
   return (
     <SafeAreaView style={styles.safe}>
-      <KeyboardAvoidingView
-        style={styles.flex}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      >
+      <KeyboardAvoidingView style={styles.flex} behavior="padding">
         <View style={styles.header}>
           <Text style={styles.title}>Sidekick</Text>
           <OnlineBadge used={web.length > 0} />

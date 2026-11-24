@@ -382,6 +382,7 @@ describe('Gemma writes the search words', () => {
     online: async () => true,
     search: jest.fn(async () => []),
     writeQuery: jest.fn(async () => 'COP31 climate talks outcome'),
+    undoLast: () => {},
     now: () => NOW,
     ...over,
   });
