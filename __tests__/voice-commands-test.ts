@@ -6,12 +6,6 @@ import {
   parseVoiceCommand as p,
   rateReply,
 } from '../src/engine/voice-commands-logic';
-import {
-  NOTE_TEMPLATES,
-  parseTemplateSections,
-  templateFor,
-  templateFormat,
-} from '../src/memory/note-templates';
 
 describe('parseVoiceCommand', () => {
   it('speech speed', () => {
@@ -33,7 +27,9 @@ describe('parseVoiceCommand', () => {
   it('listening and camera', () => {
     expect(p('Stop listening')).toEqual({ type: 'listening', on: false });
     expect(p('Sidekick, start listening')).toEqual({ type: 'listening', on: true });
-    expect(p('pause the camera')).toEqual({ type: 'camera', on: false });
+    expect(p('pause the camera')).toEqual({ type: 'camera', on: false, pause: true });
+    expect(p('resume the camera')).toEqual({ type: 'camera', on: true, pause: true });
+    expect(p('stop the camera')).toEqual({ type: 'camera', on: false });
     expect(p('turn on the camera')).toEqual({ type: 'camera', on: true });
   });
   it('camera watches', () => {
@@ -56,16 +52,6 @@ describe('parseVoiceCommand', () => {
     expect(p('stop watching')).toEqual({ type: 'unwatch', what: null });
     expect(p('what are you watching for?')).toEqual({ type: 'watchList' });
     expect(p('tell me when you get the answer')).toBeNull();
-  });
-  it('note templates', () => {
-    expect(p('This is a meeting')).toEqual({ type: 'template', id: 'meeting' });
-    expect(p("I'm at the doctor's appointment")).toEqual({ type: 'template', id: 'doctor' });
-    expect(p("it's a lecture")).toEqual({ type: 'template', id: 'lecture' });
-    expect(p('this is an interview with Jo')).toEqual({ type: 'template', id: 'interview' });
-    expect(p('take meeting notes')).toEqual({ type: 'template', id: 'meeting' });
-    expect(p('this is just a normal chat')).toEqual({ type: 'template', id: null });
-    expect(p("it's a great day for a talk about the meeting tomorrow")).toBeNull();
-    expect(p('this is Sam')).toBeNull();
   });
   it('scan', () => {
     expect(p('scan this')).toEqual({ type: 'scan' });
@@ -111,28 +97,5 @@ describe('helpText', () => {
     expect(all).toMatch(/calendar/);
     expect(all).toMatch(/look things up online/);
     expect(all).not.toMatch(/More with/);
-  });
-});
-
-describe('note templates', () => {
-  const conv = { from: 1_000_000, to: 2_000_000 };
-  it('a voice choice during the conversation wins over the default', () => {
-    expect(templateFor(conv, { id: 'meeting', at: 1_500_000 }, 'lecture')?.id).toBe('meeting');
-    expect(templateFor(conv, { id: null, at: 1_500_000 }, 'lecture')).toBeNull();
-    expect(templateFor(conv, { id: 'meeting', at: 100 }, 'lecture')?.id).toBe('lecture');
-    expect(templateFor(conv, null, null)).toBeNull();
-  });
-  it('format and parsing', () => {
-    const t = NOTE_TEMPLATES.doctor;
-    expect(templateFormat(null)).toBe('');
-    expect(templateFormat(t)).toMatch(/Medicines:/);
-    const out = parseTemplateSections(
-      t,
-      'Topics: knee\nSymptoms: pain on stairs; swelling\nMedicines: ibuprofen 400 mg three times a day\nDiagnosis: none',
-    );
-    expect(out).toEqual([
-      { name: 'Symptoms', items: ['pain on stairs', 'swelling'] },
-      { name: 'Medicines', items: ['ibuprofen 400 mg three times a day'] },
-    ]);
   });
 });

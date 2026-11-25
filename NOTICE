@@ -1,0 +1,8 @@
+Sidekick
+Copyright 2026 Robert Whiteley
+
+This product is licensed under the Apache License, Version 2.0 (see LICENSE).
+
+It bundles or downloads third-party libraries, models and data under their own licences,
+including Creative Commons Attribution 4.0 models (NVIDIA Parakeet, Kyutai Pocket TTS) and
+GeoNames data (CC BY 4.0). See THIRD_PARTY_NOTICES.md for the full list and attributions.

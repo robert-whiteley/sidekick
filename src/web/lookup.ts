@@ -306,16 +306,25 @@ export async function askWithLookup<T extends Asked>(
   previous?: string,
   /** Progress lines as they happen ("Looking it up online…"). */
   onStatus?: (line: string) => void,
-): Promise<T & { web: WebSource[]; webQuery?: string }> {
+  /** force: look it up whatever the rules say (a question kept until back online). */
+  opts: { force?: boolean } = {},
+): Promise<T & { web: WebSource[]; webQuery?: string; offline?: boolean }> {
   const enabled = deps.enabled();
   if (!enabled || photo) return { ...(await ask(build(''), onText)), web: [] };
   const names = await deps.knownNames().catch(() => [] as string[]);
-  const decision = decideLookup(question, { enabled, photo, knownNames: names });
+  const decision = opts.force
+    ? 'lookup'
+    : decideLookup(question, { enabled, photo, knownNames: names });
   if (decision === 'none') return { ...(await ask(build(''), onText)), web: [] };
 
   let webQuery: string | undefined;
+  /** A lookup was wanted but there was no internet (the question can wait for it). */
+  let offline = false;
   const lookup = async (): Promise<WebSource[]> => {
-    if (!(await deps.online())) return [];
+    if (!(await deps.online())) {
+      offline = true;
+      return [];
+    }
     onStatus?.('Looking it up online…');
     const t0 = Date.now();
     const topic = searchTopic(question, previous);
@@ -345,7 +354,7 @@ export async function askWithLookup<T extends Asked>(
 
   if (decision === 'lookup') {
     const web = await lookup();
-    return { ...(await ask(build(webContext(web, deps.now())), onText)), web, webQuery };
+    return { ...(await ask(build(webContext(web, deps.now())), onText)), web, webQuery, offline };
   }
 
   // 'ask-model': hold the streamed text back while it could still be "LOOKUP".
@@ -384,5 +393,6 @@ export async function askWithLookup<T extends Asked>(
     },
     web,
     webQuery,
+    offline,
   };
 }

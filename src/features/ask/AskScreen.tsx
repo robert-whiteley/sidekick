@@ -63,6 +63,7 @@ import { inferFactsIfIdle, stopFactInference } from '@/engine/fact-inference';
 import { inferFollowupsIfIdle, stopFollowupInference } from '@/engine/followup-inference';
 import { inferNamesIfIdle, stopNameInference } from '@/engine/name-inference';
 import { stopConversationNotes, updateConversationNotes } from '@/engine/conversation-notes';
+import { stopTranslateHeard, translateHeardIfIdle } from '@/engine/translate-heard';
 import { driveBackupIfDue } from '@/engine/drive-backup-schedule';
 import { cancelLlm, ensureLlm, holdBackground, releaseBackground } from '@/engine/llm';
 import { readBackDone } from '@/engine/actions';
@@ -355,6 +356,7 @@ export function AskScreen({
         if (!busyRef.current) await inferFactsIfIdle();
         if (!busyRef.current) await inferFollowupsIfIdle();
         if (!busyRef.current) await inferNamesIfIdle();
+        if (!busyRef.current) await translateHeardIfIdle();
         if (!busyRef.current) await updateConversationNotes();
         void driveBackupIfDue();
       } catch (e) {
@@ -594,6 +596,7 @@ export function AskScreen({
         stopFollowupInference(),
         stopNameInference(),
         stopConversationNotes(),
+        stopTranslateHeard(),
       ]);
       let imagePath: string | null = null;
       const visible = AppState.currentState === 'active';

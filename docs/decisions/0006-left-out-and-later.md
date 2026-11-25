@@ -106,6 +106,8 @@ Read this before proposing any of these again. Each line says why.
 - Removed: the direct-download APK ("full" flavour) with an Accessibility service that pressed Send in WhatsApp after approval, and direct SMS sending. Owner decision: keep it simple, every user gets the same app; two variants are too much to manage.
 - Why they can't be in the Play app: Play's Accessibility API policy bars apps that aren't accessibility tools from using it to carry out actions (including autonomous AI actions), and Play allows SEND_SMS only for the default SMS/assistant handler.
 - Result: new chats in WhatsApp, Messages, Telegram and Signal open with the text ready and the user taps Send there; replies to a message notification are sent directly by Sidekick through the notification's reply action.
+- Update 25 Nov (texts and calls as the default assistant): Play's SMS/Call Log policy lists "Default Assistant handler" as a permitted use (READ_SMS, SEND_SMS, READ_CALL_LOG among others), so the one Play app now reads texts, sends approved texts directly and reads the call history, but only while Sidekick is the phone's default digital assistant: the role is checked before asking for a permission and natively before every use (Play: stop using them as soon as it isn't the default). Not the assistant: the fallback above, plus a one-time card with the Settings button. Needs the Permissions Declaration Form (docs/store/permissions-declaration.md; review up to several weeks).
+- Left out of texts and calls: RECEIVE_SMS (new texts already arrive through Notification access; one permission fewer to justify), MMS pictures, WRITE_SMS and deleting texts, WRITE_CALL_LOG, saving texts or calls into Sidekick's memory (read on request only), and texts in WhatsApp/Telegram/Signal (no API; notifications only).
 
 ## Hands-free and quality of life (25 Nov)
 
@@ -157,6 +159,57 @@ Read this before proposing any of these again. Each line says why.
 - Built: a location track (encrypted DB) while Listening / Live camera runs (native, journaled) or the app is open (every 5 min); places named by voice ("call this place the gym", "this is home"); where am I / where was I at 3 / where did I park / when was I last at X / how long at X / where have I been; enter/leave events for routines (`onPlaceChange`, `src/engine/location-track.ts`); weather from MET Norway (Online lookup only, position rounded to ~1 km). Settings → Privacy → Location (switch, places, delete history).
 - No ACCESS_BACKGROUND_LOCATION: Play requires a declaration and review for it, and Android 14+ blocks while-in-use location in services started from the background. Positions are kept only while the user-started service runs or the app is open; when Android restarts the service on its own (in the background) it restarts without location (and stops instead of crashing if Android refuses the start).
 - Parking: marked when a car kit's Bluetooth (by name, as hands-free mode) disconnects while Sidekick runs; otherwise guessed from the first slow fix after driving speed, which can be a few hundred metres off (updates are at most every 5 min / 100 m to save battery).
-- Town names stay offline (GeoNames, towns ≥ 15 000 people). Rejected: bundling cities500 (~200 000 places, ~10 MB more) for village names. Street names come from Android's Geocoder (Google, online) only when Online lookup is on.
+- Place names offline: GeoNames cities500 (every town and village ≥ 500 people, 226 551 places) packed to 5.2 MB (2.7 MB in the download), replacing the 1.4 MB towns ≥ 15 000 table. Android only for now (iOS gets no place name until the pack is bundled there). Street names come from Android's Geocoder (Google, online) only when Online lookup is on.
 - Rejected: Open-Meteo (free tier is non-commercial only). MET Norway needs an identifying User-Agent: "Sidekick/1.0 https://sidekick.sashy.ai" (no personal details).
-- Left out: named places in the Timeline (it shows the town); place-based reminders while the app is fully closed (needs background location); "frequent places" are only hinted ("you've been here on 5 days; name it"), never named automatically; Android 16 "home/work" from Google is not readable by apps.
+- Left out: named places in the Timeline (it shows the town); Android 16 "home/work" from Google is not readable by apps. Frequent places are now offered for naming once, while the user is there ("You're often here (near Banbury, evenings). Name it?" Home / Work / Other… / Not now; never asked again for that spot).
+- Place routines ("when I get home …") run only while Sidekick is open or listening (its foreground service reads the position). Left out with the app fully closed: it needs ACCESS_BACKGROUND_LOCATION, which Google Play allows only after a Permissions Declaration (core-feature justification, a prominent in-app disclosure, a demo video, review; often refused when the feature isn't the app's main purpose), and Android geofencing comes from Google Play services (closed source). Owner's call if wanted later.
+- Network work with the app closed: Android's WorkManager wakes Sidekick when the internet or Wi-Fi comes back (plus a 15-minute check), so waiting questions, emails, Tasks sync and backups, and "when I'm back online / on Wi-Fi / leave Wi-Fi" routines run then. "Go offline" / "leave Wi-Fi" with the app closed are noticed at the next 15-minute check at worst; Android may delay checks further in battery saver or Doze.
+
+## Languages: English app, other languages heard (25 Nov)
+
+- Owner decision: offer a language only when every feature works in it. Sidekick is English-only
+  for now: screens, commands, spoken confirmations, the system prompt, the wake word ("Hey
+  Sidekick") and the speech model (Parakeet v2) are English. The phone's voice is set to English
+  so a phone set to German doesn't read English answers in a German voice.
+- Built instead: **Understand other languages around me** (Settings → Assistant, off by default).
+  Listen switches to Parakeet v3 (25 European languages, CC BY 4.0, 0.5 GB on Wi-Fi; v2 deleted).
+  Lines heard in another language get an English translation from Gemma in the background
+  (4 lines per pass, only when the model is loaded, stopped by questions), stored after the
+  original ("→ English: …") so search, recall, notes, recaps and answers ("what did the waiter
+  say?") use the English. Questions to Sidekick stay English.
+- Parakeet reports no language, so the line's language is guessed from the script (Cyrillic,
+  Greek) and common short words / letters; unsure or short lines are left untranslated.
+- Removed: the earlier Language picker, the automatic switch to v3 on non-English phones, answers
+  in the phone's language, and the "translate a command into English for the rules" pass (half
+  the app stayed English: screens, confirmations, 13 of 24 languages without command words).
+
+## Later: full localisation
+
+- Possible now: the 25 Parakeet v3 languages: English, Bulgarian, Croatian, Czech, Danish, Dutch,
+  Estonian, Finnish, French, German, Greek, Hungarian, Italian, Latvian, Lithuanian, Maltese,
+  Polish, Portuguese, Romanian, Russian, Slovak, Slovenian, Spanish, Swedish, Ukrainian.
+- Each language needs: every screen string; the command rules (reminders, timers, time ranges,
+  sums, phone controls, routines, read-back yes/no, consent phrases, name cues); spoken
+  confirmations; the system prompt; a wake phrase (or keep "Hey Sidekick"); the phone's voice in
+  that language (Pocket TTS is English only); the store listing and privacy policy; tests.
+- Design so new features get every language automatically: all user-facing strings in one
+  catalog (keys, English source); a test that fails if any key lacks a translation in any
+  enabled language; translations generated at development time (not on the phone) and reviewed;
+  command rules data-driven per language (word lists), with the model as fallback; a language is
+  switched on only when its whole test set passes. Cost: every new feature adds strings and rules
+  in 25 languages, which is why it waits.
+- Speech model trade-off: v3 is worse in English (2.9% → 3.8% words wrong in quiet, 7.2% → 17.9%
+  at 5 dB noise, laptop, 73 LibriSpeech clips), so English users keep v2. Auto-detecting the
+  spoken language (one model for everyone) needs v3 or a language-ID model in front of v2.
+- No commercial-safe on-device speech model checked for: Chinese, Japanese, Korean, Arabic, Hindi
+  and other Indian languages, Turkish, Norwegian, Hebrew, Thai, Vietnamese, Indonesian.
+
+## Break-it test leftovers (25 Nov, Pixel 5; details in docs/LIMITS.md)
+
+- Test sound played into push-to-talk can teach the owner voice the wrong person; a real owner
+  talking to their own phone doesn't hit this. Left.
+- Killing the app mid-answer loses that question. Rare; left.
+- A second send while answering isn't queued (text stays in the box). Left.
+- "Search the web in your browser" shows under every offline answer. Taste; left for the owner.
+- Reading incoming notifications and unplugging the USB camera mid-use were not tested on the
+  owner's phone (privacy / needs a person there).

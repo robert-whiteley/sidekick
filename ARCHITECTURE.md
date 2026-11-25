@@ -11,7 +11,7 @@
 | Voice out          | System TTS (`expo-speech`)                                                                                                         | Zero download, fast on old phones. Later: Kitten / Piper via sherpa-onnx                          |
 | Memory             | `@op-engineering/op-sqlite` with SQLCipher + sqlite-vec; EmbeddingGemma 2 text+vision embeddings                                   | Encrypted, fast, vector search in the same DB. USearch (HNSW) later for millions of vectors       |
 | Camera             | `expo-camera`                                                                                                                      | Photo capture is all the MVP needs; vision-camera later if live frame processing is added         |
-| Places             | GeoNames cities15000 (offline) + learned places (home/work from dwell time)                                                        | Place names with no network                                                                       |
+| Places             | GeoNames cities500 (offline, towns and villages) + learned places (home/work from dwell time)                                      | Place names with no network                                                                       |
 
 ## Memory model
 

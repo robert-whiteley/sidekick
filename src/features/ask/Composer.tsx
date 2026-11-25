@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react';
 import { Pressable, StyleSheet, TextInput, View } from 'react-native';
 
 import { Icon } from './Icon';
@@ -42,6 +43,21 @@ export function Composer({
   large?: boolean;
 }) {
   const hasText = value.trim().length > 0;
+  // Stop turns back into the mic where the finger is: a tap meant for Stop just as the answer
+  // ends must not start listening.
+  const stoppedAt = useRef(0);
+  const ignored = useRef(false);
+  useEffect(() => {
+    if (!answering) stoppedAt.current = Date.now();
+  }, [answering]);
+  const micIn = () => {
+    ignored.current = micGuard(stoppedAt.current, Date.now());
+    if (!ignored.current) onMicIn();
+  };
+  const micOut = () => {
+    if (!ignored.current) onMicOut();
+    ignored.current = false;
+  };
   const round = [styles.round, large && styles.roundLarge];
   const action = [styles.action, large && styles.actionLarge];
   const icon = large ? 32 : 22;
@@ -95,8 +111,8 @@ export function Composer({
           </Pressable>
         ) : (
           <Pressable
-            onPressIn={onMicIn}
-            onPressOut={onMicOut}
+            onPressIn={micIn}
+            onPressOut={micOut}
             style={[action, { backgroundColor: micOn ? theme.danger : 'transparent' }]}
             accessibilityRole="button"
             accessibilityLabel={micOn ? 'Listening, tap when done' : 'Talk'}
@@ -109,6 +125,9 @@ export function Composer({
     </View>
   );
 }
+
+/** True when a mic press comes so soon after Stop disappeared that it was meant for Stop. */
+export const micGuard = (stoppedAt: number, now: number) => now - stoppedAt < 800;
 
 const styles = StyleSheet.create({
   row: {

@@ -1,33 +1,19 @@
 import { PermissionsAndroid, Platform } from 'react-native';
 
 import SidekickNative from '../../modules/sidekick-native';
-import {
-  type CityTable,
-  DEFAULT_PAUSE_RADIUS_M,
-  type LatLon,
-  nearestCity,
-  type PausePlace,
-  regionAt,
-} from './place-logic';
+import { geoPack } from './geo';
+import { packNearest, packRegion } from './geo-pack';
+import { DEFAULT_PAUSE_RADIUS_M, type LatLon, type PausePlace } from './place-logic';
 import { setPlaceRegion } from './region';
 import { getSettings, updateSettings } from './settings';
 
 /** Where something happened: coordinates plus an offline place name ("Leeds, GB"). */
 export type Here = LatLon & { place: string | null };
 
-let table: CityTable | null = null;
-function cities(): CityTable {
-  // ~1 MB of GeoNames data, parsed on first use only.
-  table ??= require('../../assets/geonames/cities15000.json') as CityTable;
-  return table;
-}
-
+/** The nearest town or village ("Bloxham, GB"), offline; null if none within 30 km or no data. */
 export function placeName(p: LatLon): string | null {
-  try {
-    return nearestCity(cities(), p);
-  } catch {
-    return null;
-  }
+  const g = geoPack();
+  return g ? packNearest(g, p) : null;
 }
 
 /** The phone's recent location (≤ 2 h old) with its place name, or null. Never waits. */
@@ -45,8 +31,9 @@ export function here(): Here | null {
 export function currentRegion(): { country: string | null; admin1: string | null } {
   try {
     const l = SidekickNative.lastLocation();
-    if (!l) return { country: null, admin1: null };
-    return regionAt(cities(), l);
+    const g = geoPack();
+    if (!l || !g) return { country: null, admin1: null };
+    return packRegion(g, l);
   } catch {
     return { country: null, admin1: null };
   }

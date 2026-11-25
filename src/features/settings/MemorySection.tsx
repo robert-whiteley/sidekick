@@ -4,7 +4,9 @@ import type { Moment } from '@/memory/store';
 import { deleteMoment } from '@/memory/store';
 import { Button, formatTime, Section, styles } from './ui';
 
-export { who } from '@/features/memory/timeline-logic';
+import { who } from '@/features/memory/timeline-logic';
+
+export { who };
 
 export function MemorySection(props: {
   moments: Moment[];

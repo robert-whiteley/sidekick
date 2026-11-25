@@ -89,6 +89,14 @@ type IntegrationsNative = {
   takeShared?(): string | null;
   addListener?(event: 'onShared', listener: () => void): { remove(): void };
   isLocked?(): boolean;
+  // Texts and call history (Telephony.kt): only while Sidekick is the default assistant.
+  /** JSON {assistant, readSms, sendSms, callLog}. */
+  telephonyStatus?(): string;
+  /** JSON [{address, name, body, at, sent, read}], newest first; [address]: comma-separated numbers or ''. */
+  readSms?(fromMs: number, toMs: number, max: number, address: string): string;
+  sendSms?(number: string, text: string): boolean;
+  /** JSON [{number, name, type, at, seconds}], newest first. */
+  callLog?(fromMs: number, toMs: number, max: number): string;
   requestUnlock?(): Promise<boolean>;
 };
 

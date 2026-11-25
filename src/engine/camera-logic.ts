@@ -6,13 +6,30 @@ import type { Notice } from './notices';
 const HEIGHT = { low: 480, medium: 720, high: 1080 } as const;
 
 /** The live camera's settings from the values in force (Recommended unless changed). */
-export function cameraConfigFor(t: Pick<Tuning, 'fps' | 'imageDetail' | 'videoKeepHours'>) {
+export function cameraConfigFor(
+  t: Pick<Tuning, 'fps' | 'imageDetail' | 'videoKeepHours'>,
+  whileLocked = true,
+) {
   return {
     source: 'auto',
     sampleFps: t.fps,
     videoHeight: HEIGHT[t.imageDetail],
     keepVideoHours: t.videoKeepHours,
+    whileLocked,
   } satisfies CameraConfig;
+}
+
+/**
+ * Whether a start really took: the service can refuse the camera when asked from the background
+ * (Android 14+, e.g. by voice with the phone locked), and then shows "Tap to turn it back on".
+ */
+export function cameraStartTook(
+  accepted: boolean,
+  runningNow: boolean,
+  appActive: boolean,
+): boolean {
+  if (!accepted) return false;
+  return runningNow || appActive;
 }
 
 const rate = (fps: number) =>

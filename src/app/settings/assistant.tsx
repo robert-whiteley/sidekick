@@ -2,23 +2,14 @@ import { EntryPointsSection } from '@/features/settings/EntryPointsSection';
 import { FollowupsSection } from '@/features/settings/FollowupsSection';
 import { NotesRecapSection } from '@/features/settings/NotesRecapSection';
 import { ListeningSection } from '@/features/settings/ListeningSection';
-import { phoneLocale } from '@/engine/language';
-import { languageName, languagePlan } from '@/engine/language-logic';
+import { applySpeechModel } from '@/engine/language';
 import { Page } from '@/features/settings/Page';
-import { ChoiceRow, NavRow, Section } from '@/features/settings/ui';
+import { ChoiceRow, NavRow, Row, Section } from '@/features/settings/ui';
 import { useSettings } from '@/features/settings/useSettings';
 import type { HandsFreeMode } from '@/engine/hands-free-logic';
 import { formatMinutes } from '@/engine/place-logic';
 import type { ReadBackMode } from '@/engine/readback-logic';
 import type { SmartDefault } from '@/engine/settings';
-import { NOTE_TEMPLATES, type NoteTemplateId } from '@/memory/note-templates';
-
-/** "Automatic (German)" / "Deutsch". */
-function languageHint(choice: string): string {
-  const plan = languagePlan(choice ?? 'auto', phoneLocale());
-  const name = languageName(plan.answer);
-  return choice === 'auto' || !choice ? `Automatic (${name})` : name;
-}
 
 const MODEL_TIER_LABEL = { small: 'Small and fast', standard: 'Standard', large: 'Large' };
 
@@ -26,8 +17,22 @@ export default function AssistantSettings() {
   const { s, rec, set } = useSettings();
   return (
     <Page title="Assistant">
-      <Section title="Language">
-        <NavRow label="Language" hint={languageHint(s.speechLanguage)} href="/settings/language" />
+      <Section title="Languages">
+        <Row
+          label="Understand other languages around me"
+          hint={
+            'Sidekick speaks English. With this on, it also hears 24 other European languages ' +
+            'around you (French, German, Spanish, Polish, Ukrainian…) and shows an English ' +
+            'translation under each line, so you can ask "what did the waiter say?". English ' +
+            'is understood a little less well in quiet (2.9% → 3.8% words wrong) and much less ' +
+            'well in noise (7.2% → 17.9%). Needs a 0.5 GB download on Wi-Fi.'
+          }
+          value={s.understandOtherLanguages}
+          onChange={(v) => {
+            set({ understandOtherLanguages: v });
+            applySpeechModel();
+          }}
+        />
       </Section>
       <Section title="Voice">
         <ChoiceRow
@@ -129,21 +134,6 @@ export default function AssistantSettings() {
       <ListeningSection part="assistant" />
       <FollowupsSection part="settings" />
       <NotesRecapSection />
-      <Section title="Note style">
-        <ChoiceRow<NoteTemplateId | 'general'>
-          label="Notes shaped for"
-          hint={
-            'Extra sections for one kind of conversation, e.g. a doctor\'s appointment: symptoms, medicines, next steps. Or say it at the time: "this is a meeting", "this is a lecture".'
-          }
-          options={[
-            { value: 'general', label: 'Any conversation' },
-            ...Object.values(NOTE_TEMPLATES).map((t) => ({ value: t.id, label: t.label })),
-          ]}
-          value={s.defaultNoteTemplate}
-          recommended="general"
-          onChange={(v) => set({ defaultNoteTemplate: v === 'general' ? null : v })}
-        />
-      </Section>
       <EntryPointsSection />
     </Page>
   );

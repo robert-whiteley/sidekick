@@ -3,7 +3,7 @@ import { PermissionsAndroid, Platform } from 'react-native';
 
 import SidekickNative from '../../modules/sidekick-native';
 import { downloadFile, isDownloaded, wifiOnlyDownloads } from './downloads';
-import { applyLanguage, speechModelsReady } from './language';
+import { applySpeechModel, speechModelsReady } from './language';
 import { MODEL_FILES, OPTIONAL_SPEECH_FILES } from './models';
 import { modelsDir } from './paths';
 import { askLocationPermission, pushPauseRules } from './places';
@@ -49,8 +49,8 @@ export function wakeLine(phrase: string): { line: string; phrase: string } {
 export function configureListening() {
   const s = getSettings();
   const { line, phrase } = wakeLine(s.wakePhrase);
-  // Language first: it sets the prompt's answer language and the speech-to-text build.
-  applyLanguage();
+  // The speech-to-text build first (English, or 25 languages when that setting is on).
+  applySpeechModel();
   // The background service answers with the same instructions as the app.
   SidekickNative.kvSet('assistant.system', SYSTEM_PROMPT);
   const plan = listenPlan(s);

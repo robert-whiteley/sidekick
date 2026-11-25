@@ -97,7 +97,14 @@ export const INTEGRATIONS: Integration[] = [
     id: 'calls',
     name: 'Phone calls',
     description: 'Call someone after you tap Call.',
-    switches: [{ id: 'direct', label: 'Call straight away (no dialler step)', default: true }],
+    switches: [
+      { id: 'direct', label: 'Call straight away (no dialler step)', default: true },
+      {
+        id: 'log',
+        label: 'Who called and missed calls (when Sidekick is your assistant)',
+        default: true,
+      },
+    ],
     androidOnly: true,
     needs: 'Phone permission for straight-away calls (asked the first time)',
   },
@@ -136,6 +143,11 @@ export const INTEGRATIONS: Integration[] = [
       { id: 'read', label: 'Read new messages when asked', default: true },
       { id: 'reply', label: 'Reply from Sidekick (through the notification)', default: true },
       { id: 'compose', label: 'Write new messages (opens the app ready to send)', default: true },
+      {
+        id: 'sms',
+        label: 'Read texts and send them directly (when Sidekick is your assistant)',
+        default: true,
+      },
     ],
     androidOnly: true,
     needs: 'Notification access for reading and replying',

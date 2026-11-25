@@ -206,6 +206,8 @@ export type CameraConfig = {
   ocrRecPath?: string | null;
   ocrDictPath?: string | null;
   ocrEveryMs?: number;
+  /** Keep filming with the screen off / locked (default true). */
+  whileLocked?: boolean;
 };
 
 export type CameraStatus = {
@@ -223,10 +225,14 @@ export type CameraStatus = {
   framesKept: number;
   pendingEmbeds: number;
   startedAt: number | null;
+  /** Paused from the notification or by voice. */
+  userPaused: boolean;
+  /** Paused because the phone is locked and filming while locked is off. */
+  lockPaused: boolean;
 };
 
 export type CameraEvent =
-  | { kind: 'status'; running: boolean }
+  | { kind: 'status'; running: boolean; userPaused?: boolean }
   | {
       kind: 'throttle';
       from: number;

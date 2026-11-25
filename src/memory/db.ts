@@ -195,6 +195,9 @@ export const MIGRATIONS: { table: string; column: string; ddl: string; after?: s
   { table: 'followups', column: 'repeat', ddl: 'ALTER TABLE followups ADD COLUMN repeat TEXT' },
   // A conversation note (kind 'conversation_note', at = its end): when the conversation began.
   { table: 'moments', column: 'from_at', ddl: 'ALTER TABLE moments ADD COLUMN from_at INTEGER' },
+  // "Understand other languages": the language a heard line is in once checked ('en' = English or
+  // unsure, else the ISO code of a line that now carries its English translation). Null = unchecked.
+  { table: 'moments', column: 'lang', ddl: 'ALTER TABLE moments ADD COLUMN lang TEXT' },
 ];
 
 function migrate(d: DB) {

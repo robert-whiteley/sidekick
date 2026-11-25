@@ -4,43 +4,20 @@ import { Platform } from 'react-native';
 import SidekickNative from '../../modules/sidekick-native';
 import { downloadFile, isDownloaded, wifiOnlyDownloads } from './downloads';
 import { setRequiredSpeechFiles } from './llm-candidates';
-import {
-  baseLanguage,
-  type LanguagePlan,
-  languageName,
-  languagePlan,
-  type SpeechModelId,
-  voiceLocale,
-} from './language-logic';
+import { type SpeechModelId, speechModelFor } from './language-logic';
 import { MODEL_FILES, type ModelFile, SPEECH_FILES, speechToTextFile } from './models';
 import { notices } from './notices';
 import { modelsDir } from './paths';
-import { setAnswerLanguage } from './prompts';
 import { getSettings } from './settings';
 
 /**
- * Applies the language setting: the model's answer language, the voice's language, and the
- * speech-to-text build (downloading Parakeet v3 on Wi-Fi when another language needs it, then
- * switching and deleting the unused build). See language-logic.ts for the rules.
+ * The speech-to-text build: Parakeet v2 (English) normally; v3 (25 European languages) while
+ * "Understand other languages around me" is on — downloaded on Wi-Fi, switched to once it is in,
+ * and the unused build deleted. Sidekick itself stays English (language-logic.ts).
  */
 
-/** The phone's language as a BCP-47 tag ("de-AT"); "en" if unknown. */
-export function phoneLocale(): string {
-  try {
-    const native = SidekickNative.phoneLocale?.();
-    if (native) return native;
-  } catch {
-    // Older native build.
-  }
-  try {
-    return Intl.DateTimeFormat().resolvedOptions().locale || 'en';
-  } catch {
-    return 'en';
-  }
-}
-
-export function currentLanguagePlan(): LanguagePlan {
-  return languagePlan(getSettings().speechLanguage ?? 'auto', phoneLocale());
+export function wantedSpeechModel(): SpeechModelId {
+  return speechModelFor(getSettings().understandOtherLanguages ?? false);
 }
 
 const dirOf = (f: ModelFile) => f.unpackedCheck!.split('/')[0];
@@ -51,12 +28,12 @@ function downloadedStt(): SpeechModelId[] {
 }
 
 /**
- * The required speech files: only one speech-to-text build. First run fetches the one this
- * language needs; after a language change the build already on the phone counts until the new
- * one has arrived in the background (so the app never goes back to the download screen).
+ * The required speech files: only one speech-to-text build. First run fetches v2; after the
+ * setting changes, the build already on the phone counts until the other one has arrived in the
+ * background (so the app never goes back to the download screen).
  */
 export function requiredSpeechFiles(): ModelFile[] {
-  const want = currentLanguagePlan().model;
+  const want = wantedSpeechModel();
   const have = downloadedStt();
   const stt = speechToTextFile(have.includes(want) || !have.length ? want : have[0]);
   return SPEECH_FILES.map((f) => (f === MODEL_FILES.speechToText ? stt : f));
@@ -72,20 +49,21 @@ export function speechModelsReady(): boolean {
 
 let applied: string | null = null;
 let fetching: Promise<void> | null = null;
+let voiceSet = false;
 
-/** Call at start and whenever the language setting changes. Safe to call often. */
-export function applyLanguage() {
-  const plan = currentLanguagePlan();
-  setAnswerLanguage(plan.answer);
+/** Call at start and whenever the setting changes. Safe to call often. */
+export function applySpeechModel() {
   if (Platform.OS !== 'android') return;
-  const locale = phoneLocale();
-  const key = `${plan.answer}|${plan.model}|${locale}`;
-  if (key === applied) return;
-  applied = key;
-  // "" keeps the phone's own voice language when it already is that language.
-  const tag = baseLanguage(locale) === plan.answer ? '' : voiceLocale(plan.answer, locale);
-  SidekickNative.voiceSetLanguage?.(tag);
-  void switchSpeechModel(plan.model);
+  if (!voiceSet) {
+    voiceSet = true;
+    // Answers are English: the phone's voice speaks English even on a phone set to German
+    // (also clears a language saved by an earlier build).
+    SidekickNative.voiceSetLanguage?.('en');
+  }
+  const model = wantedSpeechModel();
+  if (model === applied) return;
+  applied = model;
+  void switchSpeechModel(model);
 }
 
 async function switchSpeechModel(model: SpeechModelId) {
@@ -98,11 +76,15 @@ async function switchSpeechModel(model: SpeechModelId) {
         fetching = null;
       });
     await fetching;
-    if (!isDownloaded(file) || currentLanguagePlan().model !== model) return;
+    if (!isDownloaded(file)) {
+      applied = null; // try again on the next call (e.g. back on Wi-Fi)
+      return;
+    }
+    if (wantedSpeechModel() !== model) return;
   }
   const ok = await SidekickNative.speechSetAsrModel?.(dirOf(file)).catch(() => false);
   if (!ok) return;
-  // Free ~0.6 GB: the other build is no longer used.
+  // Free ~0.5 GB: the other build is no longer used.
   const other = speechToTextFile(model === 'parakeet-v2' ? 'parakeet-v3' : 'parakeet-v2');
   try {
     const d = new Directory(`file://${modelsDir()}/${dirOf(other)}`);
@@ -110,11 +92,13 @@ async function switchSpeechModel(model: SpeechModelId) {
   } catch (e) {
     console.log(`[language] couldn't delete the unused speech model: ${String(e)}`);
   }
-  if (model === 'parakeet-v3')
-    notices.post({
-      key: 'language.speech',
-      kind: 'info',
-      text: `Sidekick now understands ${languageName(currentLanguagePlan().language)} (speech model for 25 languages)`,
-      href: '/settings/assistant',
-    });
+  notices.post({
+    key: 'language.speech',
+    kind: 'info',
+    text:
+      model === 'parakeet-v3'
+        ? 'Sidekick now understands 25 languages around you and translates them into English'
+        : 'Sidekick listens in English only again',
+    href: '/settings/assistant',
+  });
 }

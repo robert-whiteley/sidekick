@@ -86,7 +86,12 @@
       "./plugins/with-usb-camera",
       "./plugins/with-share-target",
       "expo-video",
-      ["expo-audio", { "enableBackgroundPlayback": false }]
+      [
+        "expo-audio",
+        {
+          "enableBackgroundPlayback": false
+        }
+      ]
     ],
     "scheme": "sidekick",
     "experiments": {
@@ -108,6 +113,13 @@
         "projectId": "9e5e57c2-26e2-4ca4-9191-3606924369f5"
       }
     },
-    "owner": "rcwhiteley1"
+    "owner": "rcwhiteley1",
+    "runtimeVersion": {
+      "policy": "fingerprint"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/9e5e57c2-26e2-4ca4-9191-3606924369f5",
+      "checkAutomatically": "NEVER"
+    }
   }
 }

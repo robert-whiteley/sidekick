@@ -2,7 +2,6 @@ import SidekickNative from '../../modules/sidekick-native';
 import { askLlmInBackground, cancelLlm } from './llm';
 import { notices } from './notices';
 import { getSettings } from './settings';
-import { templateFor } from '@/memory/note-templates';
 import {
   actionFollowups,
   type Conversation,
@@ -13,6 +12,7 @@ import {
   mergeNotes,
   notePassDue,
   notePrompt,
+  noticeWanted,
   noteText,
   parseNote,
   splitConversations,
@@ -34,17 +34,11 @@ let cancelled = false;
 
 /** One model pass over [c]: writes or rewrites its note. Null if cancelled (try again later). */
 async function notePass(c: Conversation, live: LiveNote, ended: boolean, now: number) {
-  const st = getSettings();
-  const template = templateFor(c, st.noteTemplateChoice, st.defaultNoteTemplate);
-  const { text } = await askLlmInBackground(
-    notePrompt(c, live.note, live.handled, template),
-    null,
-    {
-      maxTokens: 240,
-    },
-  );
+  const { text } = await askLlmInBackground(notePrompt(c, live.note, live.handled), null, {
+    maxTokens: 240,
+  });
   if (cancelled) return null;
-  const parsed = parseNote(text, c, template);
+  const parsed = parseNote(text, c);
   const next: LiveNote = { ...live, handled: c.lines.length, passAt: now };
   if (!parsed) return next; // nothing useful yet: the next pass reads the whole conversation again
   const note = mergeNotes(live.note, parsed);
@@ -54,14 +48,16 @@ async function notePass(c: Conversation, live: LiveNote, ended: boolean, now: nu
     return { ...next, deleted: true }; // deleted on its page while it went on
   await syncNoteFollowups(next.noteId, actionFollowups(note.actions, c.to, next.noteId), note.done);
   next.postedAt ??= now;
-  // One faint line per conversation, updated in place (same key, same position).
-  notices.post({
-    key: `conversation-note-${next.noteId}`,
-    kind: 'info',
-    text: `${ended ? 'Notes from' : 'Live notes:'} your chat with ${joinNames(note.people)}`,
-    href: `/note/${next.noteId}`,
-    at: next.postedAt,
-  });
+  // One faint line per conversation, updated in place (same key, same position); none for
+  // conversations long over (first run after an update reads the day's backlog).
+  if (noticeWanted(c, now))
+    notices.post({
+      key: `conversation-note-${next.noteId}`,
+      kind: 'info',
+      text: `${ended ? 'Notes from' : 'Live notes:'} your chat with ${joinNames(note.people)}`,
+      href: `/note/${next.noteId}`,
+      at: next.postedAt,
+    });
   return next;
 }
 
@@ -99,7 +95,7 @@ export function updateConversationNotes(now = Date.now()): Promise<void> {
       }
       const finished = !withSomeone(c) || state.handled >= c.lines.length;
       if (!ended || !finished) return;
-      if (state.noteId != null && state.note && !state.deleted) {
+      if (state.noteId != null && state.note && !state.deleted && noticeWanted(c, now)) {
         // The line says "Notes from…" once the conversation is over.
         notices.post({
           key: `conversation-note-${state.noteId}`,

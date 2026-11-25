@@ -12,14 +12,16 @@ import { AskScreen } from '@/features/ask/AskScreen';
 import { startIntegrations } from '@/engine/actions';
 import { onLlmLoaded } from '@/engine/llm';
 import { noteLlmLoaded, startModelUpdates } from '@/engine/model-updates';
+import { startQuickFixes } from '@/engine/quick-fixes';
 import { startWave2 } from '@/engine/wave2-start';
 import { startStorageMonitor } from '@/engine/storage-monitor';
 import { FirstRun } from '@/features/onboarding/FirstRun';
 import { checkWhatsNew } from '@/content/whats-new-notice';
 import { startStepSampler } from '@/integrations/extras';
+import { startOnlineQueue } from '@/engine/online-queue';
 import { startRoutines } from '@/engine/routines';
 import { startLocationMemory } from '@/engine/location';
-import { applyLanguage } from '@/engine/language';
+import { applySpeechModel } from '@/engine/language';
 
 function modelsReady() {
   const ready = allRequiredFiles(SidekickNative.getDeviceInfo().soc).every(isDownloaded);
@@ -40,14 +42,16 @@ export default function HomeScreen() {
   useEffect(() => {
     if (!ready) return;
     checkWhatsNew();
-    applyLanguage();
+    applySpeechModel();
     const stops = [
       onLlmLoaded(noteLlmLoaded),
       startModelUpdates(),
+      startQuickFixes(),
       startStorageMonitor(),
       startIntegrations(),
       startStepSampler(),
       startRoutines(),
+      startOnlineQueue(),
       startLocationMemory(),
       startWave2(),
     ];

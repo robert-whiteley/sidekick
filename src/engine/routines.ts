@@ -47,7 +47,8 @@ export type RoutinePayload =
     }
   | { type: 'charging' | 'unlock' }
   | { type: 'device'; name?: string; bluetooth?: boolean }
-  | { type: 'place'; place: string; edge: 'enter' | 'leave' };
+  | { type: 'place'; place: string; edge: 'enter' | 'leave' }
+  | { type: 'network'; online: boolean; wifi: boolean; at?: number };
 
 export type RoutineRun = {
   routine: Routine;
@@ -183,6 +184,16 @@ async function dispatch(p: RoutinePayload, now: number) {
     }
     case 'place':
       return onPlace(p.edge, p.place, now);
+    case 'network': {
+      // Back online: what waited for the internet goes first (online-queue.ts), then routines.
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const { handleNetwork } = require('./online-queue') as typeof import('./online-queue');
+      const edges = await handleNetwork({ online: p.online, wifi: p.wifi }, now);
+      for (const r of list)
+        if (r.when.type === 'network' && edges.includes(r.when.edge) && triggerAllowed(r, now))
+          await runOne(r, { type: 'network', edge: r.when.edge }, null, now);
+      return;
+    }
   }
 }
 

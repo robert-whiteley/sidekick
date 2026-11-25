@@ -2,7 +2,7 @@
 
 What each feature does, where it stops, and what was measured on the **Pixel 5** (Snapdragon
 765G, 8 GB RAM of which Android reports 7.3 GB, CPU only, Android 14) with the USB Arducam
-plugged in. Build sk44 (25 Nov 2026). "Other phones" says what is expected to differ.
+plugged in. Builds sk44–sk45 (25 Nov 2026). "Other phones" says what is expected to differ.
 Bugs found are listed per feature: fixed (with the fix) or left (with why; also in ADR 0006).
 
 ## Test phone state
@@ -50,4 +50,85 @@ Bugs:
   short of memory; otherwise one unloads first and live-camera frames wait. The Pixel 5 keeps
   both. 4 GB phones (iPhone 13 mini class) never hold both.
 
-## Battery
+## Speed (Pixel 5, CPU only)
+
+| Step                     | Time                                                                   |
+| ------------------------ | ---------------------------------------------------------------------- |
+| Load chat model          | 4.6–6.3 s                                                              |
+| First word, new question | 1.3–1.4 s (0.15 s if the start is cached)                              |
+| 3-sentence answer        | 11–12.5 s (about 5–6 words/s)                                          |
+| Question about a photo   | 14–15 s, first word ~2.9 s                                             |
+| Photo at half detail     | 11 s, but small text is cut short ("PLATFORM 4") — kept at full detail |
+| Speech to text           | 7.4 s of speech in 1.4 s                                               |
+| Voice check (who spoke)  | 0.45 s                                                                 |
+| Load memory search model | 1.6 s, then 0.23 s per item                                            |
+
+- First question after installing an update: ~60 s (model cold, plus notes for old chats being
+  written in the background). After that a typical answer shows first words in ~2 s, done ~14 s.
+- Faster guessing ("speculative decoding") fails with photos on this model; left out (ADR 0006).
+
+## Battery and heat
+
+- Measured off the charger, screen on.
+- Speed tests back to back: ~7% per 5 min (about 85–95% an hour).
+- Live camera + Listen, idle chat: ~36% an hour.
+- 94% → 25% in ~80 min of mixed heavy testing.
+- Phone stayed 27–33 °C; Android never reported heat throttling.
+- Other phones: newer chips with GPU/NPU support use far less per answer.
+
+## Storage
+
+- App size: 4.2 GB (models 4.0 GB).
+- Live camera + Listen add ~330 MB an hour before clean-up.
+- Video keeps 2 hours by default on this phone.
+- **Fixed: Storage screen disagreed with Advanced.** It said "Recommended (1 days)" and 12 GB
+  while Advanced said 2 hours and 11 GB; both now read one source of truth.
+- **Fixed: "11 (Recommended)" had no unit** when the recommended reserve isn't in the list;
+  it now reads "11 GB (Recommended)".
+
+## Chat
+
+- Stop works mid-answer.
+  - **Fixed:** tapping Stop just as the answer ended hit the mic button underneath and started
+    listening; the mic now ignores taps for 0.8 s after an answer ends.
+- Sending again while it is answering: the new text stays in the box (joined to the old text with
+  no space). Not queued; left (ADR 0006).
+- App in the background mid-answer: the answer finishes. App killed mid-answer: the question is
+  lost; the app and Listen recover. Left (ADR 0006).
+- Long input (~900 characters) works.
+- Rotation: not applicable (portrait only).
+- **Fixed: refused to write stories** ("I do not have a story about a dragon"). The instructions
+  now let it write longer things when asked. Not yet re-checked on the phone.
+- "Search the web in your browser" shows under every offline answer, even trivial ones. Taste;
+  left (ADR 0006).
+- Statements are treated as questions: "My secret locker code is 4417." got "I do not have access
+  to your secret locker code…". Small model; left.
+
+## Off the record
+
+- Long-press Send. A banner shows "this chat won't be saved · Leave". After Leave, the off-record
+  question and answer are gone from the chat.
+
+## Timeline
+
+- **Fixed:** camera moments showed as blank rows with "Someone". They now show "Camera" and a
+  thumbnail.
+
+## Conversation notes
+
+- **Fixed:** after an update the app posted a "Notes from your chat with…" notice for every old
+  conversation at once. Notices now only go out for conversations from the last 30 minutes.
+
+## Entry points
+
+- "Digital assistant app settings" button opens Android's assistant settings (checked; the
+  owner's default assistant was not changed).
+- Quick Settings tile and home-screen widget: the "add" prompts appear. Not added on the test phone.
+
+## Not tested on the phone (and why)
+
+- Reading incoming notifications: needs notification access, which would expose the owner's real
+  messages.
+- Unplugging the USB camera mid-use: needs someone at the phone.
+- Sending, calls, real calendar/alarms/contacts: never done on the owner's phone; only the
+  "Ask me first" draft card is checked.

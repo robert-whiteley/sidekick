@@ -4,6 +4,7 @@
  * happens) the instruction is run like a question, so the result is dynamic. Pure logic: parsing,
  * next run times, due / late checks, limits, prompts. Tested in __tests__/routines-logic-test.ts.
  */
+import type { NetEdge } from './online-queue-logic';
 import { clockTime } from '@/integrations/parse';
 
 export type Schedule =
@@ -20,7 +21,8 @@ export type Trigger =
   | { type: 'car' }
   | { type: 'charging' }
   | { type: 'unlock' }
-  | { type: 'place'; place: string; edge: 'enter' | 'leave' };
+  | { type: 'place'; place: string; edge: 'enter' | 'leave' }
+  | { type: 'network'; edge: NetEdge };
 
 export type When = Schedule | Trigger;
 
@@ -193,7 +195,31 @@ function parseTrigger(t: string): ParseResult {
     return { ok: true, when: { type: 'event', minutesBefore }, action };
   }
   const s = m[1];
+  const WIFI = String.raw`(?:the\s+)?(?:wi-?fi|wireless)`;
   const rules: { re: RegExp; when: (r: RegExpExecArray) => Trigger }[] = [
+    {
+      // "I'm back online", "I get internet back", "the internet is back", "I get signal again"
+      re: /^(?:i(?:'m|\s+am)\s+(?:back\s+)?(?:online|connected(?:\s+to\s+the\s+internet)?)|i\s+(?:get|have)\s+(?:the\s+)?(?:internet|signal|reception|a\s+connection)(?:\s+(?:back|again))?|(?:the\s+)?(?:internet|connection|signal)\s+(?:is\s+|comes\s+)?back|i\s+(?:go|come)\s+(?:back\s+)?online)\b/i,
+      when: () => ({ type: 'network', edge: 'online' }),
+    },
+    {
+      re: /^(?:i(?:'m|\s+am)\s+offline|i\s+go\s+offline|i\s+lose\s+(?:the\s+)?(?:internet|signal|reception|connection)|(?:the\s+)?(?:internet|connection|signal)\s+(?:goes|drops|is\s+lost))\b/i,
+      when: () => ({ type: 'network', edge: 'offline' }),
+    },
+    {
+      re: new RegExp(
+        String.raw`^(?:i\s+(?:leave|lose|go\s+off|disconnect\s+from)\s+${WIFI}|i(?:'m|\s+am)\s+(?:off|no\s+longer\s+on)\s+${WIFI}|${WIFI}\s+(?:disconnects|drops|goes))\b`,
+        'i',
+      ),
+      when: () => ({ type: 'network', edge: 'wifi-leave' }),
+    },
+    {
+      re: new RegExp(
+        String.raw`^(?:i(?:'m|\s+am)\s+(?:back\s+)?on\s+${WIFI}|i\s+(?:get|go|come)\s+(?:back\s+)?on(?:to)?\s+${WIFI}|i\s+(?:connect|join)\s+(?:to\s+)?${WIFI}|${WIFI}\s+(?:connects|is\s+back))\b`,
+        'i',
+      ),
+      when: () => ({ type: 'network', edge: 'wifi' }),
+    },
     {
       // "Sam messages me", "Sam texts me on WhatsApp", "I get a message from Sam", "I get a WhatsApp"
       re: new RegExp(
@@ -429,6 +455,13 @@ export function describeWhen(w: When, now = new Date()): string {
       return 'First unlock of the day';
     case 'place':
       return `When you ${w.edge === 'enter' ? 'arrive at' : 'leave'} ${w.place}`;
+    case 'network':
+      return {
+        online: "When you're back online",
+        offline: 'When you go offline',
+        wifi: 'When you connect to Wi-Fi',
+        'wifi-leave': 'When you leave Wi-Fi',
+      }[w.edge];
   }
 }
 
@@ -461,6 +494,7 @@ export type TriggerContext =
   | { type: 'message'; who: string | null; app: string | null; text: string | null }
   | { type: 'event'; title: string; start: number }
   | { type: 'place'; place: string; edge: 'enter' | 'leave' }
+  | { type: 'network'; edge: NetEdge }
   | { type: 'headphones' | 'car' | 'charging' | 'unlock' | 'time' };
 
 /** The question run for this routine (plain instruction for times; context for triggers). */

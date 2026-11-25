@@ -51,6 +51,14 @@ export class LiveTranscript {
     this.listeners.forEach((l) => l(this.lines));
   }
 
+  /** Replaces a line's text (an English translation added under it). */
+  retext(at: number, text: string) {
+    const i = this.lines.findIndex((l) => l.at === at);
+    if (i < 0) return;
+    this.lines = this.lines.map((l, j) => (j === i ? { ...l, text } : l));
+    this.listeners.forEach((l) => l(this.lines));
+  }
+
   has(at: number): boolean {
     return this.lines.some((l) => l.at === at);
   }

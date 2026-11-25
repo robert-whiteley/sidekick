@@ -36,6 +36,7 @@ import java.util.concurrent.TimeUnit
 object LiveCapture {
   private const val TAG = "SidekickCapture"
   private const val MB = 1024L * 1024
+  private const val WAKE_MS = 10 * 60_000L
 
   /** Events for JS ("onCamera"): {kind: "status" | "throttle" | "storage" | "lost", ...}. */
   @Volatile var listener: ((Map<String, Any?>) -> Unit)? = null
@@ -55,6 +56,15 @@ object LiveCapture {
     private set
   /** JS holds background work while it answers (frames still get saved, just not embedded). */
   @Volatile var hold = false
+
+  /** Paused from the notification (or by voice): the camera is released until resumed. */
+  @Volatile var userPaused = false
+    private set
+  /** Screen off with [CaptureConfig.whileLocked] false: released until the phone is unlocked. */
+  @Volatile var lockPaused = false
+    private set
+  /** Keeps the CPU running with the screen off while filming (frames, encoder, USB transfers). */
+  private var wakeLock: PowerManager.WakeLock? = null
 
   private var app: Context? = null
   private var source: FrameSource? = null
@@ -128,7 +138,41 @@ object LiveCapture {
     monitor = work.scheduleWithFixedDelay({ safely { checkDevice() } }, 15, 15, TimeUnit.SECONDS)
     retention = work.scheduleWithFixedDelay({ safely { enforceRetention() } }, 5, 60, TimeUnit.SECONDS)
     scheduleEmbed(0)
+    acquireWake(c)
     emit(mapOf("kind" to "status", "running" to true))
+  }
+
+  /** Pause or resume from the notification / a voice command (the service keeps running). */
+  fun setUserPaused(p: Boolean) {
+    if (userPaused == p) return
+    userPaused = p
+    if (running) work.execute { restartSource() }
+    emit(mapOf("kind" to "status", "running" to running, "userPaused" to p))
+  }
+
+  /** Screen turned off ([off]) or the phone was unlocked: pauses only if filming while locked is off. */
+  fun onScreen(off: Boolean) {
+    val pause = off && !config.whileLocked
+    if (pause == lockPaused) return
+    lockPaused = pause
+    if (running) work.execute { restartSource() }
+  }
+
+  @Synchronized
+  private fun acquireWake(ctx: Context) {
+    if (wakeLock?.isHeld == true) return
+    val pm = ctx.getSystemService(PowerManager::class.java) ?: return
+    // Renewed by the 15 s device check while filming; the timeout is a safety net if stop is missed.
+    wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "sidekick:camera").apply {
+      setReferenceCounted(false)
+      acquire(WAKE_MS)
+    }
+  }
+
+  @Synchronized
+  private fun releaseWake() {
+    runCatching { wakeLock?.takeIf { it.isHeld }?.release() }
+    wakeLock = null
   }
 
   @Synchronized
@@ -142,6 +186,8 @@ object LiveCapture {
       stopSource()
       activeSource = null
     }
+    releaseWake()
+    lockPaused = false
     emit(mapOf("kind" to "status", "running" to false))
   }
 
@@ -159,6 +205,8 @@ object LiveCapture {
       "videoBlockedForSpace" to videoBlockedForSpace,
       "framesSeen" to framesSeen,
       "framesKept" to framesKept,
+      "userPaused" to userPaused,
+      "lockPaused" to lockPaused,
       "pendingEmbeds" to (app?.let { pendingDir(it).list()?.size } ?: 0),
       "startedAt" to if (running) startedAt else null,
     )
@@ -172,7 +220,7 @@ object LiveCapture {
     stopSource()
     if (!running) return
     val r = rates ?: ThrottlePolicy.rates(config.sampleFps, config.videoFps, config.recordVideo, DeviceState()).also { rates = it }
-    if (r.paused) return
+    if (r.paused || !CaptureLogicLock.shouldFilm(userPaused, lockPaused)) return
     val cfg = config
     val usb = if (cfg.source != "phone") runCatching { usbSourceFactory(ctx, cfg, r) }.getOrNull() else null
     val src = usb ?: PhoneCameraSource(ctx, cfg, r)
@@ -324,6 +372,7 @@ object LiveCapture {
   private fun checkDevice() {
     val ctx = app ?: return
     if (!running) return
+    wakeLock?.let { if (it.isHeld) it.acquire(WAKE_MS) }
     val s = deviceState(ctx)
     val cfg = config
     val wanted = ThrottlePolicy.rates(cfg.sampleFps, cfg.videoFps, cfg.recordVideo, s)

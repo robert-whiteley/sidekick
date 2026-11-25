@@ -13,9 +13,16 @@
   <!-- Data sources (each off until turned on in Settings): read-only contacts and calendar. -->
   <uses-permission android:name="android.permission.READ_CONTACTS" />
   <uses-permission android:name="android.permission.READ_CALENDAR" />
+  <!-- Texts and call history: Play allows these only for the default assistant (Sidekick checks
+       the role before asking and before every use; docs/store/permissions-declaration.md). -->
+  <uses-permission android:name="android.permission.READ_SMS" />
+  <uses-permission android:name="android.permission.SEND_SMS" />
+  <uses-permission android:name="android.permission.READ_CALL_LOG" />
   <!-- Routines: re-arm the routine alarm after a reboot; a short foreground task runs it. -->
   <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
   <uses-permission android:name="android.permission.WAKE_LOCK" />
+  <!-- Work waiting for the internet runs when the phone is back online (WorkManager). -->
+  <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
   <!-- USB cameras: optional, so phones without USB host still get the app. The camera library
        asks for broad storage access it doesn't need here; removed (Play rejects it). -->
   <uses-feature android:name="android.hardware.usb.host" android:required="false" tools:replace="android:required" />

@@ -14,6 +14,7 @@ Everything Sidekick sees, hears and remembers stays on your phone:
 - Contacts, calendar events and notifications it reads, if you allow it.
 - Where you have been, if you turn on location: places are kept as points on the phone and named using a list of towns built into the app.
 - Phone activity you allow it to read, such as step counts, which apps you used and for how long (screen time), and text you copy, if you ask about it.
+- Your texts (SMS) and call history, only if Sidekick is your phone's digital assistant and you allow it: read on the phone when you ask (or when a routine you made asks), never copied into Sidekick's memory and never sent anywhere. Texts you approve are sent from your phone like any text, through your mobile network.
 - Routines you set up (for example "every evening, recap my day"): these run on the phone at the time you chose.
 
 All of this is processed on the phone by AI models that run on the phone. The memory database is encrypted, with its key kept in the phone's secure key store. Location, if you allow it, is turned into a town name using a list built into the app, with no online lookup. Sidekick turns off Android's automatic cloud backup, so this data is not copied to Google's backup either.
@@ -36,11 +37,17 @@ Sidekick works offline. It connects to the internet only in these cases:
 4. **Weather — only with online lookup on, when you ask about the weather.** Your location, rounded to about 1 km, is sent to the Norwegian Meteorological Institute (api.met.no) to get the forecast. Nothing else is sent. Also with online lookup on, when you ask where you are, your position is sent to Google's address lookup built into Android to get the street name.
 5. **Links and apps you open.** When you tap a link, or send a message through another app (such as Messages or WhatsApp), that app or website handles it under its own policy.
 
-App updates come only through Google Play.
+6. **Quick fixes — on unless you turn them off** (Settings → Advanced → Get quick fixes). On Wi-Fi, at most every few hours, Sidekick asks Expo (expo.dev, the service that delivers small app fixes) whether a fix is available. The request contains only the app's version information (runtime version, platform, update channel and the current update's id); like any internet request, Expo sees your phone's IP address. No personal information, memories or usage data are sent. Turned off, Sidekick never contacts Expo and fixes arrive with Google Play updates.
+
+Full app updates come through Google Play.
 
 ## Camera, microphone and other permissions
 
 Sidekick asks for each permission when you first use the feature that needs it. You can refuse or withdraw it in the app's Settings or in Android settings. The camera and microphone are only used while you have listening or the camera turned on, and Android shows its indicator whenever they are in use. Consent mode, which is on by default where the law requires everyone's agreement to record, keeps nothing of voices that haven't agreed.
+
+If you turn the live camera on, it keeps filming while your phone is locked, until you pause or stop it from the notification. You can turn this off in Settings → Camera & audio. Video and frames stay on the phone.
+
+If you turn on **Understand other languages around me** (off by default), lines heard in other languages are translated on the phone; nothing is sent over the network.
 
 ## Children
 

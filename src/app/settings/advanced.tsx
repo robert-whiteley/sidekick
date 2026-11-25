@@ -5,7 +5,7 @@ import { RESERVE_OPTIONS } from '@/engine/device-profile';
 import { DEFAULTS } from '@/engine/settings';
 import { ChipSection } from '@/features/settings/ChipSection';
 import { Page } from '@/features/settings/Page';
-import { ACCENT, Button, ChoiceRow, NavRow, Section, styles } from '@/features/settings/ui';
+import { ACCENT, Button, ChoiceRow, NavRow, Row, Section, styles } from '@/features/settings/ui';
 import { useSettings } from '@/features/settings/useSettings';
 
 export default function AdvancedSettings() {
@@ -37,6 +37,12 @@ export default function AdvancedSettings() {
           recommended={DEFAULTS.mobileDataDownloads}
           onChange={(v) => set({ mobileDataDownloads: v ?? DEFAULTS.mobileDataDownloads })}
         />
+        <Row
+          label="Get quick fixes (Recommended)"
+          hint="Small fixes arrive without a Play Store update, on Wi-Fi only. Off: Sidekick never contacts Expo, the update service; fixes come with Play Store updates."
+          value={s.quickFixes}
+          onChange={(v) => set({ quickFixes: v })}
+        />
       </Section>
       <ChipSection />
       <Section title="Reset">
@@ -56,6 +62,7 @@ export default function AdvancedSettings() {
               storageReserveGB: null,
               modelUpdates: DEFAULTS.modelUpdates,
               mobileDataDownloads: DEFAULTS.mobileDataDownloads,
+              quickFixes: DEFAULTS.quickFixes,
             })
           }
         />

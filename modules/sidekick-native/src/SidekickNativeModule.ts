@@ -197,6 +197,8 @@ declare class SidekickNativeModule extends NativeModule<SidekickNativeModuleEven
   /** New settings for the running camera (restarts it briefly) or the next start. */
   cameraConfigure(config?: CameraConfig): void;
   cameraStop(): void;
+  /** Pause / resume filming without stopping the service (the notification has the same buttons). */
+  cameraPause(paused: boolean): void;
   cameraStatus(): CameraStatus;
   /** Hold (true) frame embedding while answering; frames are still saved and embedded after. */
   cameraHold(hold: boolean): void;

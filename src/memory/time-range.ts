@@ -111,10 +111,42 @@ function clockHour(h: string, m: string | undefined, ampm: string | undefined): 
   return hour + min / 60;
 }
 
+// --- Ranges the model read (any phrasing the rules below don't know) ---
+
+const resolved = new Map<string, TimeRange>();
+const rangeKey = (q: string) =>
+  q
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
+
 /**
- * The time range named in [q], or null if it names none. Checked most specific first.
+ * Remembers the span the model read from [questions] (the said question and its forms), so every
+ * reader of time words (search, recall, recaps, location) uses it. Only the latest is kept.
+ */
+export function rememberRange(questions: string[], range: TimeRange) {
+  resolved.clear();
+  for (const q of questions) resolved.set(rangeKey(q), range);
+}
+
+export function forgetRanges() {
+  resolved.clear();
+}
+
+/**
+ * The time range named in [q], or null if it names none: the rules first (instant), then a span
+ * the model read for this question (rememberRange).
  */
 export function parseTimeRange(
+  q: string,
+  nowDate: Date,
+  opts: RangeOptions = {},
+): TimeRange | null {
+  return parseTimeRangeRules(q, nowDate, opts) ?? resolved.get(rangeKey(q)) ?? null;
+}
+
+/** The rules: checked most specific first. */
+export function parseTimeRangeRules(
   q: string,
   nowDate: Date,
   opts: RangeOptions = {},

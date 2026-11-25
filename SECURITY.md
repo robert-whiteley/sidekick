@@ -2,7 +2,7 @@
 
 ## Reporting a vulnerability
 
-Please report privately via GitHub's "Report a vulnerability" (Security → Advisories) on this repository. Do not open a public issue.
+Please report privately via GitHub's "Report a vulnerability" (Security → Advisories) on this repository, or email info@sashy.ai. Do not open a public issue.
 
 ## Design
 

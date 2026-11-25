@@ -1,22 +1,19 @@
 /**
  * Short spoken/typed commands answered without the model: speech speed, "repeat that", "what can
- * you do?", listening and camera on/off, camera watches ("tell me when you see my bus"), the note
- * template for the conversation going on ("this is a meeting"), and "scan this" (QR / barcode).
+ * you do?", listening and camera on/off, camera watches ("tell me when you see my bus"), and
+ * "scan this" (QR / barcode).
  * Pure parsing; tested in __tests__/voice-commands-test.ts.
  */
-
-import type { NoteTemplateId } from '@/memory/note-templates';
 
 export type VoiceCommand =
   | { type: 'speed'; rate: number | 'faster' | 'slower' | 'normal' }
   | { type: 'repeat' }
   | { type: 'help' }
   | { type: 'listening'; on: boolean }
-  | { type: 'camera'; on: boolean }
+  | { type: 'camera'; on: boolean; pause?: boolean }
   | { type: 'watch'; what: string; every: boolean }
   | { type: 'unwatch'; what: string | null }
   | { type: 'watchList' }
-  | { type: 'template'; id: NoteTemplateId | null }
   | { type: 'scan' };
 
 /** Speech speed limits (1 = normal). */
@@ -44,16 +41,6 @@ const clean = (q: string) =>
     .replace(/^(please |can you |could you |would you )+/, '')
     .replace(/ please$/, '')
     .trim();
-
-const TEMPLATE_WORDS: [RegExp, NoteTemplateId][] = [
-  [/\b(meeting|stand-?up|call with work|work call)\b/, 'meeting'],
-  [/\b(lecture|class|lesson|seminar|talk|course)\b/, 'lecture'],
-  [
-    /\b(doctor'?s?|gp|appointment with (the|my) (doctor|nurse|gp)|medical|clinic|hospital)\b/,
-    'doctor',
-  ],
-  [/\b(interview)\b/, 'interview'],
-];
 
 /** The command in [question], or null when it is an ordinary question. */
 export function parseVoiceCommand(question: string): VoiceCommand | null {
@@ -119,9 +106,12 @@ export function parseVoiceCommand(question: string): VoiceCommand | null {
     return { type: 'listening', on: true };
 
   // --- Camera ---
-  if (/^(pause|stop|turn off|switch off|close) (the )?(live )?camera$|^camera off$/.test(q))
+  if (/^pause (the )?(live )?camera$/.test(q)) return { type: 'camera', on: false, pause: true };
+  if (/^(unpause|resume) (the )?(live )?camera$/.test(q))
+    return { type: 'camera', on: true, pause: true };
+  if (/^(stop|turn off|switch off|close) (the )?(live )?camera$|^camera off$/.test(q))
     return { type: 'camera', on: false };
-  if (/^(start|resume|turn on|switch on|open) (the )?(live )?camera$|^camera on$/.test(q))
+  if (/^(start|turn on|switch on|open) (the )?(live )?camera$|^camera on$/.test(q))
     return { type: 'camera', on: true };
 
   // --- Camera watches ---
@@ -146,30 +136,6 @@ export function parseVoiceCommand(question: string): VoiceCommand | null {
       /\b(whenever|every time|each time)\b/.test(q) || /\b(each|every) time\b/.test(m[1]);
     const what = stripArticle(m[1].replace(/\b(again|each time|every time)\b/g, '').trim());
     if (what && what.split(' ').length <= 8) return { type: 'watch', what, every };
-  }
-
-  // --- Note template for this conversation ---
-  if (
-    (m = /^(?:this is|we'?re in|we'?re having|i'?m in|i'?m at|i'?m having|it'?s) (.+)$/.exec(q))
-  ) {
-    const rest = m[1];
-    if (/^(just )?(a |an )?(normal|ordinary|regular) (chat|conversation)$|^just a chat$/.test(rest))
-      return { type: 'template', id: null };
-    // "a meeting", "my doctor's appointment", "the team stand-up", "an interview with Jo".
-    const head =
-      /^(?:a |an |my |the |our )?(?:\w+ )?(\w+(?:'s)?(?: appointment)?|stand-?up)(?: (?:with|about|on) .+)?$/.exec(
-        rest,
-      );
-    if (head)
-      for (const [re, id] of TEMPLATE_WORDS) if (re.test(head[1])) return { type: 'template', id };
-  }
-  if (
-    (m =
-      /^(?:take|make|write|use) (meeting|lecture|doctor'?s?|interview) notes?(?: for this)?$/.exec(
-        q,
-      ))
-  ) {
-    for (const [re, id] of TEMPLATE_WORDS) if (re.test(m[1])) return { type: 'template', id };
   }
 
   // --- Scan ---

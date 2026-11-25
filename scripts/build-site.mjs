@@ -1,7 +1,7 @@
 // Writes the website (home, privacy, support, delete-data pages) (repo robert-whiteley/sidekick-site, served at
 // https://sidekick.sashy.ai/privacy) from docs/privacy-policy.md, the same text the app shows.
 // Run after editing the policy: node scripts/build-site.mjs [path to sidekick-site]
-// (default ../sidekick-site), then commit and push the site repo; Render redeploys it.
+// (default ../sidekick-site), then commit and push the site repo; GitHub Pages redeploys it.
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';

@@ -11,7 +11,7 @@ import { daysLabel, hoursLabel } from '@/features/settings/choice-logic';
 import { DevicesSection } from '@/features/settings/DevicesSection';
 import { ListeningSection } from '@/features/settings/ListeningSection';
 import { Page } from '@/features/settings/Page';
-import { ChoiceRow, Section, styles } from '@/features/settings/ui';
+import { ChoiceRow, Row, Section, styles } from '@/features/settings/ui';
 import { useSettings } from '@/features/settings/useSettings';
 
 export default function CameraAudioSettings() {
@@ -47,6 +47,12 @@ export default function CameraAudioSettings() {
           value={s.imageDetail}
           recommended={rec.imageDetail}
           onChange={(v) => set({ imageDetail: v })}
+        />
+        <Row
+          label="Keep filming when the phone is locked"
+          hint="Recommended: on, so Sidekick still remembers with the screen off (phone or USB camera). Off pauses the camera until you unlock. Pause or stop it any time from the notification."
+          value={s.cameraWhileLocked !== false}
+          onChange={(v) => set({ cameraWhileLocked: v })}
         />
       </Section>
       <Section title="Keep">

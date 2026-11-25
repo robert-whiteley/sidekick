@@ -10,6 +10,7 @@ import {
   type OpenMessageApp,
 } from './native';
 import { isOn } from './prefs';
+import { sendTextDirect } from './sms';
 import type { MessageApp, MessageFields } from './types';
 
 export const PACKAGES: Record<OpenMessageApp, string[]> = {
@@ -93,6 +94,9 @@ export async function sendMessage(f: MessageFields): Promise<SendOutcome> {
   } else if (!f.to) {
     throw new Error(`No number for ${f.name}`);
   }
+  // Sidekick is the phone's assistant and may send texts: sent straight away, no app to open.
+  if (app === 'sms' && f.to && (await sendTextDirect(f.to, f.text)))
+    return { sent: true, note: 'Sent' };
   if (!native.openMessage(app, f.to, f.text)) throw new Error(`${APP_LABEL[app]} isn't installed`);
   const pick = app === 'telegram' || app === 'signal' ? `pick ${f.name} and ` : '';
   return { sent: true, note: `Opened ${APP_LABEL[app]}: ${pick}tap Send there` };

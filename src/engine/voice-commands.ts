@@ -6,7 +6,7 @@ import { describeCode } from './codes-logic';
 import { addWatch, currentWatches, removeWatches } from './focus-watch';
 import { listWatches, looksLikeName, matchWatches } from './focus-logic';
 import { isListening, startListening, stopListening } from './listen';
-import { liveCameraOn, startLiveCamera, stopLiveCamera } from './live-camera';
+import { liveCameraOn, pauseLiveCamera, startLiveCamera, stopLiveCamera } from './live-camera';
 import { locationMemoryOn } from './location-track';
 import { getSettings, updateSettings } from './settings';
 import {
@@ -17,12 +17,11 @@ import {
   type VoiceCommand,
 } from './voice-commands-logic';
 import { latestFramePaths } from '@/memory/frames';
-import { NOTE_TEMPLATES } from '@/memory/note-templates';
 import { isOn } from '@/integrations/prefs';
 
 /**
  * Runs the short commands of voice-commands-logic.ts (no model): speech speed, repeat, help,
- * listening and camera on/off, camera watches, note templates and "scan this". The reply is
+ * listening and camera on/off, camera watches and "scan this". The reply is
  * shown and, when the question was spoken, said like any answer.
  */
 
@@ -66,6 +65,10 @@ export async function runVoiceCommand(
   return execute(cmd, question, photoNow);
 }
 
+/** Runs an already-parsed command (the tool router picks these too). */
+export const runParsedCommand = (cmd: VoiceCommand, question: string, photoNow: string | null) =>
+  execute(cmd, question, photoNow);
+
 async function execute(
   cmd: VoiceCommand,
   question: string,
@@ -107,12 +110,20 @@ async function execute(
     }
     case 'camera': {
       if (Platform.OS !== 'android') return 'The live camera needs Android.';
+      // Pause / resume keep the service, so they also work with the phone locked.
+      if (cmd.pause && liveCameraOn()) {
+        pauseLiveCamera(!cmd.on);
+        return cmd.on ? 'Camera on again.' : 'Camera paused. Say "resume the camera" to carry on.';
+      }
       if (!cmd.on) {
         if (!liveCameraOn()) return 'The camera is already off.';
         stopLiveCamera();
-        return 'Camera paused.';
+        return 'Camera off.';
       }
-      if (liveCameraOn()) return 'The camera is already on.';
+      if (liveCameraOn()) {
+        pauseLiveCamera(false); // in case it was paused
+        return 'The camera is on.';
+      }
       return startLiveCamera() ? 'Camera on.' : 'Tap the camera button to turn it on.';
     }
     case 'watch': {
@@ -133,12 +144,6 @@ async function execute(
     }
     case 'watchList':
       return listWatches(currentWatches());
-    case 'template': {
-      updateSettings({ noteTemplateChoice: { id: cmd.id, at: Date.now() } });
-      return cmd.id
-        ? `OK, I'll keep ${NOTE_TEMPLATES[cmd.id].label.toLowerCase()} notes for this one.`
-        : 'OK, ordinary notes for this one.';
-    }
     case 'scan': {
       const path = photoNow ?? latestFramePaths(1)[0] ?? null;
       if (!path) return 'Point the camera at the code, then say "scan this".';

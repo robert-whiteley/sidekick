@@ -4,16 +4,15 @@ import type { HandsFreeMode, ReadIncomingMode } from './hands-free-logic';
 import type { ReadBackMode } from './readback-logic';
 import { DEFAULT_WAKE_PHRASE } from './wake-word';
 import type { ConsentChoice } from '@/memory/consent-region';
-import type { NoteTemplateId, TemplateChoice } from '@/memory/note-templates';
 
 /** User settings, stored on the phone. Every feature can be switched off. */
 export type Settings = {
   wakePhrase: string;
   /**
-   * Language Sidekick listens and answers in: 'auto' = the phone's language when the speech model
-   * knows it, else English; or an ISO 639-1 code (language-logic.ts).
+   * "Understand other languages around me": Listen uses Parakeet v3 (25 European languages) and
+   * lines in another language get an English translation. Sidekick itself stays English.
    */
-  speechLanguage: string;
+  understandOtherLanguages: boolean;
   /** Show the conversation live on the Ask screen while listening (display only). */
   showConversation: boolean;
   /**
@@ -79,6 +78,8 @@ export type Settings = {
   imageDetail: ImageDetail | null;
   /** Hours of rolling video kept (stills, text and vectors are kept longer). */
   videoKeepHours: number | null;
+  /** Keep the live camera filming with the screen off / locked (Recommended); off pauses it until unlocked. */
+  cameraWhileLocked: boolean;
   /** Days of conversation audio kept for listening back (0 = forever). */
   audioKeepDays: number | null;
   /** Space always left free for the phone, in GB. */
@@ -87,6 +88,8 @@ export type Settings = {
   offTheRecord: boolean;
   /** Better models: download and switch automatically, ask first, or never. */
   modelUpdates: SmartDefault;
+  /** Get quick fixes (Expo OTA, Wi-Fi only). Off = the app never contacts Expo. */
+  quickFixes: boolean;
   /** Messages, emails, events and calls: send after a 5 s countdown, at once, or ask first. */
   actionSend: 'countdown' | 'instant' | 'ask';
   /** Read a draft aloud before it sends and listen for yes / no / changes (null = 'voice'). */
@@ -114,10 +117,6 @@ export type Settings = {
   lastDriveBackupAt: number | null;
   /** Speech speed of spoken answers, 0.5–2 (null = normal, 1). "Speak slower / faster". */
   speechRate: number | null;
-  /** Note template used when none was chosen by voice (null = the general note). */
-  defaultNoteTemplate: NoteTemplateId | null;
-  /** The last "this is a meeting" choice (applies to the conversation going on then). */
-  noteTemplateChoice: TemplateChoice | null;
   /** Measured silently in the background; refine the Recommended values (null = not yet). */
   measuredTokPerSec: number | null;
   measuredVoiceFirstSoundMs: number | null;
@@ -132,7 +131,7 @@ export type SmartDefault = 'auto' | 'ask' | 'off';
 const NOT_SAVED = ['offTheRecord'] as const;
 
 export const DEFAULTS: Settings = {
-  speechLanguage: 'auto',
+  understandOtherLanguages: false,
   wakePhrase: DEFAULT_WAKE_PHRASE,
   showConversation: true,
   instructionsOnly: false,
@@ -163,10 +162,12 @@ export const DEFAULTS: Settings = {
   frameWindow: null,
   imageDetail: null,
   videoKeepHours: null,
+  cameraWhileLocked: true,
   audioKeepDays: null,
   storageReserveGB: null,
   offTheRecord: false,
   modelUpdates: 'auto',
+  quickFixes: true,
   actionSend: 'countdown',
   readBack: null,
   handsFree: null,
@@ -180,8 +181,6 @@ export const DEFAULTS: Settings = {
   conversationNotes: null,
   lastDriveBackupAt: null,
   speechRate: null,
-  defaultNoteTemplate: null,
-  noteTemplateChoice: null,
   measuredTokPerSec: null,
   measuredVoiceFirstSoundMs: null,
 };

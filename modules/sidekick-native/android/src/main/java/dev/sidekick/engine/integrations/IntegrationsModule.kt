@@ -26,6 +26,14 @@ class IntegrationsModule : Module() {
       Intents.openMessage(context, activity, app, number, text)
     }
 
+    // Texts and call history, only while Sidekick is the default assistant (Telephony.kt).
+    Function("telephonyStatus") { Telephony.status(context) }
+    Function("readSms") { fromMs: Double, toMs: Double, max: Int, address: String ->
+      Telephony.readSms(context, fromMs, toMs, max, address)
+    }
+    Function("sendSms") { number: String, text: String -> Telephony.sendSms(context, number, text) }
+    Function("callLog") { fromMs: Double, toMs: Double, max: Int -> Telephony.callLog(context, fromMs, toMs, max) }
+
     // Phone controls (PhoneControls.kt).
     Function("launchableApps") { PhoneControls.launchableApps(context) }
     Function("openApp") { pkg: String -> PhoneControls.openApp(context, activity, pkg) }

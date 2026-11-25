@@ -1,12 +1,12 @@
-import { Platform } from 'react-native';
+import { AppState, Platform } from 'react-native';
 
 import SidekickNative from '../../modules/sidekick-native';
-import { cameraConfigFor, cameraNotice } from './camera-logic';
+import { cameraConfigFor, cameraNotice, cameraStartTook } from './camera-logic';
 import { currentTuning } from './device-profile';
 import { isDownloaded, modelPath } from './downloads';
 import { EMBEDDER_FILE, OCR_FILES } from './models';
 import { notices } from './notices';
-import { onSettingsChange } from './settings';
+import { getSettings, onSettingsChange } from './settings';
 import { EMBED_DIMS } from '@/memory/db';
 import { ingestFrames } from '@/memory/frames';
 
@@ -68,7 +68,7 @@ function config() {
   const ocr =
     isDownloaded(OCR_FILES.det) && isDownloaded(OCR_FILES.rec) && isDownloaded(OCR_FILES.dict);
   return {
-    ...cameraConfigFor(currentTuning()),
+    ...cameraConfigFor(currentTuning(), getSettings().cameraWhileLocked !== false),
     embedModelPath: isDownloaded(EMBEDDER_FILE) ? modelPath(EMBEDDER_FILE) : null,
     dims: EMBED_DIMS,
     ocrDetPath: ocr ? modelPath(OCR_FILES.det) : null,
@@ -81,7 +81,14 @@ function config() {
 export function startLiveCamera(): boolean {
   if (!android) return false;
   try {
-    const ok = SidekickNative.cameraStart(config());
+    const accepted = SidekickNative.cameraStart(config());
+    let running = false;
+    try {
+      running = SidekickNative.cameraStatus().running;
+    } catch {
+      // Status unavailable: trust the start.
+    }
+    const ok = cameraStartTook(accepted, running, AppState.currentState === 'active');
     setIngest(ok);
     listeners.forEach((l) => l(ok));
     return ok;
@@ -100,6 +107,16 @@ export function stopLiveCamera() {
   }
   setIngest(false);
   listeners.forEach((l) => l(false));
+}
+
+/** Pause / resume filming (the camera is released while paused; memory and service stay on). */
+export function pauseLiveCamera(paused: boolean) {
+  if (!android) return;
+  try {
+    SidekickNative.cameraPause(paused);
+  } catch {
+    // Not running.
+  }
 }
 
 /** Hold frame embedding while an answer runs (frames are still saved, embedded after). */

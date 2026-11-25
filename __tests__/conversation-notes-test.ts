@@ -171,3 +171,36 @@ describe('drive backup schedule', () => {
     expect(backupName(new Date(2026, 10, 5))).toBe('Sidekick backup 2026-11-05.zip');
   });
 });
+
+test('a chat line only for recent conversations; old ones stay in Memory', () => {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { noticeWanted } = require('@/memory/conversation-note-logic');
+  const now = 10 * 3600_000;
+  expect(noticeWanted({ from: now - 600_000, to: now - 60_000, lines: [] }, now)).toBe(true);
+  expect(noticeWanted({ from: 0, to: now - 2 * 3600_000, lines: [] }, now)).toBe(false);
+});
+
+describe('details the model chooses', () => {
+  const c = {
+    from: 0,
+    to: 60_000,
+    lines: [{ who: 'Dr Lee', text: 'Take 400 mg ibuprofen three times a day.', at: 0 }],
+  } as unknown as Parameters<typeof parseNote>[1];
+  it('asks for an optional Details line, with no fixed kinds of conversation', () => {
+    const p = notePrompt(c);
+    expect(p).toMatch(/Details: only if/);
+    expect(p).not.toMatch(/meeting|lecture|doctor/i);
+  });
+  it('parses and keeps details across updates', () => {
+    const n = parseNote(
+      'Topics: knee pain\nDecisions: none\nActions: none\nSummary: A check-up.\nDetails: ibuprofen 400 mg three times a day',
+      c,
+    )!;
+    expect(n.details).toEqual(['ibuprofen 400 mg three times a day']);
+    const next = parseNote('Topics: knee pain\nDecisions: none\nActions: none\nSummary: Done.', c)!;
+    const merged = mergeNotes(n, next);
+    expect(merged.details).toEqual(['ibuprofen 400 mg three times a day']);
+    expect(noteText(merged)).toMatch(/Details: ibuprofen/);
+    expect(notePrompt(c, merged, 1)).toMatch(/Details: ibuprofen/);
+  });
+});

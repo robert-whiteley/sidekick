@@ -4,7 +4,6 @@
  * anything useful and updated as more is said (actions added, changed or marked done). Pure; tested.
  */
 import { isDuplicate, parseWhen, type ProposedFollowup, TIME_WORDS } from './followup-logic';
-import { type NoteTemplate, parseTemplateSections, templateFormat } from './note-templates';
 
 /** A gap this long (or Listen off) ends a conversation; the next line starts a new one. */
 export const NOTE_SILENCE_MS = 5 * 60_000;
@@ -15,6 +14,9 @@ export const NOTE_PAUSE_MS = 20_000;
 export const NOTE_MIN_INTERVAL_MS = 45_000;
 /** Lines given to the model (the phone's context is small): the start and the end. */
 export const NOTE_MAX_LINES = 80;
+/** A chat line about a note only while the conversation is recent; older notes are in Memory. */
+export const NOTE_NOTICE_FRESH_MS = 30 * 60_000;
+export const noticeWanted = (c: Conversation, now: number) => now - c.to <= NOTE_NOTICE_FRESH_MS;
 /** New lines given to an update, with a few before them for context. */
 export const NOTE_UPDATE_LINES = 40;
 const NOTE_CONTEXT_LINES = 4;
@@ -116,6 +118,9 @@ const FORMAT =
   'Actions: who will do what and when, as said (like "Sam will send the deck by Friday"), ' +
   'separated by ;, or none. Add (done) after one that was said to be done.\n' +
   'Summary: one sentence.\n' +
+  'Details: only if this kind of conversation has specifics worth keeping that the lines above ' +
+  'miss (a dose, a price, an address, a date, a name to remember), separated by ;. Else leave ' +
+  'this line out.\n' +
   'Only what was said; do not guess.';
 
 /**
@@ -126,14 +131,11 @@ export function notePrompt(
   c: Conversation,
   prev: ConversationNote | null = null,
   handled = 0,
-  template: NoteTemplate | null = null,
 ): string {
-  const lines = 4 + (template?.sections.length ?? 0);
-  const format = `${FORMAT}${templateFormat(template)}`;
   if (!prev) {
     return (
-      `Below is a conversation I am having (Me is me). Write short notes of it, exactly ${lines} lines:\n` +
-      `${format}\n\n${said(sample(c.lines))}`
+      'Below is a conversation I am having (Me is me). Write short notes of it, in these lines:\n' +
+      `${FORMAT}\n\n${said(sample(c.lines))}`
     );
   }
   const fresh = c.lines.slice(handled).slice(-NOTE_UPDATE_LINES);
@@ -144,7 +146,7 @@ export function notePrompt(
     `Decisions: ${prev.decisions.join('; ') || 'none'}`,
     `Actions: ${[...prev.actions, ...prev.done.map((d) => `${d} (done)`)].join('; ') || 'none'}`,
     `Summary: ${prev.summary || 'none'}`,
-    ...(prev.sections ?? []).map((x) => `${x.name}: ${x.items.join('; ') || 'none'}`),
+    ...(prev.details?.length ? [`Details: ${prev.details.join('; ')}`] : []),
   ].join('\n');
   return (
     'These are my notes of a conversation I am having (Me is me):\n' +
@@ -152,7 +154,7 @@ export function notePrompt(
     (before.length ? `Said just before:\n${said(before)}\n\n` : '') +
     `Said since:\n${said(fresh)}\n\n` +
     'Rewrite the notes with what was said since: keep what still holds, change what changed, ' +
-    `add what is new. Exactly ${lines} lines:\n${format}`
+    `add what is new, in these lines:\n${FORMAT}`
   );
 }
 
@@ -165,8 +167,11 @@ export type ConversationNote = {
   /** Said to be done during the conversation. */
   done: string[];
   summary: string;
-  /** Extra sections from a note template (meeting: Agenda, …), if one was chosen. */
-  sections?: { name: string; items: string[] }[];
+  /**
+   * Key specifics of this kind of conversation the other lines miss (a dose at the doctor's, a
+   * price, an address, a date): the model decides what matters, there is no fixed list.
+   */
+  details?: string[];
 };
 
 const NONE = /^(none|n\/a|nothing|no(ne)? (decisions?|actions?)|-)\.?$/i;
@@ -185,11 +190,7 @@ function items(reply: string, label: string): string[] {
 const DONE = /\s*\((done|completed|finished)\)\s*$/i;
 
 /** Reads the model's four lines; people come from the voices heard, never from the model. */
-export function parseNote(
-  reply: string,
-  c: Conversation,
-  template: NoteTemplate | null = null,
-): ConversationNote | null {
+export function parseNote(reply: string, c: Conversation): ConversationNote | null {
   const all = items(reply, 'Actions?(?: items?)?');
   const note: ConversationNote = {
     people: peopleIn(c.lines),
@@ -199,8 +200,8 @@ export function parseNote(
     done: all.filter((a) => DONE.test(a)).map((a) => a.replace(DONE, '')),
     summary: items(reply, 'Summary')[0] ?? '',
   };
-  const sections = parseTemplateSections(template, reply);
-  if (sections.length) note.sections = sections;
+  const details = items(reply, 'Details?');
+  if (details.length) note.details = details;
   if (!note.topics.length && !note.summary) return null;
   return note;
 }
@@ -232,8 +233,8 @@ export function mergeNotes(
     actions,
     done,
     summary: next.summary || prev.summary,
-    ...(next.sections?.length || prev.sections?.length
-      ? { sections: next.sections?.length ? next.sections : prev.sections }
+    ...(prev.details?.length || next.details?.length
+      ? { details: union(prev.details ?? [], next.details ?? [], 8) }
       : {}),
   };
 }
@@ -246,8 +247,7 @@ export function noteText(n: ConversationNote): string {
   if (n.decisions.length) parts.push(`Decisions: ${n.decisions.join('; ')}`);
   if (n.actions.length) parts.push(`Action items: ${n.actions.join('; ')}`);
   if (n.done.length) parts.push(`Done: ${n.done.join('; ')}`);
-  for (const x of n.sections ?? [])
-    if (x.items.length) parts.push(`${x.name}: ${x.items.join('; ')}`);
+  if (n.details?.length) parts.push(`Details: ${n.details.join('; ')}`);
   return parts.join('\n');
 }
 

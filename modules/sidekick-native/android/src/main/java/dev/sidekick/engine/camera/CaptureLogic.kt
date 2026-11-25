@@ -298,3 +298,48 @@ object Retention {
   /** Recommended reserve: max(2 GB, 10 % of the phone's storage). */
   fun recommendedReserve(totalBytes: Long): Long = max(2L * 1024 * 1024 * 1024, totalBytes / 10)
 }
+
+/** Whether the camera should be filming now (besides heat / battery throttling). */
+object CaptureLogicLock {
+  fun shouldFilm(userPaused: Boolean, lockPaused: Boolean) = !userPaused && !lockPaused
+}
+
+/** The listening service's notification wording and buttons (pure, for tests). */
+object ServiceNotice {
+  data class Text(val title: String, val body: String, val actions: List<String>)
+
+  /** Actions: "pauseCamera" / "resumeCamera", "stopCamera" (when the mic stays on), "stop". */
+  fun text(
+    listening: Boolean,
+    cameraOn: Boolean,
+    cameraPaused: Boolean,
+    lockPaused: Boolean,
+    micPauseReason: String?,
+    wakePhrase: String,
+  ): Text {
+    val title =
+      when {
+        micPauseReason != null && !cameraOn -> "Sidekick is paused ($micPauseReason)"
+        cameraOn && cameraPaused && listening -> "Sidekick is listening (camera paused)"
+        cameraOn && cameraPaused -> "Sidekick camera is paused"
+        cameraOn && lockPaused && listening -> "Sidekick is listening (camera off while locked)"
+        cameraOn && lockPaused -> "Sidekick camera is off while the phone is locked"
+        cameraOn && listening -> "Sidekick is watching and listening"
+        cameraOn -> "Sidekick camera is on"
+        else -> "Sidekick is listening"
+      }
+    val body =
+      when {
+        micPauseReason != null && listening ->
+          "Not listening or keeping anything until this ends. Hold the mic button to ask."
+        listening -> "Say \"$wakePhrase\". Everything stays on this phone."
+        else -> "Not listening. Everything stays on this phone."
+      }
+    val actions = buildList {
+      if (cameraOn) add(if (cameraPaused) "resumeCamera" else "pauseCamera")
+      if (cameraOn && listening) add("stopCamera")
+      add("stop")
+    }
+    return Text(title, body, actions)
+  }
+}

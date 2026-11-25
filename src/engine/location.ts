@@ -42,6 +42,10 @@ import {
   noteFix,
   refreshPlaces,
 } from './location-track';
+import { geoPack } from './geo';
+import { maybeOfferPlaceName } from './place-naming';
+import { queueOnline } from './online-queue';
+import { packFind } from './geo-pack';
 import { haversineM, type LatLon } from './place-logic';
 import { askLocationPermission, currentRegion, placeName } from './places';
 import { getSettings } from './settings';
@@ -95,7 +99,10 @@ export function startLocationMemory(): () => void {
   const tick = () => {
     if (AppState.currentState !== 'active' || !locationMemoryOn()) return;
     const f = freshFix(10 * 60_000);
-    if (f) void noteFix(f).catch(() => false);
+    if (f)
+      void noteFix(f)
+        .then(() => maybeOfferPlaceName(f))
+        .catch(() => false);
   };
   const carTick = () => {
     const nowCar = carConnected();
@@ -164,7 +171,8 @@ export async function answerLocation(
 ): Promise<LocationAnswer | null> {
   const now = opts.now ?? new Date();
   const weather = parseWeatherQuestion(question);
-  if (weather) return weatherAnswer(weather, now);
+  // Off the record nothing is kept, so an offline forecast isn't queued either.
+  if (weather) return weatherAnswer(weather, now, opts.offRecord ? null : question);
   const q = parseLocationQuestion(question, now);
   if (!q) return null;
 
@@ -319,36 +327,13 @@ async function placeTarget(name: string): Promise<NamedPlace | null> {
   return t ? { id: -2, name: t.name, lat: t.lat, lon: t.lon, radiusM: 10_000 } : null;
 }
 
-// --- Towns by name (the bundled GeoNames list) ---
+// --- Towns by name (the offline GeoNames list) ---
 
-type CityTable = {
-  names: string[];
-  lat: number[];
-  lon: number[];
-  pop?: number[];
-  country?: string[];
-};
-let table: CityTable | null = null;
-
-/** The most populous town with that name in the built-in list, or null. */
+/** The biggest town or village with that name in the offline list, or null. */
 export function findTown(name: string): { name: string; lat: number; lon: number } | null {
-  const k = name
-    .toLowerCase()
-    .replace(/^(the) /, '')
-    .trim();
-  if (k.length < 3) return null;
-  try {
-    table ??= require('../../assets/geonames/cities15000.json') as CityTable;
-  } catch {
-    return null;
-  }
-  let best = -1;
-  for (let i = 0; i < table.names.length; i++) {
-    if (table.names[i].toLowerCase() !== k) continue;
-    if (best < 0 || (table.pop?.[i] ?? 0) > (table.pop?.[best] ?? 0)) best = i;
-  }
-  if (best < 0) return null;
-  return { name: table.names[best], lat: table.lat[best] / 1e4, lon: table.lon[best] / 1e4 };
+  const g = geoPack();
+  const t = g ? packFind(g, name) : null;
+  return t ? { name: t.name, lat: t.lat, lon: t.lon } : null;
 }
 
 // --- Weather ---
@@ -356,6 +341,7 @@ export function findTown(name: string): { name: string; lat: number; lon: number
 async function weatherAnswer(
   q: NonNullable<ReturnType<typeof parseWeatherQuestion>>,
   now: Date,
+  question: string | null,
 ): Promise<LocationAnswer> {
   if (!getSettings().webLookup)
     return {
@@ -377,8 +363,13 @@ async function weatherAnswer(
   }
   if (!pos)
     return { text: 'I can\'t get your location right now. Say a town, like "weather in Leeds".' };
+  // Offline: kept and answered when the phone is back online (online-queue.ts).
   if (!(await online()))
-    return { text: "There's no internet right now, so I can't get the forecast." };
+    return {
+      text: question
+        ? queueOnline('weather', question, now.getTime())
+        : "There's no internet right now, so I can't get the forecast.",
+    };
   const f = await getForecast(pos.lat, pos.lon);
   if (!f) return { text: "I couldn't get the forecast just now. Try again in a minute." };
   const country = q.town ? null : currentRegion().country;

@@ -40,6 +40,8 @@ data class CaptureConfig(
   val ocrDictPath: String? = null,
   /** Text check at most this often (ms). */
   val ocrEveryMs: Long = 2_000,
+  /** Keep filming with the screen off / locked (Recommended); false pauses it until unlocked. */
+  val whileLocked: Boolean = true,
 ) {
   companion object {
     fun from(m: Map<String, Any?>?): CaptureConfig {
@@ -71,6 +73,7 @@ data class CaptureConfig(
         ocrRecPath = str("ocrRecPath"),
         ocrDictPath = str("ocrDictPath"),
         ocrEveryMs = num("ocrEveryMs")?.toLong()?.coerceAtLeast(200) ?: d.ocrEveryMs,
+        whileLocked = m["whileLocked"] as? Boolean ?: d.whileLocked,
       )
     }
   }

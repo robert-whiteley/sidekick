@@ -6,6 +6,9 @@
 #   scripts/release.sh bump --version 1.0.1 --notes notes.txt  changelog entry + app.json version
 #   scripts/release.sh ship [--track internal]                 check, EAS cloud build, eas submit,
 #                                                              Play "What's new" for that build
+#   scripts/release.sh update --notes notes.txt [--channel production]
+#                                                              quick fix (JS/assets only) over the air
+#                                                              via EAS Update; native changes need ship
 #   scripts/release.sh metadata [--images]                     listing text (and images) to Play
 #   scripts/release.sh promote --from internal --to alpha [--rollout 0.2]
 #                                                              move a release between tracks
@@ -18,7 +21,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 export NODE_NO_WARNINGS=1
-REAL=0 CMD="${1:-}" VERSION="" NOTES="" TRACK="internal" FROM="" TO="" ROLLOUT="" IMAGES=0
+REAL=0 CMD="${1:-}" VERSION="" NOTES="" TRACK="internal" FROM="" TO="" ROLLOUT="" IMAGES=0 CHANNEL="production"
 shift || true
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -30,6 +33,7 @@ while [[ $# -gt 0 ]]; do
     --to) TO="$2"; shift ;;
     --rollout) ROLLOUT="$2"; shift ;;
     --images) IMAGES=1 ;;
+    --channel) CHANNEL="$2"; shift ;;
     *) echo "unknown option: $1" >&2; exit 2 ;;
   esac
   shift
@@ -69,9 +73,8 @@ check() {
   npx expo lint
   npx jest --silent
   node scripts/check-store-text.mjs
-  if grep -q '"expo-updates"' package.json || grep -q '"updates"' app.json; then
-    echo "expo-updates must not be in the app (updates come only through Google Play)" >&2; exit 1
-  fi
+  # Quick fixes must never check on their own: the app checks only when "Get quick fixes" is on.
+  node -e 'const u=require("./app.json").expo.updates; if (u && u.checkAutomatically !== "NEVER") { console.error("app.json updates.checkAutomatically must be NEVER (the app checks only when the user allows it)"); process.exit(1); }'
 }
 
 case "$CMD" in
@@ -120,6 +123,18 @@ case "$CMD" in
     fi
     run bundle exec fastlane android upload_to_track track:"$TRACK" version_code:"$CODE" status:draft
     [[ $REAL == 1 ]] && echo "Uploaded as a draft. Review and roll it out in Play Console, or: scripts/release.sh promote …"
+    ;;
+
+  update)
+    [[ -f $NOTES ]] || { echo "update needs --notes file (one line for the update message)" >&2; exit 2; }
+    case "$CHANNEL" in production|preview) ;; *) echo "bad channel: $CHANNEL" >&2; exit 2 ;; esac
+    check
+    if [[ $REAL == 1 && -n $(git status --porcelain) ]]; then
+      echo "Working tree not clean; commit first so the update matches git" >&2; exit 1
+    fi
+    say "Quick fix → channel $CHANNEL (reaches only builds with the same native fingerprint)"
+    run npx eas-cli update --channel "$CHANNEL" --platform android --message "$(head -1 "$NOTES")" --non-interactive
+    [[ $REAL == 1 ]] && echo "Published. Phones with Get quick fixes on load it on their next cold start."
     ;;
 
   metadata)

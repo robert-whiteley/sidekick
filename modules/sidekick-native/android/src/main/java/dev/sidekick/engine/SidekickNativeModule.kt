@@ -481,6 +481,7 @@ class SidekickNativeModule : Module() {
       dev.sidekick.engine.camera.LiveCapture.configure(dev.sidekick.engine.camera.CaptureConfig.from(cfg))
     }
     Function("cameraStop") { ListenService.stopCamera(context) }
+    Function("cameraPause") { paused: Boolean -> ListenService.setCameraPaused(paused) }
     Function("cameraStatus") { dev.sidekick.engine.camera.LiveCapture.status() }
     Function("cameraHold") { hold: Boolean -> dev.sidekick.engine.camera.LiveCapture.hold = hold }
     Function("cameraFramesDrain") { max: Int? -> dev.sidekick.engine.camera.FrameJournal.drain(context, max ?: Int.MAX_VALUE) }

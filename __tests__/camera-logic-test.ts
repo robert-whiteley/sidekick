@@ -1,4 +1,4 @@
-import { cameraConfigFor, cameraNotice } from '@/engine/camera-logic';
+import { cameraConfigFor, cameraNotice, cameraStartTook } from '@/engine/camera-logic';
 
 test('settings become the camera config', () => {
   expect(cameraConfigFor({ fps: 2, imageDetail: 'medium', videoKeepHours: 48 })).toEqual({
@@ -6,6 +6,7 @@ test('settings become the camera config', () => {
     sampleFps: 2,
     videoHeight: 720,
     keepVideoHours: 48,
+    whileLocked: true,
   });
   expect(cameraConfigFor({ fps: 1, imageDetail: 'low', videoKeepHours: 24 }).videoHeight).toBe(480);
 });
@@ -29,4 +30,20 @@ test('throttle and lost events in plain words', () => {
     /unplugged/,
   );
   expect(cameraNotice({ kind: 'status', running: true })).toBeNull();
+});
+
+test('the camera keeps filming while locked unless turned off', () => {
+  expect(cameraConfigFor({ fps: 2, imageDetail: 'medium', videoKeepHours: 48 }).whileLocked).toBe(
+    true,
+  );
+  expect(
+    cameraConfigFor({ fps: 2, imageDetail: 'medium', videoKeepHours: 48 }, false).whileLocked,
+  ).toBe(false);
+});
+
+test('a start asked for in the background only counts if the camera really runs', () => {
+  expect(cameraStartTook(true, false, true)).toBe(true); // visible: the service starts a moment later
+  expect(cameraStartTook(true, true, false)).toBe(true);
+  expect(cameraStartTook(true, false, false)).toBe(false); // refused by Android while locked
+  expect(cameraStartTook(false, true, true)).toBe(false);
 });

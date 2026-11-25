@@ -38,6 +38,9 @@ import { sendsAtText, splitSchedule } from '@/integrations/schedule-logic';
 import type { Draft, DraftKind, DraftFieldsByKind, PlannedAction } from '@/integrations/types';
 import type { MessageThread } from '@/integrations/native';
 import { planExtra } from '@/integrations/extras';
+import { answerCalls, lastCaller } from '@/integrations/calllog';
+import { answerTexts } from '@/integrations/sms';
+import { parseTelephony } from '@/integrations/sms-logic';
 import { notices } from './notices';
 import {
   confirmFromModel,
@@ -203,6 +206,9 @@ function notOnPhone(): PlannedAction {
 const pad = (n: number) => String(n).padStart(2, '0');
 
 /** Runs actions that send nothing to anyone (alarms, media, maps) and drafts the rest. */
+/** A parsed or model-chosen intent → its draft card or reply (the tool router uses it too). */
+export const planIntent = (intent: Intent, now = new Date()) => fromIntent(intent, now);
+
 async function fromIntent(intent: Intent, now: Date): Promise<PlannedAction | null> {
   const native = integrationsNative();
   const t = now.getTime();
@@ -395,6 +401,21 @@ async function fromIntent(intent: Intent, now: Date): Promise<PlannedAction | nu
   }
 }
 
+async function planTelephony(
+  tel: NonNullable<ReturnType<typeof parseTelephony>>,
+  now: Date,
+): Promise<PlannedAction | null> {
+  if (!integrationsNative()) return null;
+  const t = now.getTime();
+  if (tel.type === 'texts') return answerTexts(tel, t);
+  if (tel.type === 'calls') return answerCalls(tel, t);
+  const caller = await lastCaller(t);
+  if ('kind' in caller) return caller;
+  const draft = makeDraft('call', 'calls', { name: caller.name, to: caller.to }, t);
+  drafts.put(draft);
+  return { kind: 'draft', draft };
+}
+
 /** "Move the dentist to 4pm" / "reschedule lunch with Jo to Friday". */
 async function moveEvent(question: string, now: Date): Promise<PlannedAction | null> {
   const m =
@@ -441,7 +462,8 @@ async function moveEvent(question: string, now: Date): Promise<PlannedAction | n
  */
 export async function planAction(
   question: string,
-  opts: { now?: Date; useModel?: boolean } = {},
+  /** guess: let the model read a request the rules miss (off when the tool router does it). */
+  opts: { now?: Date; useModel?: boolean; guess?: boolean } = {},
 ): Promise<PlannedAction | null> {
   const now = opts.now ?? new Date();
   // An answer to a read-back ("yes", "cancel", "change it to …") comes first.
@@ -464,6 +486,13 @@ export async function planAction(
       return planned;
     }
   }
+  // Texts and call history (src/integrations/sms.ts, calllog.ts): "read my last text from Mum",
+  // "who called me", "call them back". Needs Sidekick as the default assistant; else falls back.
+  const tel = parseTelephony(question, now);
+  if (tel) {
+    const planned = await planTelephony(tel, now).catch(() => null);
+    if (planned) return planned;
+  }
   // Phone info, find my phone, birthdays, rides, Waze, search in apps (src/integrations/extras.ts):
   // narrow phrases, checked before the general rules so "… with Waze" isn't a Maps hand-off.
   const extra = await planExtra(question, now).catch(() => null);
@@ -475,7 +504,7 @@ export async function planAction(
   if (control) return control;
   const moved = await moveEvent(question, now).catch(() => null);
   if (moved) return moved;
-  if (opts.useModel === false || !mightBeAction(question)) return null;
+  if (opts.useModel === false || opts.guess === false || !mightBeAction(question)) return null;
   const guessed = await intentFromLlm(question, now);
   return guessed ? fromIntent(guessed, now) : null;
 }
@@ -702,12 +731,21 @@ export function setScheduledSendNotifier(n: SendNotifier | null) {
 
 const isDue = (d: Draft, now: number) => !d.scheduledAt || d.scheduledAt <= now;
 
+let flushing: Promise<unknown> = Promise.resolve();
+
 /**
  * Sends what is queued and due: emails waiting for the internet, and scheduled messages and
  * emails whose time has come. `scheduledOnly` skips plain queued emails (the 30 s check).
- * Returns how many went.
+ * Returns how many went. One run at a time: the app's network listener and the background
+ * network task (online-queue.ts) can both call it, and must not send an email twice.
  */
-export async function flushOutbox(opts: { scheduledOnly?: boolean; now?: number } = {}) {
+export function flushOutbox(opts: { scheduledOnly?: boolean; now?: number } = {}) {
+  const run = flushing.then(() => flushOutboxOnce(opts));
+  flushing = run.catch(() => {});
+  return run;
+}
+
+async function flushOutboxOnce(opts: { scheduledOnly?: boolean; now?: number }) {
   const now = opts.now ?? Date.now();
   let sent = 0;
   let offline = false;

@@ -66,6 +66,7 @@ object Intents {
   }
 
   private const val GOOGLE_MAPS = "com.google.android.apps.maps"
+  private const val WAZE = "com.waze"
 
   fun navigate(ctx: Context, activity: Activity?, destination: String, mode: String): Boolean {
     val q = Uri.encode(destination)
@@ -79,6 +80,11 @@ object Intents {
         Uri.parse("https://www.google.com/maps/dir/?api=1&destination=$q&travelmode=transit"),
       ).setPackage(GOOGLE_MAPS)
       if (start(ctx, activity, dir)) return true
+    }
+    // No Google Maps: Waze starts driving directions straight away.
+    if (mode == "driving" || mode == "") {
+      val waze = Intent(Intent.ACTION_VIEW, Uri.parse("https://waze.com/ul?q=$q&navigate=yes")).setPackage(WAZE)
+      if (start(ctx, activity, waze)) return true
     }
     // Any maps app.
     return start(ctx, activity, Intent(Intent.ACTION_VIEW, Uri.parse("geo:0,0?q=$q")))

@@ -20,10 +20,10 @@ Every model and library shipped with or downloaded by Sidekick, with its licence
 
 ## Data
 
-| Component                                                                             | Licence                                                                                                                                                                                                    |
-| ------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| GeoNames cities15000                                                                  | CC BY 4.0 — data from [GeoNames](https://www.geonames.org/), bundled as `assets/geonames/cities15000.json` (names, coordinates, population, country and admin1 codes; built by `scripts/build-cities.mjs`) |
-| MET Norway Locationforecast 2.0 (weather data, fetched only when Online lookup is on) | CC BY 4.0 and NLOD 2.0 — "Based on data from MET Norway" ([api.met.no](https://api.met.no/)); credited with each weather answer. Not bundled.                                                              |
+| Component                                                                             | Licence                                                                                                                                                                                                                                                             |
+| ------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| GeoNames cities500                                                                    | CC BY 4.0 — data from [GeoNames](https://www.geonames.org/), bundled as `geo/places500.bin` in the native module's assets (every town and village with ≥ 500 people: names, coordinates, population, country and admin1 codes; built by `scripts/build-places.mjs`) |
+| MET Norway Locationforecast 2.0 (weather data, fetched only when Online lookup is on) | CC BY 4.0 and NLOD 2.0 — "Based on data from MET Norway" ([api.met.no](https://api.met.no/)); credited with each weather answer. Not bundled.                                                                                                                       |
 
 ## Online content (only when Online lookup is turned on)
 
@@ -50,6 +50,7 @@ Every model and library shipped with or downloaded by Sidekick, with its licence
 | OpenSSL (used by SQLCipher)                                                                                                   | Apache-2.0                                                              |
 | Apache Commons Compress                                                                                                       | Apache-2.0                                                              |
 | AndroidX Core                                                                                                                 | Apache-2.0                                                              |
+| AndroidX WorkManager (work-runtime: queued online jobs and network routines with the app closed)                              | Apache-2.0                                                              |
 | AndroidX CameraX (camera-core, camera-camera2, camera-lifecycle: live camera memory)                                          | Apache-2.0                                                              |
 | Material Symbols "mic" icon (Quick Settings tile)                                                                             | Apache-2.0                                                              |
 | expo-symbols, expo-clipboard (chat icons, copy)                                                                               | MIT                                                                     |

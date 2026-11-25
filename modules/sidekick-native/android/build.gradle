@@ -58,6 +58,8 @@ dependencies {
   }
   // ZXing core (Apache-2.0): QR codes and barcodes on the phone (ML Kit sends usage data to Google).
   implementation "com.google.zxing:core:3.5.3"
+  // AndroidX WorkManager (Apache-2.0): queued online work and network routines with the app closed.
+  implementation "androidx.work:work-runtime-ktx:2.10.1"
   // Plain JVM tests of the pure logic (Turns.kt).
   testImplementation "junit:junit:4.13.2"
 }

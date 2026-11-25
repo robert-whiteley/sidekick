@@ -5,7 +5,6 @@ import { postCodeCards, scanCodes } from './codes';
 import { codePromptLine } from './codes-logic';
 import { answerRecap } from './recap';
 import { recallContext } from '@/memory/recall';
-import { englishForRules } from '@/engine/rules-english';
 import { postRoutineCard, routineRequest } from './routines-store';
 import SidekickNative from '../../modules/sidekick-native';
 import {
@@ -57,8 +56,12 @@ import {
 import { addFollowup, listFollowups } from '@/memory/followups';
 import { repeatLabel } from '@/memory/repeat-logic';
 import { personPromptContext } from '@/memory/people';
+import { queueOnline } from '@/engine/online-queue';
 import { askWithLookup, type WebSource } from '@/web/lookup';
 import { answerLocation } from './location';
+import { feedbackRule, resolveTimeWithModel, routeWithTools, type RouteOutcome } from './tools';
+import { forgetRanges } from '@/memory/time-range';
+import type { PlannedAction } from '@/integrations/types';
 
 export { SYSTEM_PROMPT, memoryContext };
 
@@ -189,6 +192,10 @@ export async function answer(
     onFound?: (media: NonNullable<AnswerResult['media']>) => void;
     /** Run by a routine (routines.ts): no new routines from it, and drafts wait for a tap. */
     routine?: boolean;
+    /** Re-run of a request the tool router rewrote: rules only, no second routing pass. */
+    routed?: boolean;
+    /** A question kept until back online (online-queue.ts): look it up whatever the rules say. */
+    forceLookup?: boolean;
   },
 ): Promise<AnswerResult> {
   onText = trackAnswer(onText); // "repeat that"
@@ -197,10 +204,7 @@ export async function answer(
     onText(text);
     return { text, usedPhoto: null, sources: [], ms: 0, ttftMs: 0, local: true };
   };
-  // Another language: the rules below read English, so a likely command is put into English
-  // first (one short model pass, rules-english.ts); the answer is still in the user's language.
-  const asked = question;
-  if (!photoNow) question = (await englishForRules(question)) ?? question;
+  if (!opts?.routed) forgetRanges();
   // Phone locked (screen off, hands-free): nothing personal until it is unlocked.
   const locked = lockedReply(question);
   if (locked) return done(locked);
@@ -209,6 +213,44 @@ export async function answer(
   if (command) return done(command);
   const offRecord = opts?.offTheRecord ?? getSettings().offTheRecord ?? false;
   if (!offRecord) offRecordStarted = false;
+  // Time words the rules can't read ("over Christmas"): the model gives the span once, and
+  // search, recall, recaps and location all use it (tools.ts).
+  if (!photoNow && !opts?.routed) await resolveTimeWithModel([question]).catch(() => null);
+  // Plan cards and replies from rules or tools: read-back, countdown, the card in the chat.
+  const finishPlan = (plan: PlannedAction): AnswerResult => {
+    const draftId = plan.kind === 'draft' ? plan.draft.id : undefined;
+    // Driving-style read-back: "Text to Sam: I'm running late. Send it?" then the countdown.
+    let readBackId = plan.kind === 'reply' ? plan.readBackId : undefined;
+    let text = plan.kind === 'reply' ? plan.text : draftSummary(plan.draft);
+    if (draftId && !opts?.routine && readBackOn(!!opts?.spoken)) {
+      const said = beginReadBack(draftId);
+      if (said) [text, readBackId] = [said, draftId];
+    }
+    if (draftId && !readBackId && !opts?.routine) autoSend(draftId);
+    onText(text);
+    return {
+      text,
+      usedPhoto: null,
+      sources: [],
+      ms: 0,
+      ttftMs: 0,
+      local: true,
+      draftId,
+      readBackId,
+    };
+  };
+  const routed = async (o: RouteOutcome): Promise<AnswerResult | null> => {
+    switch (o.kind) {
+      case 'reply':
+        return done(o.text);
+      case 'plan':
+        return finishPlan(o.plan);
+      case 'rules':
+        return answer(o.text, null, onText, { ...opts, routed: true });
+      case 'answer':
+        return null;
+    }
+  };
   // Where am I / was I / did I park, "call this place the gym", the weather (location.ts).
   // Before "remember …" so "remember this place as …" names a place instead of saving a fact.
   const loc = photoNow ? null : await answerLocation(question, { offRecord }).catch(() => null);
@@ -284,30 +326,17 @@ export async function answer(
     return done(routine.text);
   }
 
-  // "Text Sam I'm running late", "add lunch with Jo tomorrow at 1": a draft card, sent only on OK.
-  const plan = photoNow ? null : await planAction(question).catch(() => null);
-  if (plan) {
-    const draftId = plan.kind === 'draft' ? plan.draft.id : undefined;
-    // Driving-style read-back: "Text to Sam: I'm running late. Send it?" then the countdown.
-    let readBackId = plan.kind === 'reply' ? plan.readBackId : undefined;
-    let text = plan.kind === 'reply' ? plan.text : draftSummary(plan.draft);
-    if (draftId && !opts?.routine && readBackOn(!!opts?.spoken)) {
-      const said = beginReadBack(draftId);
-      if (said) [text, readBackId] = [said, draftId];
-    }
-    if (draftId && !readBackId && !opts?.routine) autoSend(draftId);
-    onText(text);
-    return {
-      text,
-      usedPhoto: null,
-      sources: [],
-      ms: 0,
-      ttftMs: 0,
-      local: true,
-      draftId,
-      readBackId,
-    };
+  // "Send feedback: the camera is slow": an email draft to the makers (feedback.ts).
+  const feedback = photoNow ? null : await feedbackRule(question).catch(() => null);
+  if (feedback) {
+    const r = await routed(feedback);
+    if (r) return r;
   }
+
+  // "Text Sam I'm running late", "add lunch with Jo tomorrow at 1": a draft card, sent only on OK.
+  // The model's reading of requests the rules miss is the tool router's job below.
+  const plan = photoNow ? null : await planAction(question, { guess: false }).catch(() => null);
+  if (plan) return finishPlan(plan);
 
   // Recaps over any range or topic ("what did we talk about last Tuesday", "recap the last 2
   // hours", "recap what we've been working on"), summarised by the model (src/engine/recap.ts).
@@ -329,8 +358,20 @@ export async function answer(
     onText(local);
     return { text: local, usedPhoto: null, sources: [], ms: 0, ttftMs: 0, local: true };
   }
-  // Past the rules: memory search and the model see what the user actually said.
-  question = asked;
+
+  // No rule knew it: the model may pick a tool (any phrasing; tools-logic.ts). Plain questions
+  // skip this and go straight to the answer below.
+  if (!photoNow && !opts?.routed) {
+    const outcome = await routeWithTools(question, {
+      routine: opts?.routine,
+      offRecord,
+      // A chain's step through the rules (weather, location): saved nowhere, said nowhere.
+      viaRules: async (t) =>
+        (await answer(t, null, () => {}, { ...opts, routed: true, offTheRecord: true })).text,
+    }).catch(() => null);
+    const r = outcome ? await routed(outcome) : null;
+    if (r) return r;
+  }
 
   let sources: Moment[] = [];
   let facts: string[] = [];
@@ -402,7 +443,7 @@ export async function answer(
   let promptChars = 0;
   const recent = conv.idleFor(Date.now()) < IDLE_COMPACT_MS;
   // Online lookup (when on) sends only the question text; the prompt itself stays on the phone.
-  const { text, stats, web, webQuery } = await askWithLookup(
+  const looked = await askWithLookup(
     question,
     !!image,
     (webPart) =>
@@ -430,7 +471,15 @@ export async function answer(
     undefined,
     recent ? lastQuestion : undefined,
     status,
+    { force: opts?.forceLookup },
   );
+  const { stats, web, webQuery } = looked;
+  let { text } = looked;
+  // Needed the internet but there was none: kept and answered once back online.
+  if (looked.offline && !opts?.forceLookup && !offRecord) {
+    text = `${text}\n\n${queueOnline('lookup', question)}`;
+    onText(text);
+  }
   lastQuestion = question;
 
   // Off the record: nothing is kept, and the main conversation never hears of it.
