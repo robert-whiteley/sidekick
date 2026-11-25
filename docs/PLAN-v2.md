@@ -13,14 +13,87 @@ questions at the end; nothing below is built yet unless marked.**
 - Settings list every feature on every device; unavailable ones say why ("needs a USB camera —
   not possible on iPhone") so users know it's the device.
 
+## Decisions 25 Nov 2026 (round 2)
+
+UI (ChatGPT-simple):
+
+- No app name, no "Ready · CPU", no "Speak" toggle. Top: a menu (Memory) and a gear (Settings).
+- Composer: field "Ask Sidekick"; mic button when empty, send arrow when there is text
+  (WhatsApp/ChatGPT pattern; own Material Symbols icons, no copied branding). A camera button
+  in the composer turns the camera on; the camera view shows only while the camera is in use.
+- Long-press a message: copy / share. Answers are spoken when the question was spoken (voice
+  in, voice out) and when headphones are on; a mute button on a playing answer.
+- Settings rebuilt in sections: Assistant (voice, model, chat), Camera & audio (inputs and
+  outputs, frame rate, frame window, video keep), Connections (each integration with its own
+  switches, e.g. "Send emails from Sidekick"), Privacy (recording consent, pause places,
+  online lookup, export, delete all), Phone features (every feature, with "not possible on
+  this phone: why"), Advanced. Memory is its own screen: You (facts), People, To-dos,
+  Timeline/history, Saved, Storage.
+- Every setting that can help when changed is adjustable, with a Recommended value for this
+  phone; Advanced holds the rest (frame window size, fps, image detail, model).
+- "Off the record" mode (not "private": the whole app is private): stays on until left; a
+  line at the top "Off the record: this chat won't be saved". Uses all memories, saves nothing.
+  Dark display.
+
+Media in chat:
+
+- Show the actual stored moment, not a made clip: an inline player opened at that moment,
+  scrub, tap ±5 s, free scroll outside the moment with a "Back to moment" button; Share and
+  Save. Save offers a folder intelligently ("Pictures/Sidekick/Cars"), one tap to accept.
+- Photos the same (swipe to neighbouring frames).
+- Recall results: sort Best match / Newest / Oldest; only confident matches shown; Gemma
+  checks the top matches by looking at them before answering. Text-to-image search works
+  directly (the query is compared with the image, not with a caption).
+
+Smart defaults pattern (everywhere): Automatic (Recommended) / Ask me / Off. Used for: model
+updates (download better model on Wi-Fi + charging, switch after it works, delete the old one),
+downloads on mobile data, storage cleanup, voice choice, frame rate.
+
+Models: Recommended model per phone by default; Advanced lists alternatives (faster / smarter)
+with size and speed; new models update automatically unless "Ask before updating" is on.
+
+Uninstall: models (app-specific external files) and all data (app internal storage) are
+deleted by Android on uninstall; only files the user saved/exported to shared folders stay.
+Settings → Privacy → Delete all data does the same from inside the app.
+
+Distribution: both, one codebase, two flavours.
+
+- Play (default for everyone): no Accessibility control; messages sent through notification
+  replies, else the app opens prefilled.
+- Direct APK ("full"): Accessibility can complete actions in other apps (tap Send) and direct
+  SMS. Not against Google's terms; Android 13+ makes the user allow "restricted settings"
+  for Accessibility, and Google's developer verification for sideloaded apps needs the owner's
+  verified developer identity.
+
+Integrations now (each with its own switches in Connections):
+
+- Calendar (read, create, edit), alarms and timers, Sidekick reminders, contacts, phone calls,
+  maps/navigation hand-off, media control (play/pause/next, what's playing), photos/files
+  (already), notifications read (Android).
+- Messages (WhatsApp, Messages, Telegram, Signal…): read incoming via notification access;
+  reply in the chat, sent through the notification's reply action; new conversations: draft
+  in chat → opens the app prefilled (full APK: sent automatically).
+- Email: Google sign-in (gmail.send) so Sidekick sends directly; draft card first (Send / Edit
+  / Cancel / Open in Gmail). Reading mail uses notifications (Gmail's read scopes need a paid
+  yearly security assessment). Needs the owner's Google Cloud OAuth client (free) — owner step.
+- Offline: actions needing the internet wait in an outbox shown in the chat and go when online.
+- Automations and voice: every action is available by voice and in typed chat.
+
+Dev tooling (owner): auto-memory off for this repo; facts live in repo docs (this file,
+AGENTS.md, ADRs). Minimal hooks only (see AGENTS.md).
+
+Owner steps needed later (not blocking the build):
+
+- Google Play developer account (one-time fee) — owner pays.
+- Google Cloud OAuth client for Gmail sending — owner's Google account.
+- Plug in the USB camera for the device tests.
+
 ## Chat
 
-- [ ] One continuous conversation, no "New chat" button. Recent turns verbatim; older turns
+- [ ] One continuous conversation, no "New chat" button (owner: confirmed). Recent turns verbatim; older turns
       compacted into a running summary when: size limit, 10 min idle, or a natural end
       ("I'm going out", "that's all", "bye"). Every turn also saved in memory (searchable).
-- [ ] **Private mode:** can use all memories but saves nothing from the chat. Visually distinct
-      (dark display). Enter by long-pressing the Ask button (one-off question) or a toggle
-      (stays on until turned off). Owner to confirm the gesture (see questions).
+- [ ] Off the record mode (see decisions above).
 - [ ] Chat shows images / video clips of what was seen when useful (as in livestream-ai).
 - [ ] Scrollable chat history, copy and share an answer.
 - [ ] Drafts (email, message, event) appear in the chat as cards: Send / Edit / Cancel /
@@ -166,7 +239,4 @@ questions at the end; nothing below is built yet unless marked.**
 
 ## Open questions (owner)
 
-1. Distribution: Google Play, direct APK, or both? Play forbids using Accessibility to drive
-   other apps; direct APK allows it (fuller "do it for me" control of any app).
-2. Email: draft in chat → Send opens the mail app prefilled (one more tap there), or optional
-   Google sign-in so Sidekick sends directly (uses Google's servers, an account link)?
+None open (answered 25 Nov: both flavours; email via Google sign-in).
