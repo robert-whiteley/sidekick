@@ -1,0 +1,72 @@
+# Store steps for Sidekick (app.ondevice.sidekick), Android only.
+#
+# Division of labour: EAS builds the .aab and `eas submit` uploads it (to the internal track,
+# as a draft). These lanes do only what EAS doesn't: push listing copy and changelogs, and move a
+# release between tracks. Every lane skips the binary upload, so no Android SDK or gradle is needed.
+#
+# Driven by scripts/release.sh. Direct use (key file in place, see fastlane/Appfile):
+#   bundle exec fastlane android upload_metadata
+#   bundle exec fastlane android upload_to_track track:internal version_code:12
+#   bundle exec fastlane android promote from:internal to:alpha rollout:1
+# Play track names: internal, alpha (= closed testing), beta (= open testing), production.
+
+ENV["FASTLANE_SKIP_DOCS"] = "1"
+
+METADATA = File.expand_path("metadata/android", __dir__).freeze
+
+def truthy(val, default:)
+  return default if val.nil?
+  %w[1 true yes y].include?(val.to_s.strip.downcase)
+end
+
+platform :android do
+  desc "Upload title, descriptions and images (no binary, no changelogs)"
+  lane :upload_metadata do
+    supply(
+      metadata_path: METADATA,
+      skip_upload_apk: true,
+      skip_upload_aab: true,
+      skip_upload_changelogs: true,
+      # Images only once real files exist in images/ (see fastlane/IMAGES.md).
+      skip_upload_images: !truthy(ENV["UPLOAD_IMAGES"], default: false),
+      skip_upload_screenshots: !truthy(ENV["UPLOAD_IMAGES"], default: false),
+    )
+  end
+
+  desc "Attach changelogs to an already-uploaded version code on a track (status draft by default)"
+  lane :upload_to_track do |options|
+    supply(
+      metadata_path: METADATA,
+      track: options.fetch(:track, "internal"),
+      version_code: Integer(options.fetch(:version_code)),
+      release_status: options.fetch(:status, "draft"),
+      skip_upload_apk: true,
+      skip_upload_aab: true,
+      skip_upload_metadata: true,
+      skip_upload_images: true,
+      skip_upload_screenshots: true,
+    )
+  end
+
+  desc "Promote the latest release on one track to another, e.g. internal -> alpha -> production"
+  lane :promote do |options|
+    from = options.fetch(:from)
+    to = options.fetch(:to)
+    rollout = options[:rollout]&.to_f
+    params = {
+      track: from,
+      track_promote_to: to,
+      release_status: rollout && rollout < 1 ? "inProgress" : options.fetch(:status, "completed"),
+      skip_upload_apk: true,
+      skip_upload_aab: true,
+      skip_upload_metadata: true,
+      skip_upload_images: true,
+      skip_upload_screenshots: true,
+      skip_upload_changelogs: false,
+      metadata_path: METADATA,
+    }
+    params[:rollout] = rollout.to_s if rollout && rollout < 1
+    params[:version_code] = Integer(options[:version_code]) if options[:version_code]
+    supply(**params)
+  end
+end

@@ -33,6 +33,7 @@ import {
 import { integrationsNative, messageThreads, nowPlaying } from '@/integrations/native';
 import { mightBeAction, parseIntent, type Intent } from '@/integrations/parse';
 import { isOn } from '@/integrations/prefs';
+import { planPhoneControl } from '@/integrations/phone-controls';
 import { sendsAtText, splitSchedule } from '@/integrations/schedule-logic';
 import type { Draft, DraftKind, DraftFieldsByKind, PlannedAction } from '@/integrations/types';
 import type { MessageThread } from '@/integrations/native';
@@ -464,6 +465,9 @@ export async function planAction(
   }
   const intent = parseIntent(question, now, contacts);
   if (intent) return fromIntent(intent, now);
+  // Sums, conversions, the time elsewhere, and phone controls (src/integrations/phone-controls.ts).
+  const control = await planPhoneControl(question, now).catch(() => null);
+  if (control) return control;
   const moved = await moveEvent(question, now).catch(() => null);
   if (moved) return moved;
   if (opts.useModel === false || !mightBeAction(question)) return null;

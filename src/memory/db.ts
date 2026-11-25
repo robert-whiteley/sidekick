@@ -195,6 +195,11 @@ export const MIGRATIONS: { table: string; column: string; ddl: string; after?: s
   { table: 'followups', column: 'repeat', ddl: 'ALTER TABLE followups ADD COLUMN repeat TEXT' },
 ];
 
+/** Drops unapproved fact suggestions that are model templates, not things said. */
+export const TEMPLATE_CLEANUP =
+  "DELETE FROM facts WHERE status = 'suggested' AND (text LIKE '%[%' OR text LIKE '%]%' " +
+  "OR text LIKE '%{%' OR text LIKE '%<%' OR text LIKE '%...%' OR text LIKE '%…%')";
+
 function migrate(d: DB) {
   for (const m of MIGRATIONS) {
     const cols = d.executeSync(`PRAGMA table_info(${m.table})`).rows.map((r) => r.name);
@@ -211,6 +216,8 @@ export async function getDb(): Promise<DB> {
   d.executeSync('PRAGMA foreign_keys = ON');
   for (const sql of SCHEMA) d.executeSync(sql);
   migrate(d);
+  // Template suggestions ("My name is [Name].") saved before parseFacts rejected them.
+  d.executeSync(TEMPLATE_CLEANUP);
   db = d;
   return d;
 }

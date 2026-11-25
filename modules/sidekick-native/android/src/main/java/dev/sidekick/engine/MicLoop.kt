@@ -33,6 +33,11 @@ object MicLoop {
   @Volatile var ambient = false
     private set
   @Volatile private var ptt: MutableList<FloatArray>? = null
+  /** Live words while the user talks (push-to-talk, or a spoken question): see Partials. */
+  @Volatile var partialsEnabled = true
+  private var pttSamples = 0
+  private val pttPartials = PartialPolicy()
+  private val questionPartials = PartialPolicy()
   @Volatile private var paused = false
   @Volatile private var running = false
   private var thread: Thread? = null
@@ -137,6 +142,9 @@ object MicLoop {
   }
 
   fun startPtt(ctx: Context) {
+    Partials.next()
+    pttSamples = 0
+    pttPartials.reset()
     ptt = mutableListOf()
     ensureRunning(ctx)
   }
@@ -145,6 +153,7 @@ object MicLoop {
   fun stopPtt(): FloatArray {
     val chunks = ptt ?: return FloatArray(0)
     ptt = null
+    Partials.next() // the final text replaces any partial still being decoded
     stopIfIdle()
     return concat(chunks)
   }
@@ -242,6 +251,17 @@ object MicLoop {
         samplesSeen += n
         ptt?.add(samples)
         val nowMs = System.currentTimeMillis()
+        val pttList = ptt
+        if (pttList != null && partialsEnabled) {
+          pttSamples += samples.size
+          if (pttPartials.due(nowMs, pttSamples, Partials.isBusy)) {
+            pttPartials.started(nowMs, pttSamples)
+            val sofar = concat(pttList.toList())
+            Partials.offer(sofar, "ptt", { runCatching { Speech.engine(ctx, wakeKeywords) }.getOrNull() }, { it.trim() }) {
+              if (ptt === pttList) emit("onPartialTranscript", it)
+            }
+          }
+        }
         val inConversation = turns.active(nowMs)
         if (!needed(nowMs)) break
         if (inConversation != conversation && ptt == null) {
@@ -342,6 +362,19 @@ object MicLoop {
         }
         vad.acceptWaveform(samples)
         heard.write(samples)
+        // The spoken question so far, shown as it is said (the final text comes from the segment).
+        if (partialsEnabled && questionMode && (!talking || bargedIn) && vad.isSpeechDetected()) {
+          val ms = minOf(maxOf(turnEnd.turnMs(), 0) + TURN_PREROLL_MS, WhisperMel.SECONDS * 1000)
+          val qn = ms * (SAMPLE_RATE / 1000)
+          if (questionPartials.due(nowMs, qn, Partials.isBusy)) {
+            questionPartials.started(nowMs, qn)
+            Partials.offer(heard.last(qn), "question", { engine }, { raw -> if (startsWithWake(raw)) stripWake(raw) else raw.trim() }) {
+              emit("onPartialTranscript", it)
+            }
+          }
+        } else if (!vad.isSpeechDetected()) {
+          questionPartials.reset()
+        }
         // Smart Turn: on a short pause in a spoken question, end the turn now if it sounds finished.
         var endNow = false
         if (questionMode && speechP >= 0f && (!talking || bargedIn) && !smartTurnFailed) {
@@ -430,6 +463,7 @@ object MicLoop {
       }
       if (isQuestion) {
         awaitingQuestionUntil = 0
+        Partials.next()
         Voice.turns.questionTaken()
       }
       val entry =

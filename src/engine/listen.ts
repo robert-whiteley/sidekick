@@ -84,6 +84,13 @@ export function stopListening() {
 
 export const isListening = () => SidekickNative.listenActive();
 
+/** Turns listening back on when it was on before the app was killed (call from a visible screen). */
+export async function resumeListening(): Promise<boolean> {
+  if (Platform.OS !== 'android') return false;
+  if (isListening() || !SidekickNative.listenWanted()) return isListening();
+  return (await startListening()) === null;
+}
+
 let voiceFetch: Promise<void> | null = null;
 
 /**

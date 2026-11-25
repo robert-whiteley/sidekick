@@ -38,12 +38,6 @@ export const MODEL_FILES = {
     sha256: '0b2a8980ce155fd97673d8e820b4d29d9c7d99b8fa6806f425d969b145bd52e0',
     bytes: 3659530240,
   },
-  benchPhoto: {
-    name: 'test.jpg',
-    url: 'https://raw.githubusercontent.com/robert-whiteley/sidekick/main/assets/bench/test.jpg',
-    sha256: '1ff925eb7fc6cd39ababdfede93b2103a26638c26350a00f3da96157bd8c9ac9',
-    bytes: 44731,
-  },
   // Speech (sherpa-onnx). Small, CPU-only, always resident while listening.
   vad: {
     name: 'silero_vad_v6.2.3.onnx',

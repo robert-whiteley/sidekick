@@ -1,3 +1,4 @@
+import { Asset } from 'expo-asset';
 import { useEffect, useRef, useState } from 'react';
 import { Button, ScrollView, StyleSheet, Text, View } from 'react-native';
 
@@ -14,6 +15,12 @@ import { EMBEDDER_FILE, MODEL_FILES, type ModelFile } from '@/engine/models';
 import { callIfExists, speedLine, wavSeconds, type SpeedResult } from '@/engine/bench-logic';
 import { EMBED_DIMS } from '@/memory/db';
 import { cosine } from '@/memory/voices';
+
+/** The speed-test photo, bundled with the app (no download). */
+async function benchPhoto(): Promise<string | null> {
+  const a = await Asset.fromModule(require('../../assets/bench/test.jpg')).downloadAsync();
+  return a.localUri?.replace(/^file:\/\//, '') ?? null;
+}
 
 const MOONSHINE_WAVS = 'sherpa-onnx-nemo-parakeet-tdt-0.6b-v2-int8/test_wavs';
 const KWS_WAVS = 'sherpa-onnx-kws-zipformer-gigaspeech-3.3M-2024-01-01/test_wavs';
@@ -237,8 +244,8 @@ export default function BenchScreen() {
 
       // 1. Chat model: text and photo questions under each tuning.
       await SidekickNative.embedUnload();
-      const photo = `${modelsDir}/test.jpg`;
-      const hasPhoto = SidekickNative.fileExists(photo);
+      const photo = await benchPhoto();
+      const hasPhoto = !!photo && SidekickNative.fileExists(photo);
       if (!hasPhoto) fail('photo', '', 'test.jpg missing');
       for (const [name, tuning] of LLM_TUNINGS) {
         await unloadLlm();
@@ -361,7 +368,7 @@ export default function BenchScreen() {
       const s: LlmStats = await SidekickNative.llmGenerate(
         reqId.current,
         kind === 'text' ? TEXT_PROMPT : PHOTO_PROMPT,
-        kind === 'photo' ? `${modelsDir}/test.jpg` : null,
+        kind === 'photo' ? await benchPhoto() : null,
       );
       add(
         `${kind}: total ${(s.totalMs / 1000).toFixed(1)} s · first word ${(s.ttftMs / 1000).toFixed(1)} s · ` +
@@ -385,7 +392,7 @@ export default function BenchScreen() {
         <Button
           title="Download model + photo"
           disabled={busy}
-          onPress={() => download([MODEL_FILES.gemmaGeneric, MODEL_FILES.benchPhoto])}
+          onPress={() => download([MODEL_FILES.gemmaGeneric])}
         />
       </View>
       {progress !== '' && <Text>{progress}</Text>}

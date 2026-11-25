@@ -1,0 +1,5 @@
+• First release: a private helper that runs on your phone and works offline.
+• Ask by voice or typing; answers are spoken and shown in the chat.
+• Remembers what you see and hear, so you can ask about it later.
+• Reminders, to-dos and message drafts, each waiting for your OK.
+• Online lookup is off until you turn it on.

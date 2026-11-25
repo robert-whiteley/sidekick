@@ -216,6 +216,9 @@ class ListenService : Service() {
       else ctx.stopService(Intent(ctx, ListenService::class.java))
     }
 
+    fun wanted(ctx: Context): Boolean =
+      ctx.getSharedPreferences("sidekick", Context.MODE_PRIVATE).getBoolean(PREF_ACTIVE, false)
+
     private fun remember(ctx: Context, on: Boolean) =
       ctx.getSharedPreferences("sidekick", Context.MODE_PRIVATE).edit().putBoolean(PREF_ACTIVE, on).apply()
   }

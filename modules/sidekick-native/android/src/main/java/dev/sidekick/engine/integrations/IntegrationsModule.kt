@@ -26,6 +26,28 @@ class IntegrationsModule : Module() {
       Intents.openMessage(context, activity, app, number, text)
     }
 
+    // Phone controls (PhoneControls.kt).
+    Function("launchableApps") { PhoneControls.launchableApps(context) }
+    Function("openApp") { pkg: String -> PhoneControls.openApp(context, activity, pkg) }
+    // 1 = on, 0 = off, -1 = no torch (on: 1 on, 0 off, -1 toggle).
+    Function("flashlight") { on: Int ->
+      when (PhoneControls.flashlight(context, if (on < 0) null else on == 1)) { true -> 1; false -> 0; null -> -1 }
+    }
+    Function("volume") { dir: String, percent: Int -> PhoneControls.volume(context, dir, percent) }
+    Function("dndAccess") { PhoneControls.dndAccess(context) }
+    Function("openDndAccess") { PhoneControls.openDndAccess(context, activity) }
+    Function("setDnd") { on: Boolean -> PhoneControls.setDnd(context, on) }
+    Function("canWriteSettings") { PhoneControls.canWriteSettings(context) }
+    Function("openWriteSettings") { PhoneControls.openWriteSettings(context, activity) }
+    Function("brightness") { PhoneControls.brightness(context) }
+    Function("setBrightness") { percent: Int -> PhoneControls.setBrightness(context, percent) }
+    Function("openPanel") { kind: String -> PhoneControls.openPanel(context, activity, kind) }
+    Function("playFromSearch") { query: String, pkg: String -> PhoneControls.playFromSearch(context, activity, query, pkg) }
+    Function("isLocked") { PhoneControls.isLocked(context) }
+    AsyncFunction("requestUnlock") { promise: Promise ->
+      PhoneControls.requestUnlock(activity) { promise.resolve(it) }
+    }.runOnQueue(expo.modules.kotlin.functions.Queues.MAIN)
+
     Function("notificationAccess") { NotificationCapture.accessGranted(context) }
     Function("openNotificationAccess") { NotificationCapture.openAccessSettings(context) }
     Function("messageThreads") { onlyMessages: Boolean -> NotificationHub.threads(context, onlyMessages) }

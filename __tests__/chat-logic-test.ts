@@ -3,6 +3,7 @@ import {
   historyToMessages,
   isMicTap,
   mediaForAnswer,
+  partialStatus,
   patchMessage,
   shouldSpeak,
   withoutOffRecord,
@@ -78,4 +79,11 @@ test('leaving Off the record removes what was said in it', () => {
   expect(withoutOffRecord(msgs).map((m) => m.id)).toEqual(['a']);
   expect(patchMessage(msgs, 'a', { text: 'edited' })[0].text).toBe('edited');
   expect(patchMessage(msgs, 'zz', { text: 'x' })).toEqual(msgs);
+});
+
+test('live words show while talking, trimmed to the last few', () => {
+  expect(partialStatus('  ')).toBe('Listening…');
+  expect(partialStatus('what time is it')).toBe('“what time is it…”');
+  const long = Array.from({ length: 20 }, (_, i) => `w${i}`).join(' ');
+  expect(partialStatus(long, 3)).toBe('“…w17 w18 w19…”');
 });

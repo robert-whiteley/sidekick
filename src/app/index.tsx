@@ -14,6 +14,7 @@ import { onLlmLoaded } from '@/engine/llm';
 import { noteLlmLoaded, startModelUpdates } from '@/engine/model-updates';
 import { startStorageMonitor } from '@/engine/storage-monitor';
 import { FirstRun } from '@/features/onboarding/FirstRun';
+import { checkWhatsNew } from '@/content/whats-new-notice';
 
 function modelsReady() {
   const ready = allRequiredFiles(SidekickNative.getDeviceInfo().soc).every(isDownloaded);
@@ -33,6 +34,7 @@ export default function HomeScreen() {
   // Model updates (Automatic / Ask me / Off) and storage cleanup run once the models are in.
   useEffect(() => {
     if (!ready) return;
+    checkWhatsNew();
     const stops = [
       onLlmLoaded(noteLlmLoaded),
       startModelUpdates(),

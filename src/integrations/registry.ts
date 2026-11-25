@@ -41,6 +41,23 @@ export const INTEGRATIONS: Integration[] = [
     androidOnly: true,
   },
   {
+    id: 'phone',
+    name: 'Phone controls',
+    description:
+      'Open apps, torch, volume, Do Not Disturb, brightness, and "play X on Spotify". Wi-Fi, Bluetooth, mobile data and airplane mode open their switch: Android doesn’t let apps flip them.',
+    switches: [
+      { id: 'apps', label: 'Open apps by name', default: true },
+      { id: 'torch', label: 'Torch', default: true },
+      { id: 'volume', label: 'Volume', default: true },
+      { id: 'dnd', label: 'Do Not Disturb', default: true },
+      { id: 'brightness', label: 'Screen brightness', default: true },
+      { id: 'panels', label: 'Open Wi-Fi, Bluetooth, data and airplane switches', default: true },
+      { id: 'play', label: 'Play songs, albums and podcasts by name', default: true },
+    ],
+    androidOnly: true,
+    needs: 'Do Not Disturb access and "Modify system settings" (asked the first time)',
+  },
+  {
     id: 'contacts',
     name: 'Contacts',
     description: 'Find numbers and email addresses for the people you name.',

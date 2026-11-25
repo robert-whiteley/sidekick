@@ -233,6 +233,69 @@ export function phoneFeatures(p: DeviceProfile): PhoneFeature[] {
       available: android && p.osVersion >= 29,
       why: android ? 'Needs Android 10 or newer' : notIphone('one microphone at a time'),
     },
+    {
+      id: 'openApps',
+      name: 'Open apps by name',
+      available: android,
+      why: notIphone('apps can’t open other apps by name'),
+    },
+    {
+      id: 'torch',
+      name: 'Torch on and off',
+      available: android,
+      why: notIphone('only Siri and Control Centre can'),
+    },
+    {
+      id: 'volume',
+      name: 'Volume up, down and mute',
+      available: android,
+      why: notIphone('apps can’t change the volume'),
+    },
+    {
+      id: 'dnd',
+      name: 'Do Not Disturb on and off (after you allow it)',
+      available: android,
+      why: notIphone('only Focus can'),
+    },
+    {
+      id: 'brightness',
+      name: 'Screen brightness (after you allow it)',
+      available: android,
+      why: notIphone('apps can only dim their own screen'),
+    },
+    {
+      id: 'radios',
+      name: 'Switch Wi-Fi, Bluetooth, mobile data, airplane mode',
+      available: false,
+      why: android
+        ? 'Not possible: Android 10 and later don’t let apps switch these; Sidekick opens the switch for you'
+        : notIphone('apps can’t switch these'),
+    },
+    {
+      id: 'playFromSearch',
+      name: '“Play X on Spotify”',
+      available: android,
+      why: notIphone('apps can’t start music in other apps'),
+    },
+    {
+      id: 'quickAnswers',
+      name: 'Sums, unit conversions and world time (exact, no AI)',
+      available: true,
+    },
+    { id: 'translate', name: 'Translate, including the text in the camera view', available: true },
+    {
+      id: 'screenQuestion',
+      name: '“What’s on my screen?”',
+      available: android,
+      why: notIphone('apps can’t see other apps’ screens'),
+    },
+    {
+      id: 'lockScreen',
+      name: 'Safe answers while the phone is locked (sums, timers, torch); unlock for anything personal',
+      available: android,
+      why: notIphone('only Siri works on the lock screen'),
+    },
+    { id: 'appLock', name: 'App lock (fingerprint, face or PIN)', available: true },
     { id: 'offline', name: 'Works fully offline', available: true },
   ];
 }

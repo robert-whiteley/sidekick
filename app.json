@@ -27,8 +27,16 @@
       "predictiveBackGestureEnabled": false,
       "package": "app.ondevice.sidekick",
       "allowBackup": false,
-      "blockedPermissions": ["android.permission.WRITE_CONTACTS"],
-      "permissions": ["android.permission.SCHEDULE_EXACT_ALARM"]
+      "blockedPermissions": [
+        "android.permission.WRITE_CONTACTS",
+        "android.permission.READ_MEDIA_IMAGES",
+        "android.permission.READ_MEDIA_VIDEO",
+        "android.permission.READ_MEDIA_AUDIO",
+        "android.permission.READ_MEDIA_VISUAL_USER_SELECTED",
+        "android.permission.ACCESS_MEDIA_LOCATION",
+        "android.permission.SYSTEM_ALERT_WINDOW"
+      ],
+      "permissions": ["android.permission.SCHEDULE_EXACT_ALARM", "android.permission.CALL_PHONE"]
     },
     "web": {
       "favicon": "./assets/favicon.png"
@@ -78,7 +86,7 @@
       "./plugins/without-firebase-messaging",
       "./plugins/with-usb-camera",
       "expo-video",
-      "expo-audio"
+      ["expo-audio", { "enableBackgroundPlayback": false }]
     ],
     "scheme": "sidekick",
     "experiments": {
@@ -93,6 +101,9 @@
       "google": {
         "androidClientId": "589193178601-soll8g1g6m3krjvcidu3jnl57f69kjfp.apps.googleusercontent.com"
       },
+      "support": {
+        "email": ""
+      },
       "eas": {
         "projectId": "9e5e57c2-26e2-4ca4-9191-3606924369f5"
       }
@@ -102,7 +113,8 @@
       "policy": "fingerprint"
     },
     "updates": {
-      "url": "https://u.expo.dev/9e5e57c2-26e2-4ca4-9191-3606924369f5"
+      "url": "https://u.expo.dev/9e5e57c2-26e2-4ca4-9191-3606924369f5",
+      "checkAutomatically": "NEVER"
     }
   }
 }

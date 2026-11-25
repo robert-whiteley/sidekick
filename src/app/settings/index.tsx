@@ -38,8 +38,8 @@ export default function SettingsScreen() {
       <NavRow label="Storage" hint="What's using space, how long things are kept" href="/storage" />
       <NavRow
         label="About Sidekick"
-        hint="What it does and how your data stays private"
-        href="/onboarding"
+        hint="Version, what's new, privacy policy, licences, feedback"
+        href="/about"
       />
     </Page>
   );

@@ -81,6 +81,8 @@ export type SidekickNativeModuleEvents = {
   onLlmText: (event: { requestId: string; text: string }) => void;
   onWake: (event: Record<string, never>) => void;
   onTranscript: (event: { kind: 'speech' | 'question'; text: string; at: number }) => void;
+  /** Words said so far while the user is still talking (replaced by the final text). */
+  onPartialTranscript: (event: { text: string; source: 'ptt' | 'question' }) => void;
   /** followUp: said during or right after an answer (no wake word), so the chat continues. */
   onQuestion: (event: { text: string; followUp?: boolean }) => void;
   /** The user talked over Sidekick: the voice and the running answer were stopped natively. */

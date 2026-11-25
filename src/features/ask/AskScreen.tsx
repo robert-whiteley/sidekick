@@ -52,6 +52,7 @@ import {
 import {
   configureListening,
   isListening,
+  resumeListening,
   askMicPermission,
   startListening,
   stopListening,
@@ -85,6 +86,7 @@ import {
   type ChatMessage,
   isMicTap,
   mediaForAnswer,
+  partialStatus,
   patchMessage,
   shouldSpeak,
   withoutOffRecord,
@@ -195,6 +197,13 @@ export function AskScreen({
       });
   }, []);
 
+  // Listening stays on across the app being killed and reopened.
+  useEffect(() => {
+    resumeListening()
+      .then((on) => on && setListening(true))
+      .catch(() => {});
+  }, []);
+
   // Plugged-in cameras, mics and headphones; the headset button asks a question (walk mode).
   useEffect(() => {
     openBestCamera();
@@ -286,6 +295,10 @@ export function AskScreen({
     startFollowupNotifications();
     const subs = [
       SidekickNative.addListener('onWake', () => setStatus('Listening…')),
+      // The words so far, live while the user talks; the final text replaces them.
+      SidekickNative.addListener('onPartialTranscript', (e) => {
+        if (!busyRef.current || e.source === 'question') setStatus(partialStatus(e.text));
+      }),
       SidekickNative.addListener('onQuestion', (e) => askRef.current(e.text, e.followUp)),
       SidekickNative.addListener('onBargeIn', () => setStatus('Listening…')),
       SidekickNative.addListener('onVoiceIdle', () => {
@@ -547,17 +560,25 @@ export function AskScreen({
         setMessages((m) => patchMessage(m, userId, { media: shown }));
       }
       setStatus(imagePath ? 'Looking…' : 'Thinking…');
+      let answered = false;
       // offTheRecord: uses all memories, saves nothing (assistant.ts).
       const opts = {
         keepHistory,
         offTheRecord: offRecordNow,
         spoken: spoken !== undefined,
+        // Progress as it happens, until the first words of the answer replace it.
+        onStatus: (line: string) => {
+          if (!answered) setStatus(line);
+        },
+        onFound: (media: ChatMedia[]) => setMessages((m) => patchMessage(m, replyId, { media })),
       } as Parameters<typeof answerQuestion>[3];
       holdLiveCamera(true);
       const r = await answerQuestion(
         grab ? screenQuestion(q, grab) : q,
         imagePath,
         (full) => {
+          if (!answered) setStatus('');
+          answered = true;
           setPhase('answering');
           setMessages((m) => patchMessage(m, replyId, { text: full }));
           sp.update(full);

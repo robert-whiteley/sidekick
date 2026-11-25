@@ -90,3 +90,11 @@ export const withoutOffRecord = (msgs: ChatMessage[]) => msgs.filter((m) => !m.o
 /** Replaces the message with `id` (no-op when it is gone). */
 export const patchMessage = (msgs: ChatMessage[], id: string, patch: Partial<ChatMessage>) =>
   msgs.map((m) => (m.id === id ? { ...m, ...patch } : m));
+
+/** Status line for the words heard so far: the last few words, so a long question still fits. */
+export function partialStatus(text: string, maxWords = 14): string {
+  const words = text.trim().split(/\s+/).filter(Boolean);
+  if (!words.length) return 'Listening…';
+  const shown = words.length > maxWords ? `…${words.slice(-maxWords).join(' ')}` : words.join(' ');
+  return `“${shown}…”`;
+}

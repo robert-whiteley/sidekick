@@ -45,7 +45,7 @@ class SidekickNativeModule : Module() {
   override fun definition() = ModuleDefinition {
     Name("SidekickNative")
 
-    Events("onLlmText", "onWake", "onTranscript", "onQuestion", "onListenError", "onBargeIn", "onVoiceIdle", "onUsbCamera", "onAudioDevices", "onMediaButton", "onCamera")
+    Events("onLlmText", "onWake", "onTranscript", "onPartialTranscript", "onQuestion", "onListenError", "onBargeIn", "onVoiceIdle", "onUsbCamera", "onAudioDevices", "onMediaButton", "onCamera")
 
     OnCreate {
       MicLoop.listener = { name, body -> sendEvent(name, body) }
@@ -232,6 +232,9 @@ class SidekickNativeModule : Module() {
     Function("audioSaveEnabled") { on: Boolean -> SpeechAudio.enabled = on }
 
     Function("listenStart") { ListenService.startListening(context) }
+
+    // Listening was on when the app last ran (it stays on after the app is killed and reopened).
+    Function("listenWanted") { ListenService.wanted(context) }
 
     Function("listenStop") { ListenService.stopListening(context) }
 

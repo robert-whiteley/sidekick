@@ -47,6 +47,27 @@ type IntegrationsNative = {
   /** Google Authorization API for exactly [scopes]. Resolves with an access token or rejects. */
   googleAuthorize(scopes: string[]): Promise<string>;
   googleClearToken(token: string): Promise<void>;
+  // Phone controls (PhoneControls.kt); optional so older builds degrade to "not on this phone".
+  /** JSON [{label, pkg}] of apps with a home-screen icon. */
+  launchableApps?(): string;
+  openApp?(pkg: string): boolean;
+  /** on: 1 / 0 / -1 toggle. Returns 1 on, 0 off, -1 no torch. */
+  flashlight?(on: number): number;
+  /** Returns the media volume, 0-100. */
+  volume?(dir: 'up' | 'down' | 'mute' | 'unmute' | 'max' | 'set', percent: number): number;
+  dndAccess?(): boolean;
+  openDndAccess?(): boolean;
+  setDnd?(on: boolean): boolean;
+  canWriteSettings?(): boolean;
+  openWriteSettings?(): boolean;
+  /** 0-100, or -1 when automatic. */
+  brightness?(): number;
+  /** 0-100, or -1 for automatic. */
+  setBrightness?(percent: number): boolean;
+  openPanel?(kind: 'wifi' | 'internet' | 'bluetooth' | 'airplane' | 'nfc' | 'volume'): boolean;
+  playFromSearch?(query: string, pkg: string): boolean;
+  isLocked?(): boolean;
+  requestUnlock?(): Promise<boolean>;
 };
 
 let mod: IntegrationsNative | null | undefined;

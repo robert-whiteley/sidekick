@@ -1,3 +1,4 @@
+import { isTemplate } from './fact-extraction';
 import SidekickNative, { type JournalEntry } from '../../modules/sidekick-native';
 import { isDownloaded, modelPath } from '@/engine/downloads';
 import { EMBEDDER_FILE } from '@/engine/models';
@@ -466,6 +467,7 @@ export async function markFactsScanned(ids: number[]) {
 export async function suggestFacts(texts: string[]) {
   const known = new Set((await savedFacts()).map((f) => f.text.toLowerCase().replace(/\.$/, '')));
   for (const t of texts) {
+    if (isTemplate(t)) continue;
     if (!known.has(t.toLowerCase().replace(/\.$/, ''))) await saveFact(t, 'suggested');
   }
 }

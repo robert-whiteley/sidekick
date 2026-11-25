@@ -1,0 +1,42 @@
+Sidekick is an AI helper that runs entirely on your phone. It sees what your camera sees, hears what you say, and remembers it for you — without sending any of it anywhere.
+
+PRIVATE BY DESIGN
+• No account, no sign-up, no ads, no tracking.
+• Everything is processed on your phone and stored there, encrypted.
+• Works offline, even in airplane mode, once its AI models are downloaded.
+• Online lookup is off until you turn it on. Even then, only the search words are sent.
+• Export everything, or delete anything, any time. Uninstalling removes it all.
+
+ASK ANYTHING
+• Ask by voice, with a wake word, or by typing. Answers are spoken and shown in the chat.
+• "What am I looking at?" — point the camera and ask.
+• Hands-free when you're walking or driving: answers read aloud, and the headset button starts a question.
+
+REMEMBERS FOR YOU
+• Remembers what you've seen and heard, so you can ask later: "What did that sign say this morning?"
+• Search your memory by meaning, person, place or date.
+• Keeps notes on the people you talk to, with facts you approve.
+• Summaries of what you talked about today or this week.
+
+GETS THINGS DONE — ALWAYS WITH YOUR OK
+• Suggests reminders, to-dos and events from what you say; nothing is added until you approve it.
+• Recurring reminders ("every Monday at 9") and an optional daily briefing.
+• Drafts messages and emails in the chat; reads them back before sending, so you can change them.
+• Schedule a message for later.
+• Can read new messages aloud when you choose.
+• Quiet at night: it won't speak out loud while you sleep or in Do Not Disturb.
+
+CAMERA AND CONVERSATIONS
+• Use the phone camera or a USB camera.
+• Live transcript of conversations, with speakers told apart automatically.
+• Consent mode, on by default where the law requires everyone's agreement: voices that haven't agreed are not kept.
+• You always see when it's listening.
+
+OPTIONAL EXTRAS (OFF UNTIL YOU TURN THEM ON)
+• Online lookup through Wikipedia and DuckDuckGo, and news headlines.
+• Google sign-in, used only for the feature you pick: send approved emails with Gmail, sync to-dos with Google Tasks, or back up to your Google Drive. Your phone talks directly to Google.
+
+GOOD TO KNOW
+• Sidekick uses a small AI model that fits on a phone. It is good at everyday help but is not an expert on deep specifics, and it can make mistakes.
+• The first download is a few gigabytes; Wi-Fi is recommended. Download size depends on your phone.
+• Needs enough free storage for the models; Sidekick checks before downloading.

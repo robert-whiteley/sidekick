@@ -203,3 +203,12 @@ class WhisperMelTest {
     assertEquals(0f, w.next(a)[0])
   }
 }
+
+class ResidencyTest {
+  @org.junit.Test
+  fun bothStayLoadedOnlyOnBigPhonesWithMemoryToSpare() {
+    org.junit.Assert.assertTrue(Residency.alone(3700, false)) // iPhone 13 mini-class / 4 GB
+    org.junit.Assert.assertFalse(Residency.alone(7461, false)) // Pixel 5
+    org.junit.Assert.assertTrue(Residency.alone(7461, true)) // Pixel 5 short of memory
+  }
+}

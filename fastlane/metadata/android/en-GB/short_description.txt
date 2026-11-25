@@ -1,0 +1,1 @@
+An AI helper that runs on your phone. Works offline. Your data stays with you.

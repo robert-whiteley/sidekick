@@ -315,8 +315,7 @@ object LiveCapture {
   /** Never the embedder beside the chat model on a small phone, and never during an answer. */
   private fun canEmbed(ctx: Context): Boolean {
     if (hold) return false
-    val small = totalRamMb(ctx) < 6 * 1024
-    return !(small && Engines.llm(ctx).loaded != null)
+    return !(Embedder.mustBeAlone(ctx) && Engines.llm(ctx).loaded != null)
   }
 
   // --- device state ---------------------------------------------------------------------------
@@ -503,12 +502,6 @@ object LiveCapture {
     val tmp = File(f.parentFile, f.name + ".tmp")
     FileOutputStream(tmp).use { bmp.compress(Bitmap.CompressFormat.JPEG, quality, it) }
     tmp.renameTo(f)
-  }
-
-  private fun totalRamMb(ctx: Context): Long {
-    val mem = ActivityManager.MemoryInfo()
-    (ctx.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager).getMemoryInfo(mem)
-    return mem.totalMem / MB
   }
 }
 

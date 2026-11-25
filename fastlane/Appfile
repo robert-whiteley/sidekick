@@ -1,0 +1,4 @@
+# Google Play package and the Play service-account key used by fastlane supply.
+# The key file is gitignored (.gitignore: google-service-account.json); never commit it.
+json_key_file(ENV.fetch("SUPPLY_JSON_KEY", File.expand_path("../google-service-account.json", __dir__)))
+package_name("app.ondevice.sidekick")

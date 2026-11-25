@@ -93,6 +93,10 @@ Owner steps needed later (not blocking the build):
   optional online services (web lookup, Gmail, model downloads); each permission is asked the
   first time that feature is used, not in one batch.
 - Plug in the USB camera for the device tests.
+- [x] Chat model + memory search model (embedder) loaded together: allowed when the phone has
+      ≥ 6 GB RAM and Android isn't short of memory; on smaller or memory-short phones one unloads
+      first (replaces "never together on the Pixel 5", which would reload the chat model after
+      every memory question).
 
 ## Chat
 
@@ -216,6 +220,25 @@ Owner steps needed later (not blocking the build):
 - [x] "What did we talk about today / this week": that time's lines, summarised on the phone.
       Built, not phone-tested.
 - [x] Haptic tick on send, cancel and listen start (expo-haptics, MIT; needs a new build).
+
+## Assistant parity (25 Nov, round 3)
+
+- [x] Live words while talking (push-to-talk, hands-free, after the wake word): Parakeet re-decodes
+      the clip every 0.7 s on its own thread; shown on the status line. Speech starts at the first
+      sentence (already). Status lines: searching memory / looking at N frames / reading the
+      picture / looking it up online / reading N sources; a recalled clip shows before the answer.
+      Built + unit-tested, not phone-tested.
+- [x] Phone controls (Settings → Connections → Phone controls): open an app by name, torch, volume
+      up/down/mute/%, Do Not Disturb (after allowing access), brightness (after "Modify system
+      settings"), Wi-Fi / Bluetooth / mobile data / airplane mode open their switch (apps can't
+      flip them), "play X on Spotify". Built + unit-tested, not phone-tested.
+- [x] Sums, unit conversions and world time worked out in code. Translation by Gemma, including
+      "translate this" on the camera or a screenshot (OCR first). "What's on my screen" points to
+      the assistant gesture. Timers and alarms already go through planAction. Built + tested.
+- [x] Phone locked (screen off, hands-free): only sums, conversions, the time, timers, alarms,
+      torch and volume; anything else says "Unlock your phone first". Built, not phone-tested.
+- [x] App lock in Settings → Privacy (expo-local-authentication, MIT): fingerprint, face or PIN on
+      open and after 1 min away (Every time / 1 / 5 / 15). Built, not phone-tested.
 
 ## From livestream-ai (the old cloud prototype; reviewed 25 Nov 2026)
 

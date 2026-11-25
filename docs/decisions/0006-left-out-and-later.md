@@ -120,3 +120,26 @@ Read this before proposing any of these again. Each line says why.
 - Daily briefing reuses the follow-up digest switch and hour (one setting, not two). Calendar events only when calendar access was already given; it never asks. Spoken once a day, on the first open after its time.
 - Recurring reminders: daily, weekdays or one weekday. "Every month", "every other week" and end dates are left out. Done moves the reminder to its next time; it never closes.
 - "What did we talk about": summarises up to 120 lines spread over the time asked (today, yesterday, this week, last week, this morning, last hour), on the phone.
+
+## Assistant parity (25 Nov)
+
+- Live words are a re-decode of the growing clip (Parakeet is offline-only; no new model, no new
+  licence). Every 0.7 s, one at a time, clips up to 30 s; longer push-to-talk shows no more live
+  words until the end. A partial can delay the final text by up to one decode. Shown on the status
+  line (last 14 words), not in the composer: editing AskScreen's composer was kept out.
+- Wi-Fi, Bluetooth, mobile data and airplane mode can't be switched by a Play app since Android 10:
+  Sidekick opens the system switch (Settings panel) instead.
+- Do Not Disturb sets "priority only", not "alarms only" or "total silence".
+- "Play X on Y" uses the standard play-from-search hand-off; apps that don't support it (YouTube)
+  get their search screen. Whether the app plays at once is up to the app.
+- Lock screen: Sidekick does not draw over the lock screen. Showing the chat there would show the
+  chat history to anyone holding the phone; left out. When the phone is locked (a spoken question
+  with the screen off), only sums, conversions, the time, timers, alarms, torch and volume run;
+  everything else says to unlock first. Phones kept unlocked by Smart Lock count as unlocked.
+- App lock covers the screen only. Background listening and spoken answers carry on while it is
+  locked (the phone-lock rule above still applies with the screen off).
+- Left out: changing the brightness without the "Modify system settings" permission (Android has
+  no other way), relative volume steps for other streams (ring, alarm), opening apps by package
+  name or deep links inside apps, and an offline translation model (Gemma translates; quality is
+  lower for rare languages).
+- Rejected: QUERY_ALL_PACKAGES (Play restricts it): the app list uses a launcher-intent query.

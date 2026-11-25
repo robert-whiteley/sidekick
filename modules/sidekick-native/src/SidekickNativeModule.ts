@@ -36,6 +36,7 @@ declare class SidekickNativeModule extends NativeModule<SidekickNativeModuleEven
   llmPrepare(system: string | null): Promise<boolean>;
   /** Small persistent settings (not for secrets). */
   kvGet(key: string): string | null;
+  listenWanted(): boolean;
   kvSet(key: string, value: string | null): void;
   downloadStart(url: string, destPath: string, title: string, wifiOnly: boolean): number;
   downloadStatus(id: number): DownloadStatus;

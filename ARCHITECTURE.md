@@ -24,7 +24,7 @@
 
 ## Memory budget
 
-On phones under 6 GB RAM (iPhone 13 mini) the LLM and the embedder are never resident together: embedding unloads the LLM first. The iOS build uses the `increased-memory-limit` entitlement.
+On phones under 6 GB RAM (iPhone 13 mini), and on any phone while Android reports low memory, the LLM and the embedder are never resident together: embedding unloads the LLM first, loading the LLM unloads the embedder, and live-camera frames wait (`Residency` in `Embedder.kt`). The iOS build uses the `increased-memory-limit` entitlement.
 
 The chip is chosen by measurement, not by a list: the first run times every backend that loads (one-token check, then a fixed prompt) and saves the fastest. On the Pixel 5 the GPU loads but writes slower than the CPU (2.9 vs 5.0 tokens/s), so it picks CPU. Measured on Pixel 5: typed question with memory ≈6 s, photo question ≈30 s.
 

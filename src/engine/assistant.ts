@@ -39,6 +39,9 @@ import {
 import { asksAboutSomethingSeen } from '@/memory/search-logic';
 import { ocrPromptLine } from '@/memory/photo-text';
 import { photoTextOrNull } from './photo-ocr';
+import { memoryStatus } from './progress';
+import { lockedReply } from '@/integrations/phone-controls';
+import { parseTranslate, translatePrompt } from '@/integrations/translate';
 import { answerLocally } from '@/memory/sources';
 import {
   asksAboutFollowups,
@@ -170,8 +173,24 @@ export async function answer(
    * The chat is always continuous (keepHistory is ignored, kept for older callers). offTheRecord:
    * uses memories but saves nothing, in its own chat (default: the Off the record setting).
    */
-  opts?: { keepHistory?: boolean; offTheRecord?: boolean; spoken?: boolean },
+  opts?: {
+    keepHistory?: boolean;
+    offTheRecord?: boolean;
+    spoken?: boolean;
+    /** Progress lines as each step starts: searching memory, looking at frames, online. */
+    onStatus?: (line: string) => void;
+    /** The recalled clip or photo, shown as soon as it is found (before the answer). */
+    onFound?: (media: NonNullable<AnswerResult['media']>) => void;
+  },
 ): Promise<AnswerResult> {
+  const status = opts?.onStatus ?? (() => {});
+  const done = (text: string): AnswerResult => {
+    onText(text);
+    return { text, usedPhoto: null, sources: [], ms: 0, ttftMs: 0, local: true };
+  };
+  // Phone locked (screen off, hands-free): nothing personal until it is unlocked.
+  const locked = lockedReply(question);
+  if (locked) return done(locked);
   const offRecord = opts?.offTheRecord ?? getSettings().offTheRecord ?? false;
   if (!offRecord) offRecordStarted = false;
   const remember = REMEMBER.exec(question.trim());
@@ -186,6 +205,29 @@ export async function answer(
     const text = "Got it, I'll remember that.";
     onText(text);
     return { text, usedPhoto: null, sources: [], ms: 0, ttftMs: 0, local: true };
+  }
+
+  // "Translate this" (the text in view, read exactly by OCR) or "translate … into French".
+  const tr = parseTranslate(question);
+  if (tr && (!photoNow || tr.fromView)) {
+    let source = tr.text;
+    if (tr.fromView) {
+      if (!photoNow)
+        return done(
+          'Point the camera at the text (or show it on screen and hold the home button), then say "translate this".',
+        );
+      status('Reading the text…');
+      source = (await photoTextOrNull(photoNow)) ?? '';
+      if (!source.trim()) return done("I can't see any text to translate.");
+    }
+    status(`Translating into ${tr.target}…`);
+    const t0 = Date.now();
+    const { text } = await askLlm(translatePrompt(source, tr.target), null, onText, {
+      system: SYSTEM_PROMPT,
+      maxTokens: 400,
+      scratch: true,
+    });
+    return { text, usedPhoto: photoNow, sources: [], ms: Date.now() - t0, ttftMs: 0 };
   }
 
   // "Remind me to … at …": scheduled for real, here, so the reply never claims what didn't happen.
@@ -264,6 +306,7 @@ export async function answer(
 
   let sources: Moment[] = [];
   let facts: string[] = [];
+  status('Searching memory…');
   try {
     [sources, facts] = await Promise.all([
       // A few extra candidates so a remembered photo can still be found below.
@@ -297,11 +340,17 @@ export async function answer(
   // frame beats an older photo note: it is what the question is about.
   const recall = photoNow ? null : await recallContext(question).catch(() => null);
   if (recall?.images.length) image = recall.images[0];
+  if (recall?.media)
+    opts?.onFound?.([
+      { momentAt: recall.media.at, kind: recall.media.kind, path: recall.media.path },
+    ]);
+  status(memoryStatus(sources.length, recall?.images.length ?? 0, recall?.refs.length ?? 0));
   if (recall && recall.intent !== 'none')
     console.log(
       `[recall] ${recall.intent}: ${recall.refs.length} matches, ${recall.images.length} images, media ${recall.media?.kind ?? 'none'}`,
     );
   // The photo's exact text (OCR, ~1 s) helps the model read numbers and names right.
+  if (image) status('Reading the picture…');
   const seenText = ocrPromptLine(await photoTextOrNull(image));
   const recallPart = recall?.promptPart ?? '';
   // A camera frame answers the question: unrelated notes would only pull the model away from it
@@ -346,6 +395,7 @@ export async function answer(
     onText,
     undefined,
     recent ? lastQuestion : undefined,
+    status,
   );
   lastQuestion = question;
 

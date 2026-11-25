@@ -52,6 +52,7 @@ jest.mock('@/engine/listen', () => ({
   askMicPermission: async () => true,
   startListening: async () => null,
   stopListening: jest.fn(),
+  resumeListening: jest.fn(async () => false),
 }));
 jest.mock('@/engine/speaker', () => ({
   StreamingSpeaker: class {
@@ -147,4 +148,11 @@ test('notices: info is a faint line, a decision is a card with buttons', async (
   expect(onAction).toHaveBeenCalledWith('keep7');
   expect(screen.queryByText('Storage runs out in 3 days')).toBeNull();
   await act(async () => notices.dismiss('fps'));
+});
+
+test('opening the chat turns listening back on if it was on before the app was killed', async () => {
+  const { resumeListening } = jest.requireMock('@/engine/listen');
+  resumeListening.mockClear();
+  await render(<AskScreen />);
+  expect(resumeListening).toHaveBeenCalledTimes(1);
 });

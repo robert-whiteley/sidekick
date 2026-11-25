@@ -93,6 +93,10 @@ export type Settings = {
   lastBriefingAt: number | null;
   /** Large downloads on mobile data. */
   mobileDataDownloads: 'ask' | 'auto' | 'off';
+  /** App lock: fingerprint, face or the phone's PIN to open Sidekick. */
+  appLock: boolean;
+  /** Minutes away before it asks again (0 = every time; null = Recommended, 1). */
+  appLockAfterMin: number | null;
   /** Measured silently in the background; refine the Recommended values (null = not yet). */
   measuredTokPerSec: number | null;
   measuredVoiceFirstSoundMs: number | null;
@@ -148,6 +152,8 @@ export const DEFAULTS: Settings = {
   haptics: null,
   lastBriefingAt: null,
   mobileDataDownloads: 'ask',
+  appLock: false,
+  appLockAfterMin: null,
   measuredTokPerSec: null,
   measuredVoiceFirstSoundMs: null,
 };

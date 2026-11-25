@@ -46,19 +46,27 @@ object Embedder {
     path = null
   }
 
-  /** Called before the chat model loads: on phones under 6 GB the two never stay loaded together. */
+  /** Called before the chat model loads: on small or memory-short phones the two never stay together. */
   @Synchronized
   fun unloadIfLowRam(ctx: Context) {
-    if (totalRamMb(ctx) < LOW_RAM_MB) unload()
+    if (mustBeAlone(ctx)) unload()
   }
 
-  private const val LOW_RAM_MB = 6 * 1024L
+  /**
+   * True when the chat model and the embedder must not be loaded together: a phone under 6 GB, or
+   * Android reporting low memory right now (other apps, a long camera run).
+   */
+  fun mustBeAlone(ctx: Context): Boolean {
+    val mem = ActivityManager.MemoryInfo()
+    (ctx.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager).getMemoryInfo(mem)
+    return Residency.alone(mem.totalMem / (1024 * 1024), mem.lowMemory)
+  }
 
   private fun load(ctx: Context, modelPath: String): EmbeddingEngine {
     engine?.takeIf { path == modelPath }?.let { return it }
     unload()
     Ocr.unload() // small, but frees room for a big model; reloads on the next photo
-    if (totalRamMb(ctx) < LOW_RAM_MB) Engines.llm(ctx).unload()
+    if (mustBeAlone(ctx)) Engines.llm(ctx).unload()
     val e = EmbeddingEngine(EmbeddingEngineConfig(modelPath = modelPath, backend = Backend.CPU(), visionBackend = Backend.CPU(), cacheDir = modelCacheDir(ctx)))
     e.initialize()
     pruneModelCache(modelCacheDir(ctx), modelPath)
@@ -67,9 +75,10 @@ object Embedder {
     return e
   }
 
-  private fun totalRamMb(ctx: Context): Long {
-    val mem = ActivityManager.MemoryInfo()
-    (ctx.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager).getMemoryInfo(mem)
-    return mem.totalMem / (1024 * 1024)
-  }
+}
+
+/** The residency rule, kept pure for tests. */
+object Residency {
+  const val SMALL_PHONE_MB = 6 * 1024L
+  fun alone(totalRamMb: Long, lowMemory: Boolean): Boolean = lowMemory || totalRamMb < SMALL_PHONE_MB
 }
