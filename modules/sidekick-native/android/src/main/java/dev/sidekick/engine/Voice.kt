@@ -21,8 +21,11 @@ import java.util.concurrent.atomic.AtomicInteger
 /**
  * Sidekick's spoken voice, shared by the app and the background service. Sentences are queued as
  * the answer streams in; each is synthesised with Kyutai Pocket TTS (sherpa-onnx) and streamed to
- * an AudioTrack while it is still being generated. The system voice is used while the model isn't
- * downloaded, if it fails to load, or if this phone turns out too slow for it.
+ * an AudioTrack while it is still being generated.
+ *
+ * One voice per phone, never switching mid-use: Pocket is timed once in the background (after it
+ * is downloaded) and kept only if its first sound comes within [VoiceChoice.MAX_FIRST_SOUND_MS];
+ * otherwise, and until that is decided, the system voice speaks. The owner can force either.
  *
  * [Turns] is kept in step so the mic knows when Sidekick is talking (barge-in, echo) and when the
  * follow-up window is open.
@@ -30,8 +33,13 @@ import java.util.concurrent.atomic.AtomicInteger
 object Voice {
   private const val TAG = "SidekickVoice"
   const val DIR = "sherpa-onnx-pocket-tts-int8-2026-01-26"
-  /** A short sentence whose first sound takes longer than this means the phone is too slow. */
-  private const val MAX_FIRST_SOUND_MS = 2500L
+  private const val PREFS = "sidekick"
+  private const val KEY_CHOICE = "voice.choice"
+  private const val KEY_MEASURED = "voice.measuredMs"
+  private const val KEY_OVERRIDE = "voice.override"
+  /** BCP-47 tag of the language Sidekick speaks ("" = the phone's); see language-logic.ts. */
+  private const val KEY_LANGUAGE = "voice.language"
+  private const val TEST_SENTENCE = "Sure, here is what I found."
   private const val DUCK_VOLUME = 0.25f
 
   val turns = Turns()
@@ -44,11 +52,31 @@ object Voice {
 
   @Volatile private var tts: OfflineTts? = null
   @Volatile private var ttsFailed = false
-  @Volatile private var tooSlow = false
+  @Volatile private var deciding = false
+  @Volatile private var decideLater: Context? = null
+  /** The voice of the answer being spoken, fixed when its first sentence is queued. */
+  @Volatile private var answerGen = -1
+  @Volatile private var answerEngine = "system"
   private var reference: FloatArray? = null
   private var referenceRate = 24000
   @Volatile private var track: AudioTrack? = null
   @Volatile private var volume = 1f
+  /** Speech speed (1 = normal, 0.5–2): "speak slower / faster" in Settings or by voice. */
+  @Volatile private var speechRate = 1f
+
+  fun setRate(r: Float) {
+    speechRate = r.coerceIn(0.5f, 2f)
+    track?.let { applyRate(it) }
+  }
+
+  // Time-stretch (pitch kept) on the neural voice's track.
+  private fun applyRate(t: AudioTrack) {
+    try {
+      t.playbackParams = android.media.PlaybackParams().setSpeed(speechRate).setPitch(1f)
+    } catch (e: Exception) {
+      Log.w(TAG, "speech speed $speechRate not supported", e)
+    }
+  }
 
   private var system: TextToSpeech? = null
   @Volatile private var systemReady = false
@@ -61,8 +89,101 @@ object Voice {
 
   fun modelReady(ctx: Context): Boolean = File("${Speech.modelsDir(ctx)}/$DIR/lm_main.int8.onnx").canRead()
 
-  /** Which voice answers: "pocket" (downloaded and fast enough) or "system". */
-  fun engineName(ctx: Context): String = if (!tooSlow && !ttsFailed && modelReady(ctx)) "pocket" else "system"
+  data class Info(val choice: String?, val measuredMs: Long?, val override: String, val active: String)
+
+  private fun prefs(ctx: Context) = ctx.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+
+  /** What was decided for this phone ("pocket" / "system", null until measured), and what speaks now. */
+  fun info(ctx: Context): Info {
+    val p = prefs(ctx)
+    val measured = p.getLong(KEY_MEASURED, -1L).takeIf { it >= 0 }
+    return Info(p.getString(KEY_CHOICE, null), measured, p.getString(KEY_OVERRIDE, "auto") ?: "auto", engineName(ctx))
+  }
+
+  /** The owner's choice in Settings: "auto" (recommended), "pocket" or "system". */
+  fun setOverride(ctx: Context, choice: String) {
+    val c = if (choice in VoiceChoice.OVERRIDES) choice else "auto"
+    prefs(ctx).edit().putString(KEY_OVERRIDE, c).apply()
+    decideSoon(ctx)
+  }
+
+  /**
+   * The language answers are spoken in ("" = the phone's). Pocket TTS is English only, so any
+   * other language uses the system voice in that language.
+   */
+  fun setLanguage(ctx: Context, tag: String) {
+    prefs(ctx).edit().putString(KEY_LANGUAGE, tag).apply()
+    synchronized(this) { if (systemReady) system?.language = speakLocale(ctx) }
+  }
+
+  private fun speakLocale(ctx: Context): Locale {
+    val tag = prefs(ctx).getString(KEY_LANGUAGE, "") ?: ""
+    return if (tag.isBlank()) Locale.getDefault() else Locale.forLanguageTag(tag)
+  }
+
+  /** Which voice answers now: "pocket" or "system". */
+  fun engineName(ctx: Context): String {
+    val p = prefs(ctx)
+    return VoiceChoice.active(
+      override = p.getString(KEY_OVERRIDE, "auto") ?: "auto",
+      decided = p.getString(KEY_CHOICE, null),
+      pocketUsable = !ttsFailed && modelReady(ctx) && VoiceChoice.pocketSpeaks(speakLocale(ctx).language),
+    )
+  }
+
+  /**
+   * Times Pocket's first sound once, in the background, when it is downloaded and not yet decided.
+   * Runs on the voice thread, so it never overlaps speech.
+   */
+  fun decideSoon(ctx: Context) {
+    val app = ctx.applicationContext
+    if (deciding || prefs(app).getString(KEY_CHOICE, null) != null || !modelReady(app)) return
+    deciding = true
+    worker.execute {
+      try {
+        val ms = measureFirstSound(app)
+        val choice = VoiceChoice.decide(ms)
+        prefs(app).edit().putString(KEY_CHOICE, choice).putLong(KEY_MEASURED, ms ?: -1L).apply()
+        Log.i(TAG, "voice for this phone: $choice (Pocket first sound ${ms ?: "failed"} ms)")
+        if (choice == "system") releaseTts()
+      } catch (t: Throwable) {
+        Log.w(TAG, "voice timing failed", t)
+      } finally {
+        deciding = false
+      }
+    }
+  }
+
+  /** Best first-sound time of two silent runs (the first includes warm-up); null if Pocket fails. */
+  private fun measureFirstSound(ctx: Context): Long? {
+    val engine = loadTts(ctx) ?: return null
+    val cfg =
+      GenerationConfig().apply {
+        referenceAudio = reference
+        referenceSampleRate = referenceRate
+      }
+    var best: Long? = null
+    repeat(2) {
+      val start = System.nanoTime()
+      var first = -1L
+      engine.generateWithConfigAndCallback(
+        TEST_SENTENCE,
+        cfg,
+        TtsChunks {
+          if (first < 0) first = (System.nanoTime() - start) / 1_000_000
+          0 // first chunk is enough: stop generating
+        },
+      )
+      if (first >= 0) best = minOf(best ?: first, first)
+    }
+    return best
+  }
+
+  private fun releaseTts() {
+    val t = tts ?: return
+    tts = null
+    runCatching { t.release() }
+  }
 
   /** Starts an answer; pass the result to [say] so a stopped answer can't speak again. */
   fun begin(): Int = generation.get()
@@ -77,10 +198,18 @@ object Voice {
     pending.incrementAndGet()
     turns.speaking(text, System.currentTimeMillis())
     MicLoop.startConversation(app)
+    // The voice is chosen once per answer: it never changes between its sentences.
+    if (answerGen != gen) {
+      answerGen = gen
+      answerEngine = engineName(app)
+      // Not now (it would hold up this answer): once it has been spoken.
+      if (answerEngine == "system") decideLater = app
+    }
+    val engineForAnswer = answerEngine
     worker.execute {
       try {
         if (gen != generation.get()) return@execute
-        if (!speakNeural(app, text, gen)) speakSystem(app, text)
+        if (engineForAnswer != "pocket" || !speakNeural(app, text, gen)) speakSystem(app, text)
       } catch (t: Throwable) {
         Log.w(TAG, "speak failed", t)
       } finally {
@@ -124,6 +253,10 @@ object Voice {
     if (!endRequested || speaking()) return
     turns.finished(System.currentTimeMillis())
     onIdle?.invoke()
+    decideLater?.let {
+      decideLater = null
+      decideSoon(it)
+    }
   }
 
   // --- Neural voice (Pocket TTS) ---
@@ -161,9 +294,8 @@ object Voice {
     }
   }
 
-  /** Speaks [text] with Pocket TTS; false if the system voice should say it instead. */
+  /** Speaks [text] with Pocket TTS; false if it failed to load (the system voice says it). */
   private fun speakNeural(ctx: Context, text: String, gen: Int): Boolean {
-    if (tooSlow) return false
     val engine = loadTts(ctx) ?: return false
     val out = ensureTrack(engine.sampleRate())
     val cfg =
@@ -192,10 +324,6 @@ object Voice {
     // the first sound took.
     val audioSec = audio.samples.size.toFloat() / audio.sampleRate
     Log.i(TAG, "pocket: ${"%.2f".format(audioSec)} s audio, first sound $firstChunkMs ms")
-    if (firstChunkMs > MAX_FIRST_SOUND_MS && audioSec < 3f) {
-      Log.w(TAG, "Pocket TTS too slow on this phone; switching to the system voice")
-      tooSlow = true
-    }
     if (pending.get() <= 1) drain(out)
     return true
   }
@@ -224,6 +352,8 @@ object Voice {
         .setTransferMode(AudioTrack.MODE_STREAM)
         .build()
     t.setVolume(volume)
+    if (speechRate != 1f) applyRate(t)
+    dev.sidekick.engine.usb.AudioRoutes.applyOutput(t) // headphones / chosen speaker
     track = t
     return t
   }
@@ -247,6 +377,7 @@ object Voice {
     val t = systemTts(ctx) ?: return
     systemPending.incrementAndGet()
     val params = Bundle().apply { putFloat(TextToSpeech.Engine.KEY_PARAM_VOLUME, volume) }
+    t.setSpeechRate(speechRate)
     t.speak(text, TextToSpeech.QUEUE_ADD, params, "s${System.nanoTime()}")
   }
 
@@ -261,7 +392,7 @@ object Voice {
           ready.countDown()
         }
       ready.await(3, java.util.concurrent.TimeUnit.SECONDS)
-      system?.language = Locale.getDefault()
+      system?.language = speakLocale(ctx)
       system?.setOnUtteranceProgressListener(
         object : UtteranceProgressListener() {
           override fun onStart(id: String?) {}
@@ -290,4 +421,24 @@ object Voice {
  */
 class TtsChunks(private val onChunk: (FloatArray) -> Int) : (FloatArray) -> Int {
   override fun invoke(samples: FloatArray): Int = onChunk(samples)
+}
+
+/** The one-voice-per-phone rule. Pure; tested. */
+object VoiceChoice {
+  /** Pocket is kept only if a short sentence's first sound comes within this. */
+  const val MAX_FIRST_SOUND_MS = 1000L
+  val OVERRIDES = setOf("auto", "pocket", "system")
+
+  /** From the timing run: null (Pocket failed) or too slow means the system voice. */
+  fun decide(firstSoundMs: Long?): String =
+    if (firstSoundMs != null && firstSoundMs <= MAX_FIRST_SOUND_MS) "pocket" else "system"
+
+  /** Pocket TTS only speaks English. [language] is an ISO 639 code ("en", "de"). */
+  fun pocketSpeaks(language: String): Boolean = language.isEmpty() || language == "en"
+
+  /** The voice that speaks: the owner's override, else the decision; system until decided. */
+  fun active(override: String, decided: String?, pocketUsable: Boolean): String {
+    val want = if (override == "pocket" || override == "system") override else decided ?: "system"
+    return if (want == "pocket" && pocketUsable) "pocket" else "system"
+  }
 }

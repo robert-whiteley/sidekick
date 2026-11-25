@@ -1,6 +1,6 @@
 import { router } from 'expo-router';
 import { useState } from 'react';
-import { Pressable, Text, TextInput, View } from 'react-native';
+import { View } from 'react-native';
 
 import {
   acceptSuggestedName,
@@ -11,6 +11,7 @@ import {
 } from '@/memory/store';
 import { speakerLabel } from '@/memory/people-logic';
 import { confirm, Section, styles } from './ui';
+import { AppText, Tappable, TextButton, TextField } from '@/ui';
 
 export type Person = Awaited<ReturnType<typeof listSpeakers>>[number];
 
@@ -18,7 +19,9 @@ export function PeopleSection({ people, onChanged }: { people: Person[]; onChang
   return (
     <Section title="People">
       {people.length === 0 ? (
-        <Text style={styles.hint}>No voices yet. They appear as Sidekick hears people.</Text>
+        <AppText variant="bodySmall" tone="muted">
+          No voices yet. They appear as Sidekick hears people.
+        </AppText>
       ) : (
         people.map((p) => <PersonRow key={p.id} person={p} onChanged={onChanged} />)
       )}
@@ -41,8 +44,8 @@ function PersonRow({ person, onChanged }: { person: Person; onChanged: () => voi
     <View style={styles.item}>
       <View style={styles.itemRow}>
         {editing ? (
-          <TextInput
-            style={[styles.input, styles.flex]}
+          <TextField
+            containerStyle={styles.flex}
             value={name}
             onChangeText={setName}
             onSubmitEditing={() => void save()}
@@ -50,27 +53,24 @@ function PersonRow({ person, onChanged }: { person: Person; onChanged: () => voi
             autoFocus
           />
         ) : (
-          <Pressable
-            style={styles.flex}
+          <Tappable
+            style={[styles.flex, styles.tapRow]}
             accessibilityRole="link"
             onPress={() =>
               router.push({ pathname: '/person/[id]', params: { id: String(person.id) } })
             }
           >
-            <Text style={[styles.body, styles.link]}>{label}</Text>
-          </Pressable>
+            <AppText tone="primary">{label}</AppText>
+          </Tappable>
         )}
         {!person.isOwner &&
           (editing ? (
-            <Pressable onPress={() => void save()}>
-              <Text style={styles.link}>Save</Text>
-            </Pressable>
+            <TextButton title="Save" onPress={() => void save()} />
           ) : (
-            <Pressable onPress={() => setEditing(true)}>
-              <Text style={styles.link}>Rename</Text>
-            </Pressable>
+            <TextButton title="Rename" onPress={() => setEditing(true)} />
           ))}
-        <Pressable
+        <TextButton
+          title="Delete"
           onPress={() =>
             confirm(
               `Delete ${label}?`,
@@ -81,35 +81,32 @@ function PersonRow({ person, onChanged }: { person: Person; onChanged: () => voi
               },
             )
           }
-        >
-          <Text style={[styles.link, styles.danger]}>Delete</Text>
-        </Pressable>
+          danger
+        />
       </View>
       {person.suggestedName && !person.isOwner && (
         <View style={styles.itemRow}>
-          <Text style={[styles.body, styles.flex]}>Is this {person.suggestedName}?</Text>
-          <Pressable
+          <AppText style={styles.flex}>Is this {person.suggestedName}?</AppText>
+          <TextButton
+            title="Yes"
             onPress={async () => {
               await acceptSuggestedName(person.id);
               onChanged();
             }}
-          >
-            <Text style={styles.link}>Yes</Text>
-          </Pressable>
-          <Pressable
+          />
+          <TextButton
+            title="No"
             onPress={async () => {
               await dismissSuggestedName(person.id);
               onChanged();
             }}
-          >
-            <Text style={styles.link}>No</Text>
-          </Pressable>
+          />
         </View>
       )}
-      <Text style={styles.small}>
+      <AppText variant="bodySmall" tone="muted">
         {person.moments} {person.moments === 1 ? 'memory' : 'memories'}
         {!person.isOwner && (person.consented ? ' · agreed to notes' : '')}
-      </Text>
+      </AppText>
     </View>
   );
 }

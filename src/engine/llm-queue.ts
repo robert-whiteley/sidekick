@@ -13,6 +13,8 @@ export class LlmQueue {
   private running: { background: boolean } | null = null;
   private retry: ReturnType<typeof setInterval> | null = null;
   private waiting: Job[] = [];
+  /** Background jobs stopped for a question so far (a stopped job's reply is cut short). */
+  preemptions = 0;
 
   constructor(private preempt: () => void) {}
 
@@ -28,7 +30,10 @@ export class LlmQueue {
         // After any other waiting user jobs, before every background job.
         const firstBg = this.waiting.findIndex((j) => j.background);
         this.waiting.splice(firstBg < 0 ? this.waiting.length : firstBg, 0, job);
-        if (this.running?.background) this.stopBackground();
+        if (this.running?.background) {
+          this.preemptions++;
+          this.stopBackground();
+        }
       }
       this.next();
     });

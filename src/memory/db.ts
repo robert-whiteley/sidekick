@@ -189,6 +189,15 @@ export const MIGRATIONS: { table: string; column: string; ddl: string; after?: s
     column: 'description',
     ddl: 'ALTER TABLE speakers ADD COLUMN description TEXT',
   },
+  // The saved audio of a speech line (Opus), played back from the chat and Memory.
+  { table: 'moments', column: 'audio_path', ddl: 'ALTER TABLE moments ADD COLUMN audio_path TEXT' },
+  // Recurring reminders ("every Monday at 9"): repeat-logic.ts rule, null = once.
+  { table: 'followups', column: 'repeat', ddl: 'ALTER TABLE followups ADD COLUMN repeat TEXT' },
+  // A conversation note (kind 'conversation_note', at = its end): when the conversation began.
+  { table: 'moments', column: 'from_at', ddl: 'ALTER TABLE moments ADD COLUMN from_at INTEGER' },
+  // "Understand other languages": the language a heard line is in once checked ('en' = English or
+  // unsure, else the ISO code of a line that now carries its English translation). Null = unchecked.
+  { table: 'moments', column: 'lang', ddl: 'ALTER TABLE moments ADD COLUMN lang TEXT' },
 ];
 
 function migrate(d: DB) {

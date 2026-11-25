@@ -3,6 +3,11 @@ import { render, screen } from '@testing-library/react-native';
 import HomeScreen from '@/app/index';
 
 jest.mock('@op-engineering/op-sqlite', () => ({ open: jest.fn() }));
+jest.mock('expo-network', () => ({
+  addNetworkStateListener: () => ({ remove: jest.fn() }),
+  getNetworkStateAsync: async () => ({ isConnected: true, type: 'WIFI' }),
+  NetworkStateType: { WIFI: 'WIFI', CELLULAR: 'CELLULAR' },
+}));
 
 jest.mock('../modules/sidekick-native', () => ({
   __esModule: true,
@@ -19,8 +24,8 @@ jest.mock('../modules/sidekick-native', () => ({
   },
 }));
 
-test('first run asks to download the model', async () => {
+test('first run downloads the model by itself', async () => {
   await render(<HomeScreen />);
-  expect(screen.getByText('One-time setup')).toBeTruthy();
+  expect(screen.getByText('Getting Sidekick ready')).toBeTruthy();
   expect(screen.getByText(/3\.5 GB/)).toBeTruthy();
 });

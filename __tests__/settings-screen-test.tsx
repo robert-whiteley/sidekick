@@ -1,6 +1,12 @@
-import { render, screen } from '@testing-library/react-native';
+import { fireEvent, render, screen } from '@testing-library/react-native';
 
+import MemoryScreen from '@/app/memory';
 import SettingsScreen from '@/app/settings';
+import AssistantSettings from '@/app/settings/assistant';
+import CameraAudioSettings from '@/app/settings/camera';
+import ConnectionsSettings from '@/app/settings/connections';
+import PhoneFeatures from '@/app/settings/features';
+import PrivacySettings from '@/app/settings/privacy';
 
 jest.mock('@op-engineering/op-sqlite', () => ({ open: jest.fn() }));
 jest.mock('expo-sharing', () => ({ shareAsync: jest.fn() }));
@@ -10,6 +16,8 @@ jest.mock('expo-router', () => {
   return {
     ...jest.requireActual('expo-router'),
     useFocusEffect: (cb: () => void) => React.useEffect(cb, [cb]),
+    useLocalSearchParams: () => ({}),
+    Stack: { Screen: () => null },
   };
 });
 jest.mock('@/memory/store', () => ({
@@ -44,6 +52,9 @@ jest.mock('@/memory/followups', () => ({
   dismissFollowup: jest.fn(),
   deleteFollowup: jest.fn(),
 }));
+jest.mock('expo-file-system', () => ({
+  Paths: { totalDiskSpace: 128 * 1024 ** 3, availableDiskSpace: 60 * 1024 ** 3 },
+}));
 jest.mock('../modules/sidekick-native', () => ({
   __esModule: true,
   default: {
@@ -52,16 +63,53 @@ jest.mock('../modules/sidekick-native', () => ({
     readBase64: () => null,
     listenConfigure: () => {},
     countryCode: () => 'GB',
+    getDeviceInfo: () => ({
+      manufacturer: 'Google',
+      model: 'Pixel 5',
+      soc: 'QTI SM7250',
+      totalRamMb: 7600,
+      filesDir: '/data',
+      externalFilesDir: null,
+    }),
   },
 }));
 
-test('settings shows sections and loaded memory', async () => {
+test('settings home lists the sections', async () => {
   await render(<SettingsScreen />);
-  expect(screen.getByText('Listening')).toBeTruthy();
+  for (const t of ['Assistant', 'Camera & audio', 'Connections', 'Privacy', 'Phone features']) {
+    expect(screen.getByText(t)).toBeTruthy();
+  }
+});
+
+test('assistant page shows voice with its Recommended value and follow-up settings', async () => {
+  await render(<AssistantSettings />);
+  expect(screen.getByText('Natural voice (Recommended)')).toBeTruthy();
+  expect(screen.getByText('Routines')).toBeTruthy();
+  expect(screen.getByText('Wake word')).toBeTruthy();
+});
+
+test('camera page marks Recommended values for this phone', async () => {
+  await render(<CameraAudioSettings />);
+  expect(screen.getByText('0.5 (Recommended)')).toBeTruthy(); // Pixel 5: slower chip
+  expect(screen.getByText('3 days (Recommended)')).toBeTruthy();
+});
+
+test('privacy page has consent and delete', async () => {
+  await render(<PrivacySettings />);
   expect(screen.getByText('Consent mode')).toBeTruthy();
-  expect(await screen.findByText('You')).toBeTruthy();
-  expect(await screen.findByText('my locker is 42')).toBeTruthy();
   expect(screen.getByText('Delete everything')).toBeTruthy();
+});
+
+test('connections and phone features list everything', async () => {
+  await render(<ConnectionsSettings />);
+  expect(screen.getByText('Email (Gmail)')).toBeTruthy();
+  await render(<PhoneFeatures />);
+  expect(screen.getByText(/Send texts directly/)).toBeTruthy();
+});
+
+test('memory shows facts and to-dos', async () => {
+  await render(<MemoryScreen />);
+  expect(await screen.findByText('my locker is 42')).toBeTruthy();
+  await fireEvent.press(screen.getByText('To-dos'));
   expect(await screen.findByText('To-do: Buy milk')).toBeTruthy();
-  expect(screen.getByText('Daily summary')).toBeTruthy();
 });

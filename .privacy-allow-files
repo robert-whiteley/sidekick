@@ -1,0 +1,2 @@
+# Files whose text is quoted third-party content (checked by hand).
+__tests__/fixtures/web/gdelt-rate-limited.txt

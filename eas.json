@@ -6,20 +6,52 @@
   "build": {
     "preview": {
       "distribution": "internal",
-      "channel": "preview",
       "android": {
         "buildType": "apk"
-      }
+      },
+      "channel": "preview"
     },
     "production": {
-      "channel": "production",
-      "autoIncrement": true
+      "autoIncrement": true,
+      "android": {
+        "buildType": "app-bundle"
+      },
+      "channel": "production"
     }
   },
   "submit": {
     "production": {
       "ios": {
         "ascAppId": "6838426860"
+      },
+      "android": {
+        "serviceAccountKeyPath": "./google-service-account.json",
+        "track": "internal",
+        "releaseStatus": "draft"
+      }
+    },
+    "closed": {
+      "extends": "production",
+      "android": {
+        "serviceAccountKeyPath": "./google-service-account.json",
+        "track": "alpha",
+        "releaseStatus": "draft"
+      }
+    },
+    "open": {
+      "extends": "production",
+      "android": {
+        "serviceAccountKeyPath": "./google-service-account.json",
+        "track": "beta",
+        "releaseStatus": "draft"
+      }
+    },
+    "store": {
+      "extends": "production",
+      "android": {
+        "serviceAccountKeyPath": "./google-service-account.json",
+        "track": "production",
+        "releaseStatus": "draft"
       }
     }
   }

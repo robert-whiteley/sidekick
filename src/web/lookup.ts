@@ -304,16 +304,28 @@ export async function askWithLookup<T extends Asked>(
   deps: LookupDeps = defaultDeps,
   /** The earlier question in a spoken conversation, so a follow-up's search keeps its topic. */
   previous?: string,
-): Promise<T & { web: WebSource[]; webQuery?: string }> {
+  /** Progress lines as they happen ("Looking it up online…"). */
+  onStatus?: (line: string) => void,
+  /** force: look it up whatever the rules say (a question kept until back online). */
+  opts: { force?: boolean } = {},
+): Promise<T & { web: WebSource[]; webQuery?: string; offline?: boolean }> {
   const enabled = deps.enabled();
   if (!enabled || photo) return { ...(await ask(build(''), onText)), web: [] };
   const names = await deps.knownNames().catch(() => [] as string[]);
-  const decision = decideLookup(question, { enabled, photo, knownNames: names });
+  const decision = opts.force
+    ? 'lookup'
+    : decideLookup(question, { enabled, photo, knownNames: names });
   if (decision === 'none') return { ...(await ask(build(''), onText)), web: [] };
 
   let webQuery: string | undefined;
+  /** A lookup was wanted but there was no internet (the question can wait for it). */
+  let offline = false;
   const lookup = async (): Promise<WebSource[]> => {
-    if (!(await deps.online())) return [];
+    if (!(await deps.online())) {
+      offline = true;
+      return [];
+    }
+    onStatus?.('Looking it up online…');
     const t0 = Date.now();
     const topic = searchTopic(question, previous);
     const fromModel = await deps.writeQuery(topic, names).catch(() => null);
@@ -328,6 +340,11 @@ export async function askWithLookup<T extends Asked>(
       now: deps.now(),
     };
     const found = await deps.search(q, opts).catch(() => [] as WebSource[]);
+    onStatus?.(
+      found.length
+        ? `Reading ${found.length} ${found.length === 1 ? 'source' : 'sources'}…`
+        : 'Nothing found online',
+    );
     // Timings only (no question text) for checking budgets on a phone.
     console.log(
       `[lookup] words by ${fromModel ? 'model' : 'rules'} in ${tWords} ms; ${found.length} sources (${[...new Set(found.map((w) => w.name))].join(', ')}) in ${Date.now() - t0 - tWords} ms${opts.news ? ' · news' : ''}`,
@@ -337,7 +354,7 @@ export async function askWithLookup<T extends Asked>(
 
   if (decision === 'lookup') {
     const web = await lookup();
-    return { ...(await ask(build(webContext(web, deps.now())), onText)), web, webQuery };
+    return { ...(await ask(build(webContext(web, deps.now())), onText)), web, webQuery, offline };
   }
 
   // 'ask-model': hold the streamed text back while it could still be "LOOKUP".
@@ -376,5 +393,6 @@ export async function askWithLookup<T extends Asked>(
     },
     web,
     webQuery,
+    offline,
   };
 }

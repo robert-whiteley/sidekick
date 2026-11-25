@@ -42,12 +42,13 @@ Docs: https://docs.expo.dev/eas/index.md
 
 ## Project rules (Sidekick)
 
+- The repo is public, open source, Apache-2.0: never commit personal data (see owner rules below).
 - Start every session by reading `docs/PLAN-v2.md` (all owner decisions for the current phase); tick items there as they land. Also `docs/SPEC.md`, `ARCHITECTURE.md`, `ROADMAP.md` and `docs/decisions/` before larger changes. Record anything left out or rejected (with why) in ADR 0006 and check it before proposing ideas.
-- Fully on-device: no network by default, no accounts, no telemetry.
+- Fully on-device: no network by default (except model downloads and the quick-fix check, both switchable), no accounts, no telemetry.
 - Commercial-safe licences only; update `THIRD_PARTY_NOTICES.md` with each dependency/model.
-- Must work on Pixel 5 (CPU only, 8 GB) and iPhone 13 mini (4 GB): load big models on demand, never LLM + embedder together.
+- Must work on Pixel 5 (CPU only, 8 GB) and iPhone 13 mini (4 GB): load big models on demand; LLM and embedder stay loaded together only on phones with ≥ 6 GB RAM while Android isn't short of memory, otherwise one unloads first.
 - Tests for logic changes. Report what was verified on a device vs only built; verify on the phone before calling work done.
-- Distribution: Google Play flavour (default) and a direct-APK "full" flavour (Accessibility actions, direct SMS).
+- Distribution: one app, the Google Play build, the same for every user (no direct-APK variant).
 
 ## Owner working rules
 

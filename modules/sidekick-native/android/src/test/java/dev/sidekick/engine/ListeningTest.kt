@@ -142,6 +142,23 @@ class AudioRingTest {
     r.write(floatArrayOf(4f, 5f, 6f))
     assertArrayEquals(floatArrayOf(3f, 4f, 5f, 6f), r.last(10), 0f)
   }
+
+  @Test
+  fun rangeByAbsoluteIndexSkipsWhatIsGone() {
+    val r = AudioRing(4)
+    r.write(floatArrayOf(1f, 2f, 3f, 4f, 5f, 6f))
+    assertEquals(6L, r.total)
+    assertArrayEquals(floatArrayOf(4f, 5f), r.range(3, 5), 0f)
+    assertArrayEquals(floatArrayOf(3f, 4f), r.range(0, 4), 0f) // 1, 2 overwritten
+    assertArrayEquals(floatArrayOf(), r.range(5, 5), 0f)
+  }
+
+  @Test
+  fun preRollNeverReachesIntoThePreviousLine() {
+    assertEquals(9_600L, PreRoll.start(16_000, 0, 6_400))
+    assertEquals(12_000L, PreRoll.start(16_000, 12_000, 6_400))
+    assertEquals(0L, PreRoll.start(3_000, 0, 6_400))
+  }
 }
 
 class WhisperMelTest {
@@ -184,5 +201,14 @@ class WhisperMelTest {
     assertEquals(1000f, second[64])
     w.reset()
     assertEquals(0f, w.next(a)[0])
+  }
+}
+
+class ResidencyTest {
+  @org.junit.Test
+  fun bothStayLoadedOnlyOnBigPhonesWithMemoryToSpare() {
+    org.junit.Assert.assertTrue(Residency.alone(3700, false)) // iPhone 13 mini-class / 4 GB
+    org.junit.Assert.assertFalse(Residency.alone(7461, false)) // Pixel 5
+    org.junit.Assert.assertTrue(Residency.alone(7461, true)) // Pixel 5 short of memory
   }
 }

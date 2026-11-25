@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Pressable, Text, TextInput, View } from 'react-native';
+import { View } from 'react-native';
 
 import {
   addToCalendar,
@@ -22,15 +22,17 @@ import {
   onFollowupsChange,
   updateFollowup,
 } from '@/memory/followups';
-import { Row, Section, styles } from './ui';
+import { NavRow, Row, Section, styles } from './ui';
+import { AppText, ListRow, Segmented, TextButton, TextField } from '@/ui';
 
 const KINDS: FollowupKind[] = ['todo', 'event', 'reminder'];
 
 /** Suggested and approved to-dos, events and reminders; nothing happens until approved. */
-export function FollowupsSection() {
+export function FollowupsSection({ part = 'both' }: { part?: 'settings' | 'list' | 'both' }) {
+  const showSettings = part !== 'list';
+  const showList = part !== 'settings';
   const [items, setItems] = useState<Followup[]>([]);
   const [suggest, setSuggest] = useState(getSettings().suggestFollowups);
-  const [digest, setDigest] = useState(getSettings().followupDigest);
   const [exact, setExact] = useState(true);
   const [editing, setEditing] = useState<number | null>(null);
   const [msg, setMsg] = useState('');
@@ -68,15 +70,6 @@ export function FollowupsSection() {
     }
   };
 
-  const setDigestOn = async (v: boolean) => {
-    if (v && !(await askNotificationPermission())) {
-      setMsg('Allow notifications for Sidekick to get the daily summary.');
-      return;
-    }
-    setDigest(v);
-    updateSettings({ followupDigest: v });
-  };
-
   const suggested = items.filter((f) => f.status === 'suggested');
   const approved = items.filter((f) => f.status === 'approved');
   const done = items.filter((f) => f.status === 'done');
@@ -85,95 +78,95 @@ export function FollowupsSection() {
   const line = (f: Followup) => {
     const due = formatDue(f, now);
     return (
-      <Text style={[styles.body, styles.flex, f.status === 'done' && styles.small]}>
+      <AppText style={styles.flex} tone={f.status === 'done' ? 'muted' : 'default'}>
         {`${kindLabel(f.kind)}: ${f.personName ? `${f.personName} — ` : ''}${f.title}${due ? ` · ${due}` : f.whenText ? ` · "${f.whenText}"` : ''}`}
-      </Text>
+      </AppText>
     );
   };
 
   return (
-    <Section title="Follow-ups">
-      <Row
-        label="Suggest follow-ups"
-        hint="Proposes to-dos, events and reminders from what is said. Nothing is used until you approve it."
-        value={suggest}
-        onChange={(v) => {
-          setSuggest(v);
-          updateSettings({ suggestFollowups: v });
-        }}
-      />
-      <Row
-        label="Daily summary"
-        hint={`A notification at ${getSettings().digestHour}:00 with today's follow-ups and anything still open from yesterday.`}
-        value={digest}
-        onChange={(v) => void setDigestOn(v)}
-      />
-      {!exact && (
-        <Pressable
+    <Section title={part === 'list' ? 'To-dos and reminders' : 'Follow-ups'}>
+      {showSettings && (
+        <Row
+          label="Suggest follow-ups"
+          hint="Proposes to-dos, events and reminders from what is said. Nothing is used until you approve it."
+          value={suggest}
+          onChange={(v) => {
+            setSuggest(v);
+            updateSettings({ suggestFollowups: v });
+          }}
+        />
+      )}
+      {showSettings && (
+        <NavRow
+          label="Routines"
+          hint='Things Sidekick does by itself at a time or when something happens, e.g. "every weekday at 8 brief me".'
+          href="/settings/routines"
+        />
+      )}
+      {showSettings && !exact && (
+        <ListRow
+          title="Allow exact reminder times"
+          supporting="Otherwise Android may deliver reminders late."
+          navigates
           onPress={() =>
             void allowExactReminders()
               .then(setExact)
               .catch(() => {})
           }
-        >
-          <Text style={styles.link}>Allow exact reminder times (otherwise they may be late)</Text>
-        </Pressable>
+        />
       )}
-      {msg ? <Text style={styles.hint}>{msg}</Text> : null}
+      {msg ? (
+        <AppText variant="bodySmall" tone="muted">
+          {msg}
+        </AppText>
+      ) : null}
 
-      {suggested.length > 0 && (
-        <Text style={styles.body}>Suggested (approve, edit or dismiss)</Text>
+      {showList && suggested.length > 0 && <AppText>Suggested (approve, edit or dismiss)</AppText>}
+      {showList &&
+        suggested.map((f) =>
+          editing === f.id ? (
+            <Editor key={f.id} f={f} onDone={() => setEditing(null)} />
+          ) : (
+            <View key={f.id} style={[styles.item, styles.itemRow]}>
+              {line(f)}
+              <TextButton title="Approve" onPress={() => void approve(f)} />
+              <TextButton title="Edit" onPress={() => setEditing(f.id)} />
+              <TextButton title="Dismiss" onPress={() => void dismissFollowup(f.id)} danger />
+            </View>
+          ),
+        )}
+
+      {showList && approved.length === 0 && suggested.length === 0 && (
+        <AppText variant="bodySmall" tone="muted">
+          No follow-ups yet.
+        </AppText>
       )}
-      {suggested.map((f) =>
-        editing === f.id ? (
-          <Editor key={f.id} f={f} onDone={() => setEditing(null)} />
-        ) : (
+      {showList &&
+        approved.map((f) =>
+          editing === f.id ? (
+            <Editor key={f.id} f={f} onDone={() => setEditing(null)} />
+          ) : (
+            <View key={f.id} style={[styles.item, styles.itemRow]}>
+              {line(f)}
+              <TextButton
+                title="Done"
+                onPress={() => void updateFollowup(f.id, { status: 'done' })}
+              />
+              {f.kind === 'event' && f.dueAt != null && (
+                <TextButton title="Calendar" onPress={() => void toCalendar(f)} />
+              )}
+              <TextButton title="Edit" onPress={() => setEditing(f.id)} />
+            </View>
+          ),
+        )}
+      {showList &&
+        done.map((f) => (
           <View key={f.id} style={[styles.item, styles.itemRow]}>
             {line(f)}
-            <Pressable onPress={() => void approve(f)}>
-              <Text style={styles.link}>Approve</Text>
-            </Pressable>
-            <Pressable onPress={() => setEditing(f.id)}>
-              <Text style={styles.link}>Edit</Text>
-            </Pressable>
-            <Pressable onPress={() => void dismissFollowup(f.id)}>
-              <Text style={[styles.link, styles.danger]}>Dismiss</Text>
-            </Pressable>
+            <TextButton title="Delete" onPress={() => void deleteFollowup(f.id)} danger />
           </View>
-        ),
-      )}
-
-      {approved.length === 0 && suggested.length === 0 && (
-        <Text style={styles.hint}>No follow-ups yet.</Text>
-      )}
-      {approved.map((f) =>
-        editing === f.id ? (
-          <Editor key={f.id} f={f} onDone={() => setEditing(null)} />
-        ) : (
-          <View key={f.id} style={[styles.item, styles.itemRow]}>
-            {line(f)}
-            <Pressable onPress={() => void updateFollowup(f.id, { status: 'done' })}>
-              <Text style={styles.link}>Done</Text>
-            </Pressable>
-            {f.kind === 'event' && f.dueAt != null && (
-              <Pressable onPress={() => void toCalendar(f)}>
-                <Text style={styles.link}>Calendar</Text>
-              </Pressable>
-            )}
-            <Pressable onPress={() => setEditing(f.id)}>
-              <Text style={styles.link}>Edit</Text>
-            </Pressable>
-          </View>
-        ),
-      )}
-      {done.map((f) => (
-        <View key={f.id} style={[styles.item, styles.itemRow]}>
-          {line(f)}
-          <Pressable onPress={() => void deleteFollowup(f.id)}>
-            <Text style={[styles.link, styles.danger]}>Delete</Text>
-          </Pressable>
-        </View>
-      ))}
+        ))}
     </Section>
   );
 }
@@ -203,36 +196,24 @@ function Editor({ f, onDone }: { f: Followup; onDone: () => void }) {
 
   return (
     <View style={styles.item}>
-      <View style={styles.chips}>
-        {KINDS.map((k) => (
-          <Pressable
-            key={k}
-            onPress={() => setKind(k)}
-            style={[styles.chip, kind === k && styles.chipOn]}
-            accessibilityRole="radio"
-            accessibilityState={{ checked: kind === k }}
-          >
-            <Text style={[styles.chipText, kind === k && styles.chipTextOn]}>{kindLabel(k)}</Text>
-          </Pressable>
-        ))}
-      </View>
-      <TextInput style={styles.input} value={title} onChangeText={setTitle} placeholder="What" />
-      <TextInput
-        style={styles.input}
+      <Segmented
+        accessibilityLabel="Kind"
+        options={KINDS.map((k) => ({ value: k, label: kindLabel(k) }))}
+        value={kind}
+        onChange={setKind}
+      />
+      <TextField value={title} onChangeText={setTitle} placeholder="What" />
+      <TextField
         value={when}
         onChangeText={setWhen}
         placeholder='When, e.g. "next Tuesday at 3" (optional)'
       />
-      <Text style={styles.hint}>
+      <AppText variant="bodySmall" tone="muted">
         {when.trim() ? (preview ? `Due ${preview}` : "Couldn't read that time") : 'No time'}
-      </Text>
+      </AppText>
       <View style={styles.itemRow}>
-        <Pressable onPress={() => void save()}>
-          <Text style={styles.link}>Save</Text>
-        </Pressable>
-        <Pressable onPress={onDone}>
-          <Text style={styles.link}>Cancel</Text>
-        </Pressable>
+        <TextButton title="Save" onPress={() => void save()} />
+        <TextButton title="Cancel" onPress={onDone} />
       </View>
     </View>
   );

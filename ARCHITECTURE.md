@@ -11,7 +11,11 @@
 | Voice out          | System TTS (`expo-speech`)                                                                                                         | Zero download, fast on old phones. Later: Kitten / Piper via sherpa-onnx                          |
 | Memory             | `@op-engineering/op-sqlite` with SQLCipher + sqlite-vec; EmbeddingGemma 2 text+vision embeddings                                   | Encrypted, fast, vector search in the same DB. USearch (HNSW) later for millions of vectors       |
 | Camera             | `expo-camera`                                                                                                                      | Photo capture is all the MVP needs; vision-camera later if live frame processing is added         |
-| Places             | GeoNames cities15000 (offline) + learned places (home/work from dwell time)                                                        | Place names with no network                                                                       |
+| Places             | GeoNames cities500 (offline, towns and villages) + learned places (home/work from dwell time)                                      | Place names with no network                                                                       |
+
+## UI
+
+One design for Android and iOS, the common ground of Material 3 and Apple's guidelines, identical on both (no platform ripple, native Switch or system Alert). Every screen builds from the component library in `src/ui` (rows, switches, sliders, bottom-sheet pickers with a tick, buttons, tabs, dialogs) and one token file, `src/ui/tokens.ts` (light/dark colours, a 4-pt spacing grid, type scale, 48-pt touch targets). `__tests__/ui-conventions-test.ts` is silent until a file in `src/app` or `src/features` imports a raw touchable, Switch, Text or TextInput from react-native, hard-codes a colour or font size, or uses spacing off the grid. The fix is to use or add a `src/ui` component or token, or to mark the line `// ui-exception: <why>` (or the file, in its first 10 lines, `// ui-exception-file: <why>`); an exception without a reason still fails.
 
 ## Memory model
 
@@ -24,7 +28,7 @@
 
 ## Memory budget
 
-On phones under 6 GB RAM (iPhone 13 mini) the LLM and the embedder are never resident together: embedding unloads the LLM first. The iOS build uses the `increased-memory-limit` entitlement.
+On phones under 6 GB RAM (iPhone 13 mini), and on any phone while Android reports low memory, the LLM and the embedder are never resident together: embedding unloads the LLM first, loading the LLM unloads the embedder, and live-camera frames wait (`Residency` in `Embedder.kt`). The iOS build uses the `increased-memory-limit` entitlement.
 
 The chip is chosen by measurement, not by a list: the first run times every backend that loads (one-token check, then a fixed prompt) and saves the fastest. On the Pixel 5 the GPU loads but writes slower than the CPU (2.9 vs 5.0 tokens/s), so it picks CPU. Measured on Pixel 5: typed question with memory ≈6 s, photo question ≈30 s.
 

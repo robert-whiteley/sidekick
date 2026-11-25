@@ -1,0 +1,58 @@
+import { useLocalSearchParams } from 'expo-router';
+import { useEffect, useState } from 'react';
+
+import { readDeviceProfile } from '@/engine/device-profile';
+import { connectGoogle } from '@/integrations/google';
+import { isOn, onPrefsChange, setSwitch } from '@/integrations/prefs';
+import { integration } from '@/integrations/registry';
+import { integrationAvailability } from '@/features/settings/connections-logic';
+import { Page } from '@/features/settings/Page';
+import { Row, Section } from '@/features/settings/ui';
+import { AppText } from '@/ui';
+
+export default function ConnectionSettings() {
+  const { id } = useLocalSearchParams<{ id: string }>();
+  const item = integration(id);
+  const [, bump] = useState(0);
+  useEffect(() => onPrefsChange(() => bump((n) => n + 1)), []);
+  if (!item) {
+    return (
+      <Page title="Connection">
+        <AppText variant="bodySmall" tone="muted">
+          Not found.
+        </AppText>
+      </Page>
+    );
+  }
+  const a = integrationAvailability(item, readDeviceProfile());
+  return (
+    <Page title={item.name}>
+      <Section title={item.name}>
+        <AppText>{item.description}</AppText>
+        {!a.available && (
+          <AppText variant="bodySmall" tone="muted">
+            {a.why}
+          </AppText>
+        )}
+        {a.available &&
+          item.switches.map((sw) => (
+            <Row
+              key={sw.id}
+              label={sw.label}
+              value={isOn(item.id, sw.id)}
+              onChange={(v) => {
+                // Google features ask Google's own consent for just that access first.
+                if (v && item.google) void connectGoogle(item.google);
+                else setSwitch(item.id, sw.id, v);
+              }}
+            />
+          ))}
+        {a.available && item.needs ? (
+          <AppText variant="bodySmall" tone="muted">
+            Needs: {item.needs}
+          </AppText>
+        ) : null}
+      </Section>
+    </Page>
+  );
+}

@@ -1,9 +1,10 @@
 import { useNetworkState } from 'expo-network';
 import { useEffect, useState } from 'react';
-import { Linking, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Linking, StyleSheet, View } from 'react-native';
 
 import { getSettings, onSettingsChange, updateSettings } from '@/engine/settings';
 import { browserSearchQuery, type WebSource } from '@/web/lookup';
+import { AppText, makeStyles, radius, space, Tappable } from '@/ui';
 
 /**
  * Online/Offline button: tap to turn online lookup on or off (off by default). Shows "Offline"
@@ -20,11 +21,13 @@ export function OnlineBadge({ used }: { used: boolean }) {
   const connected = net.isConnected !== false && net.isInternetReachable !== false;
   const label = onlineLabel(enabled, connected);
   const online = label === 'Online';
+  const st = useStyles();
   return (
-    <Pressable
+    <Tappable
+      feedback="dim"
       onPress={() => updateSettings({ webLookup: !enabled })}
-      hitSlop={8}
-      style={[styles.badge, online && styles.on, online && used && styles.used]}
+      hitSlop={12}
+      style={[st.badge, online && st.on, online && used && st.used]}
       accessibilityRole="switch"
       accessibilityState={{ checked: enabled }}
       accessibilityLabel={
@@ -35,10 +38,10 @@ export function OnlineBadge({ used }: { used: boolean }) {
             : 'Offline: answers come only from this phone. Tap to allow online lookup.'
       }
     >
-      <Text style={[styles.badgeText, online && styles.onText]}>
+      <AppText variant="badge" style={[st.badgeText, online && st.onText]}>
         {!online && enabled ? 'Offline · no internet' : label}
-      </Text>
-    </Pressable>
+      </AppText>
+    </Tappable>
   );
 }
 
@@ -54,14 +57,18 @@ export function WebSources({ sources }: { sources: WebSource[] }) {
   return (
     <View style={styles.sources}>
       {sources.map((s) => (
-        <Text
+        <Tappable
           key={s.url || s.title}
-          style={styles.source}
+          feedback="dim"
+          hitSlop={4}
           accessibilityRole="link"
-          onPress={s.url ? () => void Linking.openURL(s.url).catch(() => {}) : undefined}
+          disabled={!s.url}
+          onPress={() => void Linking.openURL(s.url).catch(() => {})}
         >
-          {sourceLabel(s)}
-        </Text>
+          <AppText variant="bodySmall" tone="primary">
+            {sourceLabel(s)}
+          </AppText>
+        </Tappable>
       ))}
     </View>
   );
@@ -97,23 +104,33 @@ export function WebSearchLink({
     }
   };
   return (
-    <Text style={styles.source} accessibilityRole="link" onPress={() => void onPress()}>
-      {opening ? 'Opening the browser…' : 'Search the web in your browser'}
-    </Text>
+    <Tappable
+      feedback="dim"
+      style={styles.link}
+      accessibilityRole="link"
+      onPress={() => void onPress()}
+    >
+      <AppText variant="bodySmall" tone="primary">
+        {opening ? 'Opening the browser…' : 'Search the web in your browser'}
+      </AppText>
+    </Tappable>
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((c) => ({
   badge: {
-    paddingVertical: 3,
-    paddingHorizontal: 10,
-    borderRadius: 12,
-    backgroundColor: '#eee',
+    paddingVertical: space.xxs,
+    paddingHorizontal: space.sm,
+    borderRadius: radius.sm,
+    backgroundColor: c.surfaceHigh,
   },
-  on: { backgroundColor: '#2f6fed' },
-  badgeText: { fontSize: 12, color: '#555', fontWeight: '600' },
-  onText: { color: '#fff' },
-  used: { borderWidth: 2, borderColor: '#9db8f5' },
-  sources: { gap: 4, marginTop: 8 },
-  source: { fontSize: 13, color: '#2f6fed' },
+  on: { backgroundColor: c.primary },
+  badgeText: { color: c.muted },
+  onText: { color: c.onPrimary },
+  used: { borderWidth: 2, borderColor: c.primaryContainer },
+}));
+
+const styles = StyleSheet.create({
+  sources: { gap: space.sm, marginTop: space.sm },
+  link: { alignSelf: 'flex-start', paddingVertical: space.xs },
 });

@@ -1,5 +1,10 @@
 import { addresseeOf, findNameCues } from '../src/memory/names';
-import { factPrompt, parseFacts } from '../src/memory/fact-extraction';
+import {
+  factPrompt,
+  isStaleSuggestion,
+  isTemplate,
+  parseFacts,
+} from '../src/memory/fact-extraction';
 
 const names = (t: string) => findNameCues(t).map((c) => `${c.who}:${c.name}`);
 
@@ -80,5 +85,24 @@ describe('parseFacts rejects templates and made-up facts', () => {
         said,
       ),
     ).toEqual(['My dentist appointment is on Friday.', 'My door code is 4321.']);
+  });
+});
+
+describe('isTemplate', () => {
+  it('flags model templates, not real facts', () => {
+    expect(isTemplate('My name is [Name].')).toBe(true);
+    expect(isTemplate('My plan is {Plan}.')).toBe(true);
+    expect(isTemplate('My code is ...')).toBe(true);
+    expect(isTemplate('My door code is 4321.')).toBe(false);
+  });
+});
+
+describe('isStaleSuggestion', () => {
+  it('drops old suggestions that today would be rejected, keeps real ones', () => {
+    expect(isStaleSuggestion('My birthday is [Date].')).toBe(true);
+    expect(
+      isStaleSuggestion('Please provide the conversation you are referring to. I need the text.'),
+    ).toBe(true);
+    expect(isStaleSuggestion('My preference is sparkling water.')).toBe(false);
   });
 });

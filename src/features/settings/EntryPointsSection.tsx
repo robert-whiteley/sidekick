@@ -1,9 +1,10 @@
 import { useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
-import { Platform, Text } from 'react-native';
+import { Platform } from 'react-native';
 
 import SidekickNative from '../../../modules/sidekick-native';
-import { Button, Section, styles } from './ui';
+import { Button, Section } from './ui';
+import { AppText } from '@/ui';
 
 /** Android only: phone assistant ("ask about my screen"), Quick Settings tile, widget. */
 export function EntryPointsSection() {
@@ -22,14 +23,14 @@ export function EntryPointsSection() {
   if (!android) return null;
   return (
     <Section title="Quick ways to ask">
-      <Text style={styles.body}>
+      <AppText>
         {isAssistant
           ? 'Sidekick is your phone assistant: long-press home or swipe up from a bottom corner to ask about your screen.'
           : 'Make Sidekick your phone assistant to ask about whatever is on your screen.'}
-      </Text>
-      <Text style={styles.hint}>
+      </AppText>
+      <AppText variant="bodySmall" tone="muted">
         The screenshot stays on this phone. Save it from the Ask screen if you want to keep it.
-      </Text>
+      </AppText>
       <Button
         title="Digital assistant app settings"
         onPress={() => {
@@ -56,7 +57,11 @@ export function EntryPointsSection() {
           )
         }
       />
-      {note ? <Text style={styles.hint}>{note}</Text> : null}
+      {note ? (
+        <AppText variant="bodySmall" tone="muted">
+          {note}
+        </AppText>
+      ) : null}
     </Section>
   );
 }

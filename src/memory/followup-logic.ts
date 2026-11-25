@@ -3,6 +3,7 @@
  * captured. Pure logic (prompt, parsing, dates, dedup, digest) so it can be tested off the phone.
  * Nothing here acts: proposals are saved as "suggested" and wait for the user.
  */
+import { nextOccurrence, parseRepeat, type Repeat } from './repeat-logic';
 
 export type FollowupKind = 'todo' | 'event' | 'reminder';
 export type FollowupStatus = 'suggested' | 'approved' | 'done' | 'dismissed';
@@ -24,6 +25,8 @@ export type Followup = {
   personId?: number | null;
   /** That person's current name or label (so renames show). */
   personName?: string | null;
+  /** Recurring reminder rule (repeat-logic.ts): 'daily', 'weekdays', 'weekly:1'. */
+  repeat?: Repeat | null;
 };
 
 export type ProposedFollowup = Pick<
@@ -404,7 +407,7 @@ export function followupContext(items: Followup[], now: Date, limit = 12): strin
 
 // --- Spoken "remind me …" ---
 
-const TIME_WORDS = [
+export const TIME_WORDS = [
   /\bin (half an|a|an|\d+|[a-z-]+) (minute|min|hour|hr|day|week|month)s?\b/g,
   /\b(the )?day after tomorrow\b/g,
   /\b(tomorrow|tmrw|today|tonight)( (morning|afternoon|evening|night))?\b/g,
@@ -429,18 +432,26 @@ const TIME_WORDS = [
 export function parseReminderRequest(
   q: string,
   now: Date,
-): Pick<Followup, 'kind' | 'title' | 'dueAt' | 'allDay' | 'whenText'> | null {
+): Pick<Followup, 'kind' | 'title' | 'dueAt' | 'allDay' | 'whenText' | 'repeat'> | null {
   const m =
     /^(?:hey )?(?:sidekick,? )?(?:please )?(?:(?:can|could|will) you )?remind me (.+?)[.!?]*$/i.exec(
       q.trim(),
     );
   if (!m) return null;
-  const rest = m[1].replace(/\s+/g, ' ');
+  let rest = m[1].replace(/\s+/g, ' ');
+  // "Every Monday at 9", "every day": the rule, then the first time as a one-off would be.
+  const rep = parseRepeat(rest);
+  let repeatDay = '';
+  if (rep) {
+    const day = /(sunday|monday|tuesday|wednesday|thursday|friday|saturday)/i.exec(rep.words);
+    repeatDay = day ? ` on ${day[1]}` : '';
+    rest = rest.replace(rep.words, ' ').replace(/\s+/g, ' ').trim();
+  }
   // "Remind me what Sam said" / "remind me where I parked" are questions about memory.
   if (/^(what|where|who|whom|whose|when|how|which|why|if|whether|again)\b/i.test(rest)) return null;
   // A request: "to …", "about …", "that …", or a time first ("in 20 minutes to …").
   if (!/^(to|about|that|of)\b/i.test(rest) && !/\b(to|about|that)\b/i.test(rest)) return null;
-  const when = parseWhen(rest, now);
+  const when = parseWhen(`${rest}${repeatDay}`, now);
   let title = ` ${rest} `;
   let whenText = '';
   for (const re of TIME_WORDS) {
@@ -458,6 +469,13 @@ export function parseReminderRequest(
     .trim();
   if (!title) return null;
   title = cleanTitle(title);
+  if (rep) {
+    // A repeating reminder always has a time of day (default 9:00).
+    const t = when && !when.allDay ? when.at : new Date(now).setHours(DEFAULT_HOUR, 0, 0, 0);
+    const dueAt = nextOccurrence(rep.repeat, t, now.getTime() - 1);
+    const words = [rep.words.trim(), whenText].filter(Boolean).join(' ');
+    return { kind: 'reminder', title, dueAt, allDay: false, whenText: words, repeat: rep.repeat };
+  }
   if (!when) return { kind: 'todo', title, dueAt: null, allDay: false, whenText: '' };
   return { kind: 'reminder', title, dueAt: when.at, allDay: when.allDay, whenText };
 }

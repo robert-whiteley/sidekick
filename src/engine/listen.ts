@@ -2,8 +2,9 @@ import { Camera } from 'expo-camera';
 import { PermissionsAndroid, Platform } from 'react-native';
 
 import SidekickNative from '../../modules/sidekick-native';
-import { downloadFile, isDownloaded } from './downloads';
-import { MODEL_FILES, OPTIONAL_SPEECH_FILES, SPEECH_FILES } from './models';
+import { downloadFile, isDownloaded, wifiOnlyDownloads } from './downloads';
+import { applySpeechModel, speechModelsReady } from './language';
+import { MODEL_FILES, OPTIONAL_SPEECH_FILES } from './models';
 import { modelsDir } from './paths';
 import { askLocationPermission, pushPauseRules } from './places';
 import { SYSTEM_PROMPT } from './prompts';
@@ -14,7 +15,7 @@ import { DEFAULT_WAKE_PHRASE, parseSentencepiece, wakeKeywordLines } from './wak
 const KWS_DIR = MODEL_FILES.wakeWord.unpackedCheck!.split('/')[0];
 
 export function speechReady(): boolean {
-  return SPEECH_FILES.every(isDownloaded);
+  return speechModelsReady();
 }
 
 function base64ToBytes(b64: string): Uint8Array {
@@ -48,6 +49,8 @@ export function wakeLine(phrase: string): { line: string; phrase: string } {
 export function configureListening() {
   const s = getSettings();
   const { line, phrase } = wakeLine(s.wakePhrase);
+  // The speech-to-text build first (English, or 25 languages when that setting is on).
+  applySpeechModel();
   // The background service answers with the same instructions as the app.
   SidekickNative.kvSet('assistant.system', SYSTEM_PROMPT);
   const plan = listenPlan(s);
@@ -84,6 +87,13 @@ export function stopListening() {
 
 export const isListening = () => SidekickNative.listenActive();
 
+/** Turns listening back on when it was on before the app was killed (call from a visible screen). */
+export async function resumeListening(): Promise<boolean> {
+  if (Platform.OS !== 'android') return false;
+  if (isListening() || !SidekickNative.listenWanted()) return isListening();
+  return (await startListening()) === null;
+}
+
 let voiceFetch: Promise<void> | null = null;
 
 /**
@@ -96,7 +106,7 @@ export function fetchVoiceInBackground() {
   const missing = OPTIONAL_SPEECH_FILES.filter((f) => !isDownloaded(f));
   if (!missing.length) return;
   voiceFetch = (async () => {
-    for (const f of missing) await downloadFile(f, () => {}, true);
+    for (const f of missing) await downloadFile(f, () => {}, wifiOnlyDownloads());
   })().catch((e) => {
     console.log(`[voice] download failed: ${String(e)}`);
     voiceFetch = null;

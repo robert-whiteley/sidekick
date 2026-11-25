@@ -89,3 +89,16 @@ describe('mentionedName', () => {
     expect(mentionedName('what about samples', ['Sam'])).toBeNull();
   });
 });
+
+test('"N minutes ago" windows grow with N and handle "a few"', () => {
+  const now = new Date(2026, 10, 25, 14, 3, 45);
+  const t = now.getTime();
+  const five = timeWindow('what did I see 5 minutes ago?', now)!;
+  expect(five.from).toBe(t - 7.5 * 60_000);
+  expect(five.to).toBe(t - 2.5 * 60_000);
+  const one = timeWindow('what did I see a minute ago?', now)!;
+  expect(one).toEqual({ from: t - 2 * 60_000, to: t });
+  const few = timeWindow('what did I see a few minutes ago', now)!;
+  expect(few.from).toBe(t - 4.5 * 60_000);
+  expect(timeWindow('a couple of hours ago', now)!.to).toBe(t - 3600_000);
+});

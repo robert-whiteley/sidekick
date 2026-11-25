@@ -33,6 +33,11 @@ object MicLoop {
   @Volatile var ambient = false
     private set
   @Volatile private var ptt: MutableList<FloatArray>? = null
+  /** Live words while the user talks (push-to-talk, or a spoken question): see Partials. */
+  @Volatile var partialsEnabled = true
+  private var pttSamples = 0
+  private val pttPartials = PartialPolicy()
+  private val questionPartials = PartialPolicy()
   @Volatile private var paused = false
   @Volatile private var running = false
   private var thread: Thread? = null
@@ -137,6 +142,9 @@ object MicLoop {
   }
 
   fun startPtt(ctx: Context) {
+    Partials.next()
+    pttSamples = 0
+    pttPartials.reset()
     ptt = mutableListOf()
     ensureRunning(ctx)
   }
@@ -145,6 +153,7 @@ object MicLoop {
   fun stopPtt(): FloatArray {
     val chunks = ptt ?: return FloatArray(0)
     ptt = null
+    Partials.next() // the final text replaces any partial still being decoded
     stopIfIdle()
     return concat(chunks)
   }
@@ -184,6 +193,7 @@ object MicLoop {
       if (conversation && AcousticEchoCanceler.isAvailable()) {
         runCatching { AcousticEchoCanceler.create(rec.audioSessionId)?.apply { enabled = true } }.getOrNull()
       } else null
+    dev.sidekick.engine.usb.AudioRoutes.applyInput(rec) // best connected mic (USB > headset > phone)
     rec.startRecording()
     return rec to aec
   }
@@ -229,6 +239,9 @@ object MicLoop {
     val startedAt = System.currentTimeMillis()
     // Wall time of the VAD's sample 0 (moved on each reset).
     var vadEpochMs = startedAt
+    // Absolute index (in [heard]) of the VAD's sample 0, and where the last line ended.
+    var vadBase = 0L
+    var lastLineEnd = 0L
     var pauseCheckedAt = 0L
     try {
       while (running) {
@@ -238,6 +251,17 @@ object MicLoop {
         samplesSeen += n
         ptt?.add(samples)
         val nowMs = System.currentTimeMillis()
+        val pttList = ptt
+        if (pttList != null && partialsEnabled) {
+          pttSamples += samples.size
+          if (pttPartials.due(nowMs, pttSamples, Partials.isBusy)) {
+            pttPartials.started(nowMs, pttSamples)
+            val sofar = concat(pttList.toList())
+            Partials.offer(sofar, "ptt", { runCatching { Speech.engine(ctx, wakeKeywords) }.getOrNull() }, { it.trim() }) {
+              if (ptt === pttList) emit("onPartialTranscript", it)
+            }
+          }
+        }
         val inConversation = turns.active(nowMs)
         if (!needed(nowMs)) break
         if (inConversation != conversation && ptt == null) {
@@ -308,6 +332,7 @@ object MicLoop {
             if (reason != null) {
               vad?.reset()
               vadEpochMs = nowMs
+              vadBase = heard.total
             }
             runCatching { onPauseChange?.invoke(reason) }
             emit("onListenPause", mapOf("reason" to reason))
@@ -337,6 +362,19 @@ object MicLoop {
         }
         vad.acceptWaveform(samples)
         heard.write(samples)
+        // The spoken question so far, shown as it is said (the final text comes from the segment).
+        if (partialsEnabled && questionMode && (!talking || bargedIn) && vad.isSpeechDetected()) {
+          val ms = minOf(maxOf(turnEnd.turnMs(), 0) + TURN_PREROLL_MS, WhisperMel.SECONDS * 1000)
+          val qn = ms * (SAMPLE_RATE / 1000)
+          if (questionPartials.due(nowMs, qn, Partials.isBusy)) {
+            questionPartials.started(nowMs, qn)
+            Partials.offer(heard.last(qn), "question", { engine }, { raw -> if (startsWithWake(raw)) stripWake(raw) else raw.trim() }) {
+              emit("onPartialTranscript", it)
+            }
+          }
+        } else if (!vad.isSpeechDetected()) {
+          questionPartials.reset()
+        }
         // Smart Turn: on a short pause in a spoken question, end the turn now if it sounds finished.
         var endNow = false
         if (questionMode && speechP >= 0f && (!talking || bargedIn) && !smartTurnFailed) {
@@ -361,8 +399,13 @@ object MicLoop {
         while (!vad.empty()) {
           val seg = vad.front()
           vad.pop()
-          val atMs = vadEpochMs + (seg.start * 1000 / SAMPLE_RATE)
-          val audio = seg.samples
+          // The line with a little audio from just before Silero noticed it (its first word).
+          val segStart = vadBase + seg.start
+          val from = PreRoll.start(segStart, lastLineEnd, PreRoll.MS * SAMPLE_RATE / 1000)
+          val before = heard.range(from, segStart)
+          lastLineEnd = segStart + seg.samples.size
+          val audio = if (before.isEmpty()) seg.samples else before + seg.samples
+          val atMs = vadEpochMs + ((seg.start - before.size) * 1000 / SAMPLE_RATE)
           // Ended while Sidekick was still talking and never confirmed as barge-in: its own echo.
           if (talking && !bargedIn) continue
           worker.execute { handleSegment(ctx, engine, audio, atMs) }
@@ -371,6 +414,7 @@ object MicLoop {
           // Flushing leaves Silero mid-speech; start it afresh so the pause isn't a second segment.
           vad.reset()
           vadEpochMs = System.currentTimeMillis()
+          vadBase = heard.total
           turnEnd.reset()
         }
       }
@@ -419,6 +463,7 @@ object MicLoop {
       }
       if (isQuestion) {
         awaitingQuestionUntil = 0
+        Partials.next()
         Voice.turns.questionTaken()
       }
       val entry =
@@ -430,7 +475,11 @@ object MicLoop {
           .put("owner", isQuestion)
           .put("voice", voice?.let { v -> JSONArray().apply { v.forEach { put(it.toDouble()) } } })
       Places.tag(entry)
-      if (isQuestion || (recordAmbient && ambient)) Journal.append(ctx, entry)
+      if (isQuestion || (recordAmbient && ambient)) {
+        // The line's audio, for playback (off the record: not saved).
+        SpeechAudio.save(ctx, audio, atMs)?.let { entry.put("audioPath", it) }
+        Journal.append(ctx, entry)
+      }
       emit("onTranscript", mapOf("kind" to entry.getString("kind"), "text" to text, "at" to atMs.toDouble()))
       if (isQuestion) {
         if (jsAnswers && listener != null) emit("onQuestion", mapOf("text" to text, "followUp" to followUp))

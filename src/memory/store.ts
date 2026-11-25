@@ -1,3 +1,4 @@
+import { isStaleSuggestion, isTemplate } from './fact-extraction';
 import SidekickNative, { type JournalEntry } from '../../modules/sidekick-native';
 import { isDownloaded, modelPath } from '@/engine/downloads';
 import { EMBEDDER_FILE } from '@/engine/models';
@@ -43,6 +44,8 @@ import {
 import { applyAutoName, assignLabel, collectPersonInfo, type KeptLine } from './people';
 import { CONVERSATION_GAP_MS, speakerLabel } from './people-logic';
 import { liveTranscript } from '@/engine/live-transcript';
+import { noteFix } from '@/engine/location-track';
+import { momentIdsAtNamedPlace } from './places-store';
 
 export type Moment = {
   id: number;
@@ -57,6 +60,8 @@ export type Moment = {
   withPeople?: string[];
   /** Offline place name ("Leeds, GB") when location was on. */
   place: string | null;
+  /** The line's saved audio (speech), while it is kept. */
+  audioPath?: string | null;
 };
 
 type Row = Record<string, unknown>;
@@ -70,6 +75,7 @@ const toMoment = (r: Row): Moment => ({
   isOwner: r.is_owner === 1,
   photoPath: (r.photo_path as string | null) ?? null,
   place: (r.place as string | null) ?? null,
+  audioPath: (r.audio_path as string | null) ?? null,
 });
 
 /** Stores where a moment happened (coordinates + offline place name). */
@@ -217,6 +223,11 @@ async function ingestJournalNow(): Promise<number> {
     } catch {
       continue;
     }
+    if (e.kind === 'location') {
+      // The location track (while listening); not a moment.
+      await noteFix(e).catch(() => false);
+      continue;
+    }
     if (e.kind === 'answer') {
       const r = await db.execute('INSERT INTO moments (kind, at, text) VALUES (?, ?, ?)', [
         'answer',
@@ -240,6 +251,8 @@ async function ingestJournalNow(): Promise<number> {
         }
       }
       if (!keepOtherSpeech({ consentMode, speakerConsented: consented })) {
+        // Not kept: nor is their voice recording.
+        if (e.audioPath) SidekickNative.deleteFile(e.audioPath);
         if (!s && e.voice) pendingClips.push({ at: e.at, voice: e.voice, momentId: null });
         liveTranscript.put({
           at: e.at,
@@ -252,8 +265,8 @@ async function ingestJournalNow(): Promise<number> {
       }
     }
     const ins = await db.execute(
-      'INSERT INTO moments (kind, at, text, speaker_id) VALUES (?, ?, ?, ?)',
-      [e.kind, e.at, e.text, s?.id ?? null],
+      'INSERT INTO moments (kind, at, text, speaker_id, audio_path) VALUES (?, ?, ?, ?, ?)',
+      [e.kind, e.at, e.text, s?.id ?? null, e.audioPath ?? null],
     );
     await tagPlace(ins.insertId!, entryPlace(e));
     if (!s && !isOwner && e.voice)
@@ -461,6 +474,7 @@ export async function markFactsScanned(ids: number[]) {
 export async function suggestFacts(texts: string[]) {
   const known = new Set((await savedFacts()).map((f) => f.text.toLowerCase().replace(/\.$/, '')));
   for (const t of texts) {
+    if (isTemplate(t)) continue;
     if (!known.has(t.toLowerCase().replace(/\.$/, ''))) await saveFact(t, 'suggested');
   }
 }
@@ -549,7 +563,7 @@ export async function nextUndescribedPhoto(): Promise<{ id: number; photoPath: s
   const r = await db.execute(
     `SELECT m.id, m.photo_path FROM moments m
      LEFT JOIN photo_descriptions d ON d.moment_id = m.id
-     WHERE m.photo_path IS NOT NULL AND d.moment_id IS NULL AND m.photo_ocr != ${OCR_FOUND}
+     WHERE m.photo_path IS NOT NULL AND m.kind != 'frame' AND d.moment_id IS NULL AND m.photo_ocr != ${OCR_FOUND}
      ORDER BY m.at DESC LIMIT 1`,
   );
   const row = r.rows[0];
@@ -764,7 +778,10 @@ async function narrowByPlaceOrPerson(question: string, ids: number[]): Promise<n
   ).rows.map((x) => x.place as string);
   const people = (await db.execute('SELECT id, name FROM speakers WHERE name IS NOT NULL')).rows;
   let wanted: Set<number> | null = null;
-  const place = mentionedName(question, places);
+  // A place the user named ("the gym"): moments recorded inside it.
+  const atNamed = await momentIdsAtNamedPlace(question).catch(() => null);
+  if (atNamed?.length) wanted = new Set(atNamed);
+  const place = atNamed?.length ? null : mentionedName(question, places);
   if (place) {
     const r = await db.execute(
       'SELECT id FROM moments WHERE place = ? ORDER BY at DESC LIMIT 500',
@@ -803,17 +820,36 @@ export async function recentMoments(limit = 100, offset = 0): Promise<Moment[]> 
   return r.rows.map(toMoment);
 }
 
+/** What was said and asked between [from] and [to], oldest first ("what did we talk about today"). */
+export async function momentsBetween(from: number, to: number, limit = 400): Promise<Moment[]> {
+  const db = await getDb();
+  const r = await db.execute(
+    `${MOMENT_SELECT} WHERE m.at >= ? AND m.at < ? AND m.kind IN ('speech', 'answer', 'question')
+     AND length(m.text) > 0 ORDER BY m.at DESC LIMIT ?`,
+    [from, to, limit],
+  );
+  return r.rows.map(toMoment).reverse();
+}
+
 export async function savedFacts(): Promise<{ id: number; text: string; status: string }[]> {
   const db = await getDb();
   // The owner's facts only; facts about other people are on their pages (people.ts).
   const r = await db.execute(
     'SELECT id, text, status FROM facts WHERE speaker_id IS NULL ORDER BY at DESC',
   );
-  return r.rows.map((x) => ({
-    id: x.id as number,
-    text: x.text as string,
-    status: x.status as string,
-  }));
+  // Suggestions saved by older versions that today's checks reject ("My name is [Name].",
+  // "Please provide the conversation…") are dropped, not shown.
+  const stale = r.rows.filter(
+    (x) => x.status === 'suggested' && isStaleSuggestion(x.text as string),
+  );
+  for (const x of stale) await db.execute('DELETE FROM facts WHERE id = ?', [x.id as number]);
+  return r.rows
+    .filter((x) => !stale.includes(x))
+    .map((x) => ({
+      id: x.id as number,
+      text: x.text as string,
+      status: x.status as string,
+    }));
 }
 
 export async function listSpeakers() {
@@ -861,13 +897,17 @@ export async function nameSpeaker(id: number, name: string) {
 
 // --- Deleting ---
 
+/** The photo and audio files of the moments being deleted go with them. */
 async function deletePhotos(where: string, params: (number | string)[]) {
   const db = await getDb();
   const r = await db.execute(
-    `SELECT photo_path FROM moments WHERE photo_path IS NOT NULL AND ${where}`,
+    `SELECT photo_path, audio_path FROM moments WHERE (photo_path IS NOT NULL OR audio_path IS NOT NULL) AND ${where}`,
     params,
   );
-  r.rows.forEach((x) => SidekickNative.deleteFile(x.photo_path as string));
+  for (const x of r.rows) {
+    if (x.photo_path) SidekickNative.deleteFile(x.photo_path as string);
+    if (x.audio_path) SidekickNative.deleteFile(x.audio_path as string);
+  }
 }
 
 async function deleteMoments(where: string, params: (number | string)[]) {

@@ -27,14 +27,16 @@ export const MODEL_FILES = {
   gemmaTensorG6: {
     name: 'gemma-4-E2B-it_Google_Tensor_G6.litertlm',
     url: `${HF}/gemma-4-E2B-it_Google_Tensor_G6.litertlm`,
-    sha256: '181938105e0eefd105961417e8da75903eacda102c4fce9ce90f50b97139a63c',
-    bytes: 2588147712,
+    // Checked against the Hugging Face file list, 25 Nov 2026.
+    sha256: 'd6cbe8d625f4965a8c32565f65ae774d19598d0d967a4c2101a7e04988daaf58',
+    bytes: 3453960202,
   },
-  benchPhoto: {
-    name: 'test.jpg',
-    url: 'https://raw.githubusercontent.com/robert-whiteley/sidekick/main/assets/bench/test.jpg',
-    sha256: '1ff925eb7fc6cd39ababdfede93b2103a26638c26350a00f3da96157bd8c9ac9',
-    bytes: 44731,
+  // Gemma 4 E4B (Apache-2.0): smarter, slower; Recommended on phones with 12 GB+ RAM.
+  gemmaE4B: {
+    name: 'gemma-4-E4B-it.litertlm',
+    url: 'https://huggingface.co/litert-community/gemma-4-E4B-it-litert-lm/resolve/main/gemma-4-E4B-it.litertlm',
+    sha256: '0b2a8980ce155fd97673d8e820b4d29d9c7d99b8fa6806f425d969b145bd52e0',
+    bytes: 3659530240,
   },
   // Speech (sherpa-onnx). Small, CPU-only, always resident while listening.
   vad: {
@@ -56,6 +58,15 @@ export const MODEL_FILES = {
     sha256: '6fc4426b54aa549a0019b8a75b8dea59164e71790a37ac56a045ad57f915f714',
     bytes: 482440461,
     unpackedCheck: 'sherpa-onnx-nemo-parakeet-tdt-0.6b-v2-int8/tokens.txt',
+  },
+  // Parakeet TDT 0.6B v3 (NVIDIA, CC BY 4.0): 25 European languages incl. English. Replaces v2 on
+  // phones set to another of those languages (language-logic.ts). Must match SpeechEngine.kt AsrChoice.
+  speechToTextMulti: {
+    name: 'sherpa-onnx-nemo-parakeet-tdt-0.6b-v3-int8.tar.bz2',
+    url: `${SHERPA}/asr-models/sherpa-onnx-nemo-parakeet-tdt-0.6b-v3-int8.tar.bz2`,
+    sha256: '1495e91b59d7fc53ddca91f3431758ec99f8fa253fdb0e1e851be0f72b14b0f9',
+    bytes: 487211443,
+    unpackedCheck: 'sherpa-onnx-nemo-parakeet-tdt-0.6b-v3-int8/tokens.txt',
   },
   voiceprint: {
     name: '3dspeaker_speech_campplus_sv_en_voxceleb_16k.onnx',
@@ -99,12 +110,23 @@ export const EMBEDDER_FILE: ModelFile = {
   bytes: 387710976,
 };
 
+/** The required speech models with English speech-to-text (v2); see speechFilesFor. */
 export const SPEECH_FILES: ModelFile[] = [
   MODEL_FILES.vad,
   MODEL_FILES.wakeWord,
   MODEL_FILES.speechToText,
   MODEL_FILES.voiceprint,
 ];
+
+/** The speech-to-text file for a Parakeet build (language-logic.ts). */
+export function speechToTextFile(model: 'parakeet-v2' | 'parakeet-v3'): ModelFile {
+  return model === 'parakeet-v3' ? MODEL_FILES.speechToTextMulti : MODEL_FILES.speechToText;
+}
+
+/** Required speech models for a Parakeet build: only one speech-to-text file is downloaded. */
+export function speechFilesFor(model: 'parakeet-v2' | 'parakeet-v3'): ModelFile[] {
+  return SPEECH_FILES.map((f) => (f === MODEL_FILES.speechToText ? speechToTextFile(model) : f));
+}
 
 /**
  * PaddleOCR PP-OCRv6 small (Apache-2.0), PaddlePaddle's own ONNX exports, pinned to a commit:

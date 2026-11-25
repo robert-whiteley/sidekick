@@ -4,6 +4,11 @@
     "modules": ["SidekickNativeModule"]
   },
   "android": {
-    "modules": ["dev.sidekick.engine.SidekickNativeModule"]
+    "modules": [
+      "dev.sidekick.engine.SidekickNativeModule",
+      "dev.sidekick.engine.integrations.IntegrationsModule",
+      "dev.sidekick.engine.routines.RoutinesModule",
+      "dev.sidekick.engine.offline.OfflineModule"
+    ]
   }
 }

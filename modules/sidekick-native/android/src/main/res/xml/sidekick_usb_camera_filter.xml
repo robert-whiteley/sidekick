@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- USB devices Sidekick offers to open on plug-in: video class (UVC cameras), incl. composite. -->
+<resources>
+  <usb-device class="14" />
+  <usb-device class="239" subclass="2" />
+</resources>

@@ -1,19 +1,13 @@
-import { Pressable, Text, View } from 'react-native';
+import { View } from 'react-native';
 
 import type { Moment } from '@/memory/store';
 import { deleteMoment } from '@/memory/store';
 import { Button, formatTime, Section, styles } from './ui';
 
-export function who(m: Moment): string {
-  if (m.kind === 'photo') return 'Photo';
-  if (m.kind === 'answer') return 'Asked Sidekick';
-  if (m.kind === 'note') return 'Your note';
-  if (m.kind === 'file') return 'File';
-  if (m.kind === 'event') return 'Calendar';
-  if (m.kind === 'notification') return 'Notification';
-  if (m.kind === 'question' || m.isOwner) return 'You';
-  return m.speakerName ?? (m.speakerId ? `Voice ${m.speakerId}` : 'Someone');
-}
+import { who } from '@/features/memory/timeline-logic';
+import { AppText, TextButton } from '@/ui';
+
+export { who };
 
 export function MemorySection(props: {
   moments: Moment[];
@@ -23,28 +17,30 @@ export function MemorySection(props: {
 }) {
   return (
     <Section title="Memory">
-      {props.moments.length === 0 && <Text style={styles.hint}>Nothing remembered yet.</Text>}
+      {props.moments.length === 0 && (
+        <AppText variant="bodySmall" tone="muted">
+          Nothing remembered yet.
+        </AppText>
+      )}
       {props.moments.map((m) => (
         <View key={m.id} style={styles.item}>
           <View style={styles.itemRow}>
-            <Text style={[styles.small, styles.flex]}>
+            <AppText variant="bodySmall" tone="muted" style={styles.flex}>
               {formatTime(m.at)} · {who(m)}
               {m.place ? ` · ${m.place}` : ''}
-              {m.photoPath ? ' · 📷' : ''}
-            </Text>
-            <Pressable
+              {m.photoPath ? ' · photo' : ''}
+            </AppText>
+            <TextButton
+              title="Delete"
               onPress={async () => {
                 await deleteMoment(m.id);
                 props.onChanged();
               }}
               accessibilityLabel="Delete memory"
-            >
-              <Text style={[styles.link, styles.danger]}>Delete</Text>
-            </Pressable>
+              danger
+            />
           </View>
-          <Text style={styles.body} numberOfLines={4}>
-            {m.text}
-          </Text>
+          <AppText numberOfLines={4}>{m.text}</AppText>
         </View>
       ))}
       {props.hasMore && <Button title="Load more" onPress={props.onMore} />}

@@ -1,21 +1,19 @@
-import * as Sharing from 'expo-sharing';
 import { useState } from 'react';
-import { Text } from 'react-native';
 
-import { syncFollowupNotifications } from '@/engine/followup-notify';
-import { deleteEverything, deleteRange, exportEverything } from '@/memory/store';
+import { deleteAllData, exportAllData } from '@/engine/data-export';
+import { deleteRange } from '@/memory/store';
 import { DeleteBySource } from './SourcesSection';
-import { Button, confirm, Section, styles } from './ui';
+import { Button, confirm, Section } from './ui';
+import { AppText } from '@/ui';
 
 export function DataSection({ onChanged }: { onChanged: () => void }) {
   const [msg, setMsg] = useState('');
 
   const exportAll = async () => {
-    setMsg('Preparing export…');
+    setMsg('Choose a folder for the export…');
     try {
-      const path = await exportEverything();
-      setMsg('');
-      await Sharing.shareAsync(`file://${path}`, { mimeType: 'application/zip' });
+      const r = await exportAllData();
+      setMsg(r ? `Exported ${r.files} files to "${r.folder}".` : '');
     } catch (e) {
       setMsg(`Export failed: ${e instanceof Error ? e.message : String(e)}`);
     }
@@ -29,10 +27,10 @@ export function DataSection({ onChanged }: { onChanged: () => void }) {
 
   return (
     <Section title="Your data">
-      <Text style={styles.hint}>
-        Everything is stored encrypted on this phone only. Export gives you all of it (text and
-        photos) as a zip.
-      </Text>
+      <AppText variant="bodySmall" tone="muted">
+        Everything is stored encrypted on this phone only. Export copies all of it (text, photos,
+        video and audio) to a folder you choose.
+      </AppText>
       <Button title="Export everything" onPress={() => void exportAll()} />
       <Button
         danger
@@ -65,16 +63,18 @@ export function DataSection({ onChanged }: { onChanged: () => void }) {
         onPress={() =>
           confirm(
             'Delete everything?',
-            'All memories, people, facts and photos are permanently deleted.',
+            'All memories, people, facts, photos, video, settings and downloaded models are permanently deleted, as if Sidekick was uninstalled. The app then closes.',
             async () => {
-              await deleteEverything();
-              await syncFollowupNotifications(); // drop reminders for deleted follow-ups
-              onChanged();
+              await deleteAllData();
             },
           )
         }
       />
-      {msg ? <Text style={styles.hint}>{msg}</Text> : null}
+      {msg ? (
+        <AppText variant="bodySmall" tone="muted">
+          {msg}
+        </AppText>
+      ) : null}
     </Section>
   );
 }

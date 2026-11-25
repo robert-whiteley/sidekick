@@ -1,5 +1,5 @@
 import { router, useLocalSearchParams } from 'expo-router';
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import SidekickNative from '../../modules/sidekick-native';
@@ -9,7 +9,19 @@ import { allRequiredFiles } from '@/engine/llm-candidates';
 import { OBSOLETE_MODEL_PATHS } from '@/engine/models';
 import { modelsDir } from '@/engine/paths';
 import { AskScreen } from '@/features/ask/AskScreen';
-import { ModelSetup } from '@/features/ask/ModelSetup';
+import { startIntegrations } from '@/engine/actions';
+import { onLlmLoaded } from '@/engine/llm';
+import { noteLlmLoaded, startModelUpdates } from '@/engine/model-updates';
+import { startQuickFixes } from '@/engine/quick-fixes';
+import { startWave2 } from '@/engine/wave2-start';
+import { startStorageMonitor } from '@/engine/storage-monitor';
+import { FirstRun } from '@/features/onboarding/FirstRun';
+import { checkWhatsNew } from '@/content/whats-new-notice';
+import { startStepSampler } from '@/integrations/extras';
+import { startOnlineQueue } from '@/engine/online-queue';
+import { startRoutines } from '@/engine/routines';
+import { startLocationMemory } from '@/engine/location';
+import { applySpeechModel } from '@/engine/language';
 
 function modelsReady() {
   const ready = allRequiredFiles(SidekickNative.getDeviceInfo().soc).every(isDownloaded);
@@ -26,10 +38,29 @@ export default function HomeScreen() {
   const entry = parseEntry(useLocalSearchParams());
   // Cleared once handled, so the same link (e.g. a widget button) works again next time.
   const entryDone = useCallback(() => router.setParams({ entry: undefined, t: undefined }), []);
+  // Model updates (Automatic / Ask me / Off) and storage cleanup run once the models are in.
+  useEffect(() => {
+    if (!ready) return;
+    checkWhatsNew();
+    applySpeechModel();
+    const stops = [
+      onLlmLoaded(noteLlmLoaded),
+      startModelUpdates(),
+      startQuickFixes(),
+      startStorageMonitor(),
+      startIntegrations(),
+      startStepSampler(),
+      startRoutines(),
+      startOnlineQueue(),
+      startLocationMemory(),
+      startWave2(),
+    ];
+    return () => stops.forEach((s) => s());
+  }, [ready]);
   if (ready) return <AskScreen entry={entry} onEntryHandled={entryDone} />;
   return (
     <SafeAreaView style={{ flex: 1 }}>
-      <ModelSetup onReady={() => setReady(true)} />
+      <FirstRun onReady={() => setReady(true)} />
     </SafeAreaView>
   );
 }

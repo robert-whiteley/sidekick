@@ -1,6 +1,6 @@
 import { useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
-import { AppState, Platform, Pressable, Text, TextInput, View } from 'react-native';
+import { AppState, Platform, View } from 'react-native';
 
 import { getSettings, onSettingsChange, type Settings, updateSettings } from '@/engine/settings';
 import {
@@ -19,6 +19,7 @@ import {
   syncNow,
 } from '@/memory/sources';
 import { Button, confirm, Row, Section, styles } from './ui';
+import { AppText, TextButton, TextField } from '@/ui';
 
 const isAndroid = Platform.OS === 'android';
 
@@ -119,10 +120,10 @@ export function SourcesSection({ onChanged }: { onChanged: () => void }) {
 
   return (
     <Section title="Your data sources">
-      <Text style={styles.hint}>
+      <AppText variant="bodySmall" tone="muted">
         Extra things Sidekick can remember and search. Each is off until you turn it on, and
         everything stays encrypted on this phone.
-      </Text>
+      </AppText>
 
       <Row
         label="Notes"
@@ -132,8 +133,8 @@ export function SourcesSection({ onChanged }: { onChanged: () => void }) {
       />
       {s.sourceNotes && (
         <View style={styles.itemRow}>
-          <TextInput
-            style={[styles.input, styles.flex]}
+          <TextField
+            containerStyle={styles.flex}
             value={note}
             onChangeText={setNote}
             onSubmitEditing={() => void saveNote()}
@@ -141,9 +142,7 @@ export function SourcesSection({ onChanged }: { onChanged: () => void }) {
             accessibilityLabel="New note"
             multiline
           />
-          <Pressable onPress={() => void saveNote()} accessibilityRole="button">
-            <Text style={styles.link}>Save</Text>
-          </Pressable>
+          <TextButton title="Save" onPress={() => void saveNote()} />
         </View>
       )}
 
@@ -163,10 +162,11 @@ export function SourcesSection({ onChanged }: { onChanged: () => void }) {
         <>
           {s.folderUris.map((uri) => (
             <View key={uri} style={styles.itemRow}>
-              <Text style={[styles.body, styles.flex]} numberOfLines={1}>
+              <AppText style={styles.flex} numberOfLines={1}>
                 {folderLabel(uri)}
-              </Text>
-              <Pressable
+              </AppText>
+              <TextButton
+                title="Remove"
                 onPress={() =>
                   confirm(
                     'Remove this folder?',
@@ -175,9 +175,8 @@ export function SourcesSection({ onChanged }: { onChanged: () => void }) {
                   )
                 }
                 accessibilityLabel={`Remove folder ${folderLabel(uri)}`}
-              >
-                <Text style={[styles.link, styles.danger]}>Remove</Text>
-              </Pressable>
+                danger
+              />
             </View>
           ))}
           <Button
@@ -221,15 +220,19 @@ export function SourcesSection({ onChanged }: { onChanged: () => void }) {
           />
           {s.sourceNotifications && !notifAccess && (
             <>
-              <Text style={styles.hint}>
+              <AppText variant="bodySmall" tone="muted">
                 Android needs you to allow “Sidekick memory” under Notification access.
-              </Text>
+              </AppText>
               <Button title="Open notification access" onPress={openNotificationAccess} />
             </>
           )}
         </>
       )}
-      {msg ? <Text style={styles.hint}>{msg}</Text> : null}
+      {msg ? (
+        <AppText variant="bodySmall" tone="muted">
+          {msg}
+        </AppText>
+      ) : null}
     </Section>
   );
 }

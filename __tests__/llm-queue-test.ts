@@ -8,6 +8,19 @@ const deferred = () => {
 const tick = () => new Promise((r) => setTimeout(r, 0));
 
 describe('LlmQueue', () => {
+  it('counts background jobs stopped for a question (their reply is cut short)', async () => {
+    const running = deferred();
+    const q = new LlmQueue(() => running.resolve());
+    const bg = q.run(true, () => running.p);
+    await tick();
+    expect(q.preemptions).toBe(0);
+    const user = q.run(false, async () => {});
+    await Promise.all([bg, user]);
+    expect(q.preemptions).toBe(1);
+    await q.run(false, async () => {}); // nothing running in the background: not counted
+    expect(q.preemptions).toBe(1);
+  });
+
   it('runs background jobs one at a time, in order', async () => {
     const q = new LlmQueue(() => {});
     const order: string[] = [];

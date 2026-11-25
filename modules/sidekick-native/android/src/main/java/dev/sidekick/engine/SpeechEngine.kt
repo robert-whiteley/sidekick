@@ -27,7 +27,8 @@ class SpeechPaths(modelsDir: String) {
   val kwsDecoder = "$kwsDir/decoder-epoch-12-avg-2-chunk-16-left-64.onnx"
   val kwsJoiner = "$kwsDir/joiner-epoch-12-avg-2-chunk-16-left-64.int8.onnx"
   val kwsTokens = "$kwsDir/tokens.txt"
-  private val asrDir = "$modelsDir/sherpa-onnx-nemo-parakeet-tdt-0.6b-v2-int8"
+  /** The chosen speech-to-text folder (language-logic.ts), else English Parakeet v2. */
+  private val asrDir = "$modelsDir/${AsrChoice.dir(modelsDir)}"
   val asrEncoder = "$asrDir/encoder.int8.onnx"
   val asrDecoder = "$asrDir/decoder.int8.onnx"
   val asrJoiner = "$asrDir/joiner.int8.onnx"
@@ -40,10 +41,37 @@ class SpeechPaths(modelsDir: String) {
 }
 
 /**
+ * Which Parakeet build transcribes: v2 (English) or v3 (25 European languages). Saved as a file
+ * next to the models so the listen service uses it with the app closed. Falls back to v2 when the
+ * chosen folder isn't fully there.
+ */
+object AsrChoice {
+  const val V2 = "sherpa-onnx-nemo-parakeet-tdt-0.6b-v2-int8"
+  const val V3 = "sherpa-onnx-nemo-parakeet-tdt-0.6b-v3-int8"
+  private const val FILE = "asr-model.txt"
+  private val PARTS = listOf("encoder.int8.onnx", "decoder.int8.onnx", "joiner.int8.onnx", "tokens.txt")
+
+  fun complete(modelsDir: String, dir: String): Boolean = PARTS.all { File("$modelsDir/$dir/$it").canRead() }
+
+  fun dir(modelsDir: String): String {
+    val chosen = runCatching { File(modelsDir, FILE).readText().trim() }.getOrNull()
+    return if (chosen == V3 && complete(modelsDir, V3)) V3 else V2
+  }
+
+  /** Saves [dir]; false if it isn't one of the builds or isn't downloaded. */
+  fun save(modelsDir: String, dir: String): Boolean {
+    if (dir != V2 && dir != V3) return false
+    if (!complete(modelsDir, dir)) return false
+    File(modelsDir, FILE).writeText(dir)
+    return true
+  }
+}
+
+/**
  * The speech models, loaded once per process. Everything runs on the CPU and is small (~80 MB),
  * so it can stay resident next to the LLM.
  */
-class SpeechEngine(private val paths: SpeechPaths, keywordsFile: File) {
+class SpeechEngine(private var paths: SpeechPaths, keywordsFile: File) {
   /** Speech-to-text; swapped by [setAsrThreads], so only touch it under the engine's lock. */
   private var asr = newAsr(asrThreads)
   private var asrThreadsInUse = asrThreads
@@ -67,6 +95,23 @@ class SpeechEngine(private val paths: SpeechPaths, keywordsFile: File) {
           ),
       ),
     )
+
+  /** Switches to the speech-to-text build in [modelsDir]'s saved choice (waits for a running one). */
+  @Synchronized
+  fun reloadAsr(modelsDir: String) {
+    val next = SpeechPaths(modelsDir)
+    if (next.asrEncoder == paths.asrEncoder) return
+    val old = paths
+    paths = next
+    try {
+      val asrNext = newAsr(asrThreadsInUse)
+      asr.release()
+      asr = asrNext
+    } catch (e: Throwable) {
+      paths = old
+      throw e
+    }
+  }
 
   /** Reloads speech-to-text with [threads] CPU threads (waits for a running transcription). */
   @Synchronized
@@ -176,6 +221,13 @@ class SpeechEngine(private val paths: SpeechPaths, keywordsFile: File) {
     fun configureAsrThreads(threads: Int) {
       asrThreads = threads.coerceIn(1, 8)
       instance?.setAsrThreads(asrThreads)
+    }
+
+    /** Saves the speech-to-text build ([AsrChoice]) and switches to it now if loaded. */
+    fun configureAsrModel(modelsDir: String, dir: String): Boolean {
+      if (!AsrChoice.save(modelsDir, dir)) return false
+      instance?.reloadAsr(modelsDir)
+      return true
     }
 
     /** Loads the models on first use. [keywords] is written to the file sherpa requires. */

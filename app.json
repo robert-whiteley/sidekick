@@ -29,9 +29,17 @@
       "allowBackup": false,
       "blockedPermissions": [
         "android.permission.WRITE_CONTACTS",
-        "android.permission.WRITE_CALENDAR"
+        "android.permission.READ_MEDIA_IMAGES",
+        "android.permission.READ_MEDIA_VIDEO",
+        "android.permission.READ_MEDIA_AUDIO",
+        "android.permission.READ_MEDIA_VISUAL_USER_SELECTED",
+        "android.permission.ACCESS_MEDIA_LOCATION",
+        "android.permission.SYSTEM_ALERT_WINDOW",
+        "android.permission.READ_SMS",
+        "android.permission.SEND_SMS",
+        "android.permission.READ_CALL_LOG"
       ],
-      "permissions": ["android.permission.SCHEDULE_EXACT_ALARM"]
+      "permissions": ["android.permission.SCHEDULE_EXACT_ALARM", "android.permission.CALL_PHONE"]
     },
     "web": {
       "favicon": "./assets/favicon.png"
@@ -58,7 +66,6 @@
         }
       ],
       "expo-secure-store",
-      "./plugins/with-third-party-sqlite",
       "expo-sharing",
       [
         "expo-contacts",
@@ -69,11 +76,27 @@
       [
         "expo-calendar",
         {
-          "calendarPermission": "Sidekick reads your calendar so it can answer questions like \"when is my dentist\". Events stay on this phone."
+          "calendarPermission": "Sidekick reads your calendar to answer questions like \"when is my dentist\", and adds events only after you tap Add. Events stay on this phone."
         }
       ],
-      ["expo-notifications", { "enableRemoteNotifications": false }],
-      "./plugins/without-firebase-messaging"
+      [
+        "expo-notifications",
+        {
+          "enableRemoteNotifications": false
+        }
+      ],
+      "./plugins/without-firebase-messaging",
+      "./plugins/with-usb-camera",
+      "./plugins/with-share-target",
+      "expo-video",
+      [
+        "expo-audio",
+        {
+          "enableBackgroundPlayback": false
+        }
+      ],
+      "expo-asset",
+      "expo-font"
     ],
     "scheme": "sidekick",
     "experiments": {
@@ -85,6 +108,12 @@
           "web": true
         }
       },
+      "google": {
+        "androidClientId": "589193178601-soll8g1g6m3krjvcidu3jnl57f69kjfp.apps.googleusercontent.com"
+      },
+      "support": {
+        "email": "info@sashy.ai"
+      },
       "eas": {
         "projectId": "9e5e57c2-26e2-4ca4-9191-3606924369f5"
       }
@@ -94,7 +123,8 @@
       "policy": "fingerprint"
     },
     "updates": {
-      "url": "https://u.expo.dev/9e5e57c2-26e2-4ca4-9191-3606924369f5"
+      "url": "https://u.expo.dev/9e5e57c2-26e2-4ca4-9191-3606924369f5",
+      "checkAutomatically": "NEVER"
     }
   }
 }

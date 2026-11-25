@@ -1,10 +1,11 @@
 import { useState } from 'react';
-import { Pressable, Text, TextInput, View } from 'react-native';
+import { View } from 'react-native';
 
 import { formatMinutes, parseTime } from '@/engine/place-logic';
 import { addPausePlaceHere, pushPauseRules, removePausePlace } from '@/engine/places';
 import { getSettings, type Settings, updateSettings } from '@/engine/settings';
 import { Button, Row, Section, styles } from './ui';
+import { AppText, TextButton, TextField } from '@/ui';
 
 /** Quiet hours and "pause here" places. Push-to-talk always works. */
 export function AutoPauseSection() {
@@ -45,10 +46,10 @@ export function AutoPauseSection() {
 
   return (
     <Section title="Auto-pause">
-      <Text style={styles.hint}>
+      <AppText variant="bodySmall" tone="muted">
         While paused, Sidekick does not listen for the wake word or keep anything. Holding the mic
         button still works. Silence is never processed anyway.
-      </Text>
+      </AppText>
       <Row
         label="Quiet hours"
         hint={`Pause every day from ${formatMinutes(s.quietStart)} to ${formatMinutes(s.quietEnd)}.`}
@@ -57,17 +58,17 @@ export function AutoPauseSection() {
       />
       {s.quietHours && (
         <View style={styles.itemRow}>
-          <TextInput
-            style={[styles.input, styles.flex]}
+          <TextField
+            containerStyle={styles.flex}
             value={start}
             onChangeText={setStart}
             onEndEditing={saveTimes}
             placeholder="22:00"
             accessibilityLabel="Quiet hours start"
           />
-          <Text style={styles.body}> to </Text>
-          <TextInput
-            style={[styles.input, styles.flex]}
+          <AppText> to </AppText>
+          <TextField
+            containerStyle={styles.flex}
             value={end}
             onChangeText={setEnd}
             onEndEditing={saveTimes}
@@ -76,30 +77,33 @@ export function AutoPauseSection() {
           />
         </View>
       )}
-      <Text style={styles.label}>Pause listening here</Text>
-      <TextInput
-        style={styles.input}
+      <AppText>Pause listening here</AppText>
+      <TextField
         value={name}
         onChangeText={setName}
         placeholder="Name, e.g. Work"
         autoCapitalize="words"
       />
       <Button title="Pause listening here" onPress={pauseHere} />
-      {msg ? <Text style={styles.hint}>{msg}</Text> : null}
+      {msg ? (
+        <AppText variant="bodySmall" tone="muted">
+          {msg}
+        </AppText>
+      ) : null}
       {s.pausePlaces.map((p) => (
         <View key={p.id} style={styles.itemRow}>
-          <Text style={[styles.body, styles.flex]}>
+          <AppText style={styles.flex}>
             {p.name} ({p.radiusM} m)
-          </Text>
-          <Pressable
+          </AppText>
+          <TextButton
+            title="Delete"
             onPress={() => {
               removePausePlace(p.id);
               setS(getSettings());
             }}
             accessibilityLabel={`Delete ${p.name}`}
-          >
-            <Text style={[styles.link, styles.danger]}>Delete</Text>
-          </Pressable>
+            danger
+          />
         </View>
       ))}
     </Section>

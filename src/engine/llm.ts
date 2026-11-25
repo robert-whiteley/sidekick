@@ -23,6 +23,20 @@ const SAVED_KEY = 'llm.backend.v1';
 
 let loaded: LlmLoadResult | null = null;
 let loading: Promise<LlmLoadResult> | null = null;
+/** Bumped each time the model loads: a chat from an earlier load is gone. */
+let loads = 0;
+/** The system prompt the next fresh chat starts with (the usual one plus the running summary). */
+let chatSystemNow = SYSTEM_PROMPT;
+
+let chatSystemSource: (() => string) | null = null;
+
+/** Where a load finds the current chat's system prompt (set by the assistant), to read it in early. */
+export function setChatSystemSource(source: () => string) {
+  chatSystemSource = source;
+}
+
+/** How many times the model has loaded (a chat started under another count no longer exists). */
+export const llmLoadCount = () => loads;
 
 /** Which backend this phone settled on, if it has calibrated. */
 export function savedBackend(): LlmBackend | null {
@@ -39,6 +53,13 @@ export function resetBackendChoice() {
  * loads is timed on a fixed prompt and the winner is remembered; after that it loads directly
  * (falling back to the others only if the saved one stops working, e.g. after a driver update).
  */
+const loadListeners = new Set<(r: LlmLoadResult) => void>();
+/** Called after each model load (model updates confirm a switch from it). */
+export function onLlmLoaded(l: (r: LlmLoadResult) => void): () => void {
+  loadListeners.add(l);
+  return () => loadListeners.delete(l);
+}
+
 export function ensureLlm(onStatus?: (s: string) => void): Promise<LlmLoadResult> {
   if (loaded && SidekickNative.llmIsLoaded()) return Promise.resolve(loaded);
   loaded = null;
@@ -46,11 +67,24 @@ export function ensureLlm(onStatus?: (s: string) => void): Promise<LlmLoadResult
     loading = load(onStatus).then(
       async (r) => {
         // Read the fixed system prompt in now, so the first question doesn't wait for it.
-        await SidekickNative.llmPrepare(SYSTEM_PROMPT).catch((e) =>
+        loads++;
+        try {
+          if (chatSystemSource) chatSystemNow = chatSystemSource();
+        } catch (e) {
+          console.log(`[llm] chat prompt unavailable: ${String(e)}`);
+        }
+        await SidekickNative.llmPrepare(chatSystemNow).catch((e) =>
           console.log(`[llm] prepare failed: ${String(e)}`),
         );
         loaded = r;
         loading = null;
+        for (const l of loadListeners) {
+          try {
+            l(r);
+          } catch (e) {
+            console.log(`[llm] load listener failed: ${String(e)}`);
+          }
+        }
         return r;
       },
       (e) => {
@@ -178,6 +212,22 @@ export async function askLlmAside(prompt: string, maxTokens: number): Promise<st
   });
   return text;
 }
+
+/**
+ * The next fresh chat starts with [system]: read it in now, in the background (after any answer),
+ * so that question doesn't wait for it.
+ */
+export function prepareChat(system: string) {
+  chatSystemNow = system;
+  if (!loaded || !SidekickNative.llmIsLoaded()) return;
+  void foreground
+    .idle()
+    .then(() => queue.run(true, () => SidekickNative.llmPrepare(system)))
+    .catch((e) => console.log(`[llm] prepare failed: ${String(e)}`));
+}
+
+/** Background passes stopped by a question so far. */
+export const backgroundPreemptions = () => queue.preemptions;
 
 /** Drops the last chat turn sent with `undoable` (e.g. a "LOOKUP" reply); false if none. */
 export function undoLastTurn(): boolean {

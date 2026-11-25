@@ -50,3 +50,9 @@ coverage/
 /.models/
 modules/sidekick-native/android/build/
 modules/sidekick-native/android/.cxx/
+
+# fastlane output
+fastlane/report.xml
+fastlane/Preview.html
+.bundle/
+vendor/bundle/
