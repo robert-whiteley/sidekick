@@ -1,3 +1,4 @@
+import { draftSummary, planAction } from '@/engine/actions';
 import { recallContext } from '@/memory/recall';
 import SidekickNative from '../../modules/sidekick-native';
 import {
@@ -64,6 +65,8 @@ export type AnswerResult = {
   webQuery?: string;
   /** Answered here without the model (a saved fact, reminder or contact); no web link. */
   local?: boolean;
+  /** A phone action drafted for the user's OK (message, email, event, call): shown as a card. */
+  draftId?: string;
   /** Stored moments the answer is about (video clip or still), shown in the chat player. */
   media?: { momentAt: number; kind: 'video' | 'photo' | 'audio'; path?: string }[];
 };
@@ -190,6 +193,15 @@ export async function answer(
     return { text, usedPhoto: null, sources: [], ms: 0, ttftMs: 0, local: true };
   }
 
+  // "Text Sam I'm running late", "add lunch with Jo tomorrow at 1": a draft card, sent only on OK.
+  const plan = photoNow ? null : await planAction(question).catch(() => null);
+  if (plan) {
+    const text = plan.kind === 'reply' ? plan.text : draftSummary(plan.draft);
+    onText(text);
+    const draftId = plan.kind === 'draft' ? plan.draft.id : undefined;
+    return { text, usedPhoto: null, sources: [], ms: 0, ttftMs: 0, local: true, draftId };
+  }
+
   // "What's Sam's number": straight from contacts (when on), no model needed.
   const local = photoNow ? null : await answerLocally(question).catch(() => null);
   if (local) {
@@ -228,11 +240,16 @@ export async function answer(
       : '';
   // "What did I ask Sam to do?": the named person's notes, kept facts and requests.
   const person = await personPromptContext(question).catch(() => '');
+  // What the camera saw (live frames, clips): empty unless the question is about it. Its
+  // frame beats an older photo note: it is what the question is about.
+  const recall = photoNow ? null : await recallContext(question).catch(() => null);
+  if (recall?.images.length) image = recall.images[0];
+  if (recall && recall.intent !== 'none')
+    console.log(
+      `[recall] ${recall.intent}: ${recall.refs.length} matches, ${recall.images.length} images, media ${recall.media?.kind ?? 'none'}`,
+    );
   // The photo's exact text (OCR, ~1 s) helps the model read numbers and names right.
   const seenText = ocrPromptLine(await photoTextOrNull(image));
-  // What the camera saw (live frames, clips): empty unless the question is about it.
-  const recall = photoNow ? null : await recallContext(question).catch(() => null);
-  if (!image && recall?.images.length) image = recall.images[0];
   const recallPart = recall?.promptPart ?? '';
   const conv = conversation();
   if (conv.keepHistory() && chatLoad !== llmLoadCount()) conv.restart(); // the model was reloaded

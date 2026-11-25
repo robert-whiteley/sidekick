@@ -253,7 +253,17 @@ export function recallPrompt(
     lines.push(
       `Camera memory: ${extra.count} separate sighting${extra.count === 1 ? '' : 's'} of ${extra.what ?? 'it'} (frames within a few seconds count once). Check the images; answer with the count.`,
     );
-  else lines.push(`Camera memory: best matches at ${found.map((f) => hhmm(f.at)).join(', ')}.`);
+  else
+    lines.push(
+      `Camera memory: the attached image is what the camera saw at ${hhmm(found[0].at)}${
+        found.length > 1
+          ? ` (other matches: ${found
+              .slice(1)
+              .map((f) => hhmm(f.at))
+              .join(', ')})`
+          : ''
+      }. Answer from it: say what it shows.`,
+    );
   if (extra.frames && extra.frames > 1)
     lines.push(
       `Images: ${extra.frames} frames around ${hhmm(found[0].at)}, ~1 s apart, oldest first.`,

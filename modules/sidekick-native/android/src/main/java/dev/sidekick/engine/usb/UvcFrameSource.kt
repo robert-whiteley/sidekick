@@ -1,5 +1,9 @@
 package dev.sidekick.engine.usb
 
+import android.graphics.PixelFormat
+import android.media.ImageReader
+import android.os.Handler
+import android.os.HandlerThread
 import android.util.Log
 import com.serenegiant.usb.IFrameCallback
 import com.serenegiant.usb.USBMonitor
@@ -18,6 +22,10 @@ class UvcFrameSource(
   private val fps: Int = 10,
 ) : FrameSource {
   @Volatile private var camera: UVCCamera? = null
+  // UVCAndroid only runs its capture thread with a preview window: an off-screen one that drops
+  // every picture (frames for memory come from the frame callback).
+  private var sink: ImageReader? = null
+  private var sinkThread: HandlerThread? = null
 
   /** The mode actually used, once started. */
   @Volatile var mode: UvcChoice? = null
@@ -58,7 +66,14 @@ class UvcFrameSource(
       },
       UVCCamera.PIXEL_FORMAT_NV21,
     )
+    val thread = HandlerThread("uvc-sink").apply { start() }
+    val reader = ImageReader.newInstance(w, h, PixelFormat.RGBX_8888, 2)
+    reader.setOnImageAvailableListener({ r -> runCatching { r.acquireLatestImage()?.close() } }, Handler(thread.looper))
+    sink = reader
+    sinkThread = thread
+    cam.setPreviewDisplay(reader.surface)
     cam.startPreview()
+    Log.i(TAG, "USB camera started: $mode")
     camera = cam
   }
 
@@ -69,6 +84,10 @@ class UvcFrameSource(
     runCatching { cam.setFrameCallback(null, 0) }
     runCatching { cam.stopPreview() }
     runCatching { cam.destroy() }
+    runCatching { sink?.close() }
+    sinkThread?.quitSafely()
+    sink = null
+    sinkThread = null
   }
 
   private companion object {

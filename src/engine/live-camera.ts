@@ -3,8 +3,11 @@ import { Platform } from 'react-native';
 import SidekickNative from '../../modules/sidekick-native';
 import { cameraConfigFor, cameraNotice } from './camera-logic';
 import { currentTuning } from './device-profile';
+import { isDownloaded, modelPath } from './downloads';
+import { EMBEDDER_FILE, OCR_FILES } from './models';
 import { notices } from './notices';
 import { onSettingsChange } from './settings';
+import { EMBED_DIMS } from '@/memory/db';
 import { ingestFrames } from '@/memory/frames';
 
 /**
@@ -38,11 +41,25 @@ function setIngest(on: boolean) {
   }
 }
 
+/** The recorder's settings plus the on-phone models it embeds and reads text with. */
+function config() {
+  const ocr =
+    isDownloaded(OCR_FILES.det) && isDownloaded(OCR_FILES.rec) && isDownloaded(OCR_FILES.dict);
+  return {
+    ...cameraConfigFor(currentTuning()),
+    embedModelPath: isDownloaded(EMBEDDER_FILE) ? modelPath(EMBEDDER_FILE) : null,
+    dims: EMBED_DIMS,
+    ocrDetPath: ocr ? modelPath(OCR_FILES.det) : null,
+    ocrRecPath: ocr ? modelPath(OCR_FILES.rec) : null,
+    ocrDictPath: ocr ? modelPath(OCR_FILES.dict) : null,
+  };
+}
+
 /** Starts live camera memory. Needs the camera permission already granted; false if it can't. */
 export function startLiveCamera(): boolean {
   if (!android) return false;
   try {
-    const ok = SidekickNative.cameraStart(cameraConfigFor(currentTuning()));
+    const ok = SidekickNative.cameraStart(config());
     setIngest(ok);
     listeners.forEach((l) => l(ok));
     return ok;
@@ -86,9 +103,9 @@ export function onLiveCamera(l: (live: boolean) => void): () => void {
 export function watchLiveCamera(): () => void {
   if (!android) return () => {};
   setIngest(liveCameraOn());
-  let last = JSON.stringify(cameraConfigFor(currentTuning()));
+  let last = JSON.stringify(config());
   const stopSettings = onSettingsChange(() => {
-    const cfg = cameraConfigFor(currentTuning());
+    const cfg = config();
     const now = JSON.stringify(cfg);
     if (now === last) return;
     last = now;

@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { Text } from 'react-native';
 
 import { readDeviceProfile } from '@/engine/device-profile';
+import { connectGoogle } from '@/integrations/google';
 import { isOn, onPrefsChange, setSwitch } from '@/integrations/prefs';
 import { integration } from '@/integrations/registry';
 import { integrationAvailability } from '@/features/settings/connections-logic';
@@ -33,7 +34,11 @@ export default function ConnectionSettings() {
               key={sw.id}
               label={sw.label}
               value={isOn(item.id, sw.id)}
-              onChange={(v) => setSwitch(item.id, sw.id, v)}
+              onChange={(v) => {
+                // Google features ask Google's own consent for just that access first.
+                if (v && item.google) void connectGoogle(item.google);
+                else setSwitch(item.id, sw.id, v);
+              }}
             />
           ))}
         {a.available && item.needs ? <Text style={styles.hint}>Needs: {item.needs}</Text> : null}

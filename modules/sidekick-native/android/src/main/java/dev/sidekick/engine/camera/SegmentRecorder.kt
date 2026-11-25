@@ -172,6 +172,7 @@ class SegmentRecorder(
     runCatching { m.release() }
     if (part == null) return
     if (!ok || lastWall <= segStartWall) {
+      Log.w(TAG, "segment dropped (muxer ok=$ok, ${lastWall - segStartWall} ms)")
       part.delete()
       return
     }

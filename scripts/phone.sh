@@ -6,7 +6,15 @@ ADB="${ADB:-$(ls /mnt/c/Users/*/AppData/Local/Android/Sdk/platform-tools/adb.exe
 CACHE="$HOME/.cache/sidekick-phone"
 ready() { "$ADB" devices | tr -d '\r' | awk '$2=="device"{print $1}' | head -1; }
 s=$(ready); [ -n "$s" ] && { echo "$s"; exit 0; }
-try() { "$ADB" connect "$1" 2>/dev/null | grep -q "connected to" && { echo "${1%%:*}" >"$CACHE"; sleep 1; ready; exit 0; }; }
+# Drop stale (offline) Wi-Fi connections first.
+"$ADB" devices | tr -d '\r' | awk '$2=="offline"{print $1}' | xargs -r -n1 "$ADB" disconnect >/dev/null 2>&1
+try() {
+  "$ADB" disconnect "$1" >/dev/null 2>&1
+  "$ADB" connect "$1" 2>/dev/null | grep -q "connected to" || return 1
+  sleep 1
+  local d; d=$(ready)
+  [ -n "$d" ] && { echo "${1%%:*}" >"$CACHE"; echo "$d"; exit 0; }
+}
 ip=$(cat "$CACHE" 2>/dev/null)
 [ -n "$ip" ] && try "$ip:5555"
 # Wireless debugging's own port (changes each time it is switched on).

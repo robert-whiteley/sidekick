@@ -9,6 +9,7 @@ import { allRequiredFiles } from '@/engine/llm-candidates';
 import { OBSOLETE_MODEL_PATHS } from '@/engine/models';
 import { modelsDir } from '@/engine/paths';
 import { AskScreen } from '@/features/ask/AskScreen';
+import { startIntegrations } from '@/engine/actions';
 import { onLlmLoaded } from '@/engine/llm';
 import { noteLlmLoaded, startModelUpdates } from '@/engine/model-updates';
 import { startStorageMonitor } from '@/engine/storage-monitor';
@@ -32,7 +33,12 @@ export default function HomeScreen() {
   // Model updates (Automatic / Ask me / Off) and storage cleanup run once the models are in.
   useEffect(() => {
     if (!ready) return;
-    const stops = [onLlmLoaded(noteLlmLoaded), startModelUpdates(), startStorageMonitor()];
+    const stops = [
+      onLlmLoaded(noteLlmLoaded),
+      startModelUpdates(),
+      startStorageMonitor(),
+      startIntegrations(),
+    ];
     return () => stops.forEach((s) => s());
   }, [ready]);
   if (ready) return <AskScreen entry={entry} onEntryHandled={entryDone} />;

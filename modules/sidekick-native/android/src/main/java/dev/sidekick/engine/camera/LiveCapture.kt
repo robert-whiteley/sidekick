@@ -186,6 +186,7 @@ object LiveCapture {
     }
     src.onLost = { reason -> work.execute { lost(reason) } }
     source = src
+    Log.i(TAG, "camera source $now: sample ${r.sampleFps} fps, video ${if (r.recordVideo) "${r.videoFps} fps" else "off"}")
     src.start { frame -> safely { onFrame(ctx, frame) } }
   }
 
@@ -205,6 +206,7 @@ object LiveCapture {
   }
 
   private fun onSegment(seg: Segment) {
+    Log.i(TAG, "video segment ${File(seg.path).name}")
     synchronized(sizeCache) { sizeCache.remove(File(seg.path).parent) }
   }
 
@@ -219,6 +221,7 @@ object LiveCapture {
     saveLive(ctx, bmp, frame.atMs, cfg.liveFrames)
     if (!dedupe.keep(lumaGrid(bmp), frame.atMs)) return
     framesKept++
+    if (framesKept == 1 || framesKept % 50 == 0) Log.i(TAG, "frames kept $framesKept of $framesSeen")
     val at = frame.atMs
     val bucket = HourBuckets.name(at)
     val key = File(File(framesDir(ctx), bucket).apply { mkdirs() }, "$at.jpg")
@@ -305,6 +308,7 @@ object LiveCapture {
       FrameJournal.append(ctx, e)
     }
     batch.forEach { it.delete() }
+    Log.i(TAG, "journaled ${usable.size} frames (${if (vectors == null) "no vectors" else "embedded"})")
     return if (files.size > batch.size) 0 else -1
   }
 

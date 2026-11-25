@@ -83,6 +83,7 @@ import { LiveFrame } from './LiveFrame';
 import { Composer } from './Composer';
 import { Icon } from './Icon';
 import { LiveConversation } from './LiveConversation';
+import { DraftCard } from './DraftCard';
 import { MessageBubble } from './MessageBubble';
 import { NoticeItem, useNotices } from './NoticeLines';
 import { ScreenGrabBar } from './ScreenGrabBar';
@@ -511,6 +512,7 @@ export function AskScreen({
           webAsk:
             imagePath || grab || r.local ? { question: '' } : { question: q, query: r.webQuery },
           media: mediaForAnswer(r as typeof r & { media?: ChatMedia[] }),
+          draftId: r.draftId,
         }),
       );
       if (!speak) conversation.current.answered(Date.now());
@@ -656,13 +658,15 @@ export function AskScreen({
           ) : null}
           {items.map((it) =>
             'm' in it && it.m ? (
-              <MessageBubble
-                key={it.key}
-                m={it.m}
-                theme={theme}
-                speaking={speakingId === it.m.id}
-                onMute={mute}
-              />
+              <View key={it.key}>
+                <MessageBubble
+                  m={it.m}
+                  theme={theme}
+                  speaking={speakingId === it.m.id}
+                  onMute={mute}
+                />
+                {it.m.draftId ? <DraftCard id={it.m.draftId} theme={theme} /> : null}
+              </View>
             ) : 'n' in it && it.n ? (
               <NoticeItem key={it.key} n={it.n} theme={theme} />
             ) : null,

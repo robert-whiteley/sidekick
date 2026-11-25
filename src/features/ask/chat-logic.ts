@@ -18,6 +18,8 @@ export type ChatMessage = {
   /** The question behind the browser link ('' = no link) and the search words used. */
   webAsk?: { question: string; query?: string };
   media?: ChatMedia[];
+  /** A phone action waiting for OK (engine/actions.ts), shown as a card under the answer. */
+  draftId?: string;
   /** Said while Off the record: shown now, never saved, gone when the mode is left. */
   offRecord?: boolean;
   /** The answer is still being written. */
