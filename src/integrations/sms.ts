@@ -91,6 +91,8 @@ export type Access = 'ok' | 'notAssistant' | 'denied' | 'unavailable';
 export async function ensureTelephony(need: Need, ask = true): Promise<Access> {
   if (Platform.OS !== 'android' || !integrationsNative()?.telephonyStatus) return 'unavailable';
   const s = telephonyStatus();
+  // This release doesn't include the permissions (blocked until Play approves the declaration).
+  if (s.declared === false) return 'unavailable';
   if (!s.assistant) {
     if (ask) offerAssistantRole();
     return 'notAssistant';

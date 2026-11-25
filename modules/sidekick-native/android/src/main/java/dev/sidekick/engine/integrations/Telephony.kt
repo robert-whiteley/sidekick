@@ -27,10 +27,21 @@ object Telephony {
   private fun granted(ctx: Context, perm: String) =
     ContextCompat.checkSelfPermission(ctx, perm) == PackageManager.PERMISSION_GRANTED
 
-  /** JSON {assistant, readSms, sendSms, callLog}: what may be used right now. */
+  /** True when this build declares the permissions (a release may block them until Play approves). */
+  fun declared(ctx: Context): Boolean =
+    try {
+      val info = ctx.packageManager.getPackageInfo(ctx.packageName, PackageManager.GET_PERMISSIONS)
+      val req = info.requestedPermissions?.toSet() ?: emptySet()
+      Manifest.permission.READ_SMS in req && Manifest.permission.READ_CALL_LOG in req
+    } catch (_: Exception) {
+      false
+    }
+
+  /** JSON {declared, assistant, readSms, sendSms, callLog}: what may be used right now. */
   fun status(ctx: Context): String {
     val a = isAssistant(ctx)
     return JSONObject()
+      .put("declared", declared(ctx))
       .put("assistant", a)
       .put("readSms", a && granted(ctx, Manifest.permission.READ_SMS))
       .put("sendSms", a && granted(ctx, Manifest.permission.SEND_SMS))

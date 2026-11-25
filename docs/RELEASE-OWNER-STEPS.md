@@ -26,7 +26,7 @@ The site (`robert-whiteley/sidekick-site`, public) is already published by GitHu
   - Content rating, target audience, ads, app access: `docs/store/content-rating.md`.
   - **Foreground service types** (`docs/store/permissions.md`): camera, microphone, location (the listening/camera service), and shortService (routines running with the app closed). Each needs a one-line use and a short phone video (Claude records the clips' script; you upload unlisted to YouTube).
   - **Health apps declaration**: step counting (activity recognition) — declare "fitness / activity tracking is a feature, data stays on the device".
-  - **SMS and Call Log permissions declaration** (default-assistant exception) — **only when that build lands** (another part of the work is building it); Claude writes the form text and a demo video script.
+  - **SMS and Call Log permissions declaration** (default-assistant exception) — **for the second release, not the first** (owner decision 25 Nov: launch without). The feature is built; release 1 blocks READ_SMS, SEND_SMS and READ_CALL_LOG in `app.json` (`blockedPermissions`) and the app hides it. For release 2: remove those three from `blockedPermissions`, submit the form with the answers and video script in `docs/store/permissions-declaration.md`, wait for approval.
   - Background location: not used (no declaration needed). Only if it is ever added.
 - [ ] **Store images**: Claude makes them (`fastlane/IMAGES.md`); nothing to do unless you want to approve them.
 

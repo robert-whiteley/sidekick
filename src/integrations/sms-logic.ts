@@ -28,6 +28,8 @@ export type CallItem = {
 };
 
 export type TelephonyStatus = {
+  /** False when this release blocks the permissions (until Play approves the declaration). */
+  declared?: boolean;
   assistant: boolean;
   readSms: boolean;
   sendSms: boolean;

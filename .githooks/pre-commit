@@ -18,6 +18,9 @@ if [ -n "$fmt" ]; then
   npx --no-install prettier --check --ignore-unknown $fmt
 fi
 
+# Personal details, home paths, build output, big files: never committed (also run in CI).
+scripts/check-privacy.sh --staged
+
 if command -v gitleaks >/dev/null; then
   gitleaks git --staged --no-banner --redact
 else

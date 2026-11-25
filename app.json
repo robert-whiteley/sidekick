@@ -34,7 +34,10 @@
         "android.permission.READ_MEDIA_AUDIO",
         "android.permission.READ_MEDIA_VISUAL_USER_SELECTED",
         "android.permission.ACCESS_MEDIA_LOCATION",
-        "android.permission.SYSTEM_ALERT_WINDOW"
+        "android.permission.SYSTEM_ALERT_WINDOW",
+        "android.permission.READ_SMS",
+        "android.permission.SEND_SMS",
+        "android.permission.READ_CALL_LOG"
       ],
       "permissions": ["android.permission.SCHEDULE_EXACT_ALARM", "android.permission.CALL_PHONE"]
     },

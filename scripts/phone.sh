@@ -2,7 +2,7 @@
 # Connects adb to the test phone over Wi-Fi with no manual steps (after a one-time pairing).
 # Prints the adb serial to use. The phone's address is cached outside the repo.
 set -u
-ADB="${ADB:-$(ls /mnt/c/Users/*/AppData/Local/Android/Sdk/platform-tools/adb.exe 2>/dev/null | head -1)}"; ADB="${ADB:-adb}"
+ADB="${ADB:-$(ls /mnt/c/Users/*/AppData/Local/Android/Sdk/platform-tools/adb.exe 2>/dev/null | head -1)}"; ADB="${ADB:-adb}" # privacy-allow (wildcard, no name)
 CACHE="$HOME/.cache/sidekick-phone"
 ready() { "$ADB" devices | tr -d '\r' | awk '$2=="device"{print $1}' | head -1; }
 s=$(ready); [ -n "$s" ] && { echo "$s"; exit 0; }
