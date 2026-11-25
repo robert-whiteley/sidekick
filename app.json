@@ -91,7 +91,9 @@
         {
           "enableBackgroundPlayback": false
         }
-      ]
+      ],
+      "expo-asset",
+      "expo-font"
     ],
     "scheme": "sidekick",
     "experiments": {

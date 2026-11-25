@@ -59,6 +59,7 @@ Every model and library shipped with or downloaded by Sidekick, with its licence
 | expo-notifications, expo-calendar (follow-ups)                                                                                | MIT                                                                     |
 | expo-network (online lookup: connection state)                                                                                | MIT                                                                     |
 | expo-video, expo-media-library (moment player: play, save to a folder)                                                        | MIT                                                                     |
+| expo-asset, expo-font (required by expo-audio and expo-symbols)                                                               | MIT                                                                     |
 | expo-audio (playing saved speech clips)                                                                                       | MIT                                                                     |
 | expo-haptics (tick on send, cancel, listen)                                                                                   | MIT                                                                     |
 | expo-local-authentication (app lock: fingerprint, face or PIN)                                                                | MIT                                                                     |
