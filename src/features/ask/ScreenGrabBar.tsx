@@ -14,7 +14,11 @@ export function ScreenGrabBar(props: {
         <Image source={{ uri: `file://${props.grab.shot}` }} style={styles.thumb} />
       ) : null}
       <Text style={styles.text} numberOfLines={2}>
-        {props.grab.shot ? 'Asking about your screen' : 'Asking about your screen (text only)'}
+        {props.grab.shared
+          ? 'Asking about the shared picture'
+          : props.grab.shot
+            ? 'Asking about your screen'
+            : 'Asking about your screen (text only)'}
       </Text>
       <Pressable onPress={props.onSave} accessibilityRole="button" style={styles.btn}>
         <Text style={styles.btnText}>Save</Text>

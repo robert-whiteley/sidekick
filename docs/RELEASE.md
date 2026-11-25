@@ -18,12 +18,8 @@ Nothing here costs money. EAS free tier: cloud builds are queued, about 30 Andro
    - Play Console → Users and permissions → the service account's email (the one Pocket Animals uses) → App permissions → add Sidekick.
    - Grant: Releases (manage testing tracks, release to production), Store presence (edit listing), App access (view app information).
    - Put its JSON key at `./google-service-account.json` in this repo folder. It is gitignored; never commit it. Pocket Animals' key file can be copied locally, the same account.
-5. **Host the privacy policy at a public URL.** Use `docs/privacy-policy.md`, the same text as in the app. A free option: a public GitHub Pages site or Google Sites page with only this text. **This repo should stay private**, and it is currently public; see note C. Enter the URL in App content → Privacy policy, and in the OAuth consent screen.
-6. **Support email.** Create a contact address for the listing (Play shows it publicly), e.g. a new free mailbox. Put it in:
-   - Play Console → Store settings → Store listing contact details;
-   - `app.json` `expo.extra.support.email`, which turns on About → Send feedback.
-
-   Do not use a personal address.
+5. **Website (privacy policy, support, data deletion).** The site is in the private repo `robert-whiteley/sidekick-site` and goes live at https://sidekick.sashy.ai on Render's free static hosting (steps: `docs/RELEASE-OWNER-STEPS.md`). Enter https://sidekick.sashy.ai/privacy in App content → Privacy policy and in the OAuth consent screen; https://sidekick.sashy.ai/delete-data where Play asks for a deletion link. `scripts/build-site.mjs` regenerates the site's privacy page from `docs/privacy-policy.md` (the same text as in the app).
+6. **Support email: info@sashy.ai.** Already in `app.json` `expo.extra.support.email` (turns on About → Send feedback). Put the same in Play Console → Store settings → Store listing contact details.
 
 7. **Store images.** See `fastlane/IMAGES.md`: icon 512 px, feature graphic 1024 × 500, and 2–8 phone screenshots with test data only.
 8. **App content forms.** Claude has written the answers; paste them:
@@ -37,7 +33,7 @@ Nothing here costs money. EAS free tier: cloud builds are queued, about 30 Andro
 
 ## B. Claude steps (each release)
 
-1. `scripts/release.sh check`: typecheck, lint and tests; store text lengths; no secret files tracked; legal texts in sync; `updates.checkAutomatically: "NEVER"`.
+1. `scripts/release.sh check`: typecheck, lint and tests; store text lengths; no secret files tracked; legal texts in sync; no `expo-updates`. App updates come only through Google Play (no over-the-air updates; nothing contacts expo.dev). Play's own "Enable auto update" switch per app lets users choose.
 2. Write plain-words notes (one change per line) and run `scripts/release.sh bump --version 1.0.1 --notes notes.txt --real`. This adds the entry to `src/content/changelog.ts` (shown in the app under What's new, once after the update) and sets `app.json` version. Commit, PR, merge.
 3. Verify on the test phone first (preview build or dev build). Report what was checked on the device.
 4. `scripts/release.sh ship --real`:
@@ -57,8 +53,6 @@ Rules: never publish to production without the owner's go-ahead. Never pay. Neve
 
 ## C. Known issues before launch
 
-- **The GitHub repo is public** (`gh repo view` reports PUBLIC); the owner rule is private. Making it private breaks the Speed test photo download (`src/engine/models.ts` `benchPhoto` points at raw.githubusercontent.com in this repo). Bundle that photo, or hide the Speed test, first.
 - **Saving to the gallery** now runs without READ_MEDIA permissions (blocked for Play's photo policy). Check Save in the moment player on the phone.
-- **Drive backup** has a switch but nothing calls `backupToDrive()` yet.
 - **CALL_PHONE** is now declared. Check "call Sam" on the phone.
 - **Background playback** of saved clips is off (no mediaPlayback service). Clips stop if the app is left.

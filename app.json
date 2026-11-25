@@ -63,7 +63,6 @@
         }
       ],
       "expo-secure-store",
-      "./plugins/with-third-party-sqlite",
       "expo-sharing",
       [
         "expo-contacts",
@@ -85,6 +84,7 @@
       ],
       "./plugins/without-firebase-messaging",
       "./plugins/with-usb-camera",
+      "./plugins/with-share-target",
       "expo-video",
       ["expo-audio", { "enableBackgroundPlayback": false }]
     ],
@@ -102,19 +102,12 @@
         "androidClientId": "589193178601-soll8g1g6m3krjvcidu3jnl57f69kjfp.apps.googleusercontent.com"
       },
       "support": {
-        "email": ""
+        "email": "info@sashy.ai"
       },
       "eas": {
         "projectId": "9e5e57c2-26e2-4ca4-9191-3606924369f5"
       }
     },
-    "owner": "rcwhiteley1",
-    "runtimeVersion": {
-      "policy": "fingerprint"
-    },
-    "updates": {
-      "url": "https://u.expo.dev/9e5e57c2-26e2-4ca4-9191-3606924369f5",
-      "checkAutomatically": "NEVER"
-    }
+    "owner": "rcwhiteley1"
   }
 }

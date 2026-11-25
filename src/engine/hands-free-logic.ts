@@ -1,6 +1,6 @@
 /**
  * Hands-free (driving / walking) mode, quiet hours, reading incoming messages aloud, the daily
- * briefing and "what did we talk about" windows. Pure; tested in __tests__/hands-free-logic-test.ts.
+ * briefing. Pure; tested in __tests__/hands-free-logic-test.ts.
  * Runtime wiring: engine/hands-free.ts.
  */
 import type { MessageThread } from '@/integrations/native';
@@ -13,9 +13,10 @@ export type ReadIncomingMode = 'off' | 'headphones' | 'always';
  * extra permission, so the name is the signal (ADR 0006). Headphones like "Jabra" or "AirPods"
  * don't match.
  */
-const CAR_NAME =
+export const CAR_NAME =
   /\b(car|auto|vehicle|uconnect|sync|mylink|intellilink|mmi|idrive|carplay|android auto|handsfree|hands-free|carkit|car kit|parrot|pioneer|kenwood|alpine|jvc|sony xav|harman|becker|audi|bmw|mini|mercedes|benz|vw|volkswagen|skoda|seat|cupra|ford|toyota|lexus|honda|nissan|mazda|subaru|kia|hyundai|peugeot|citroen|renault|dacia|opel|vauxhall|fiat|volvo|tesla|polestar|jaguar|land rover|range rover|porsche|chevrolet|chevy|gmc|dodge|jeep|ram|chrysler|cadillac|buick|mitsubishi|suzuki|mg)\b/i;
-const NOT_CAR = /\b(buds|pods|airpods|headphones?|headset|earbuds?|speaker|soundbar|watch|tv)\b/i;
+export const NOT_CAR =
+  /\b(buds|pods|airpods|headphones?|headset|earbuds?|speaker|soundbar|watch|tv)\b/i;
 
 export function isCarDevice(o: { kind: string; name: string }): boolean {
   return o.kind === 'bluetooth' && CAR_NAME.test(o.name) && !NOT_CAR.test(o.name);
@@ -99,41 +100,8 @@ export function incomingSpeech(t: MessageThread): string {
   return `${who} on ${t.app} says: ${text}${t.canReply ? ' Say reply and your answer.' : ''}`;
 }
 
-// --- "What did we talk about today / this week" ---
-
-export type TimeWindow = { from: number; to: number; label: string };
-
 const startOfDay = (d: Date, add = 0) =>
   new Date(d.getFullYear(), d.getMonth(), d.getDate() + add).getTime();
-
-/** The time window of a "what did we talk about …" question, or null if it isn't one. */
-export function summaryWindow(question: string, now: Date): TimeWindow | null {
-  const q = question.toLowerCase();
-  if (
-    !/\b(what (did|have) (we|i) (talk|talked|chat|chatted|discuss|discussed|say|said)|what (were|was) (we|i) (talking|chatting) about|summari[sz]e (my |our |the )?(conversations?|chats?|talks?|day|week)|recap (of )?(my |our |the )?(conversations?|day|week|chats?))\b/.test(
-      q,
-    )
-  )
-    return null;
-  const t = now.getTime();
-  if (/\byesterday\b/.test(q))
-    return { from: startOfDay(now, -1), to: startOfDay(now), label: 'yesterday' };
-  if (/\blast week\b/.test(q)) {
-    const monday = startOfDay(now, -((now.getDay() + 6) % 7));
-    return { from: monday - 7 * 86_400_000, to: monday, label: 'last week' };
-  }
-  if (/\b(this week|the week|past week|week)\b/.test(q))
-    return { from: startOfDay(now, -((now.getDay() + 6) % 7)), to: t, label: 'this week' };
-  if (/\b(this morning)\b/.test(q))
-    return {
-      from: startOfDay(now),
-      to: Math.min(t, startOfDay(now) + 12 * 3_600_000),
-      label: 'this morning',
-    };
-  if (/\b(last hour|past hour)\b/.test(q))
-    return { from: t - 3_600_000, to: t, label: 'in the last hour' };
-  return { from: startOfDay(now), to: t, label: 'today' };
-}
 
 // --- Daily briefing ---
 
@@ -164,32 +132,4 @@ export function briefingText(
   }
   if (digest) parts.push(digest);
   return parts.length ? parts.join(' ') : null;
-}
-
-/** Lines kept for a summary prompt: spread over the window, each cut short. */
-export const SUMMARY_MAX_LINES = 120;
-
-export function summaryPrompt(
-  w: TimeWindow,
-  lines: { at: number; who: string; text: string }[],
-): string | null {
-  if (!lines.length) return null;
-  const step = Math.max(1, lines.length / SUMMARY_MAX_LINES);
-  const picked: typeof lines = [];
-  for (let i = 0; i < lines.length && picked.length < SUMMARY_MAX_LINES; i += step)
-    picked.push(lines[Math.floor(i)]);
-  const multiDay = w.to - w.from > 86_400_000 + 3_600_000;
-  const stamp = (at: number) =>
-    new Date(at).toLocaleString(undefined, {
-      ...(multiDay ? { weekday: 'short' } : {}),
-      hour: '2-digit',
-      minute: '2-digit',
-    });
-  const body = picked
-    .map((l) => `[${stamp(l.at)}] ${l.who}: ${l.text.replace(/\s+/g, ' ').slice(0, 200)}`)
-    .join('\n');
-  return `These are my conversations ${w.label} (oldest first; "Me" is me, "Q/A" are my questions to you):
-${body}
-
-Summarise what we talked about ${w.label} in a few short points: topics, decisions and anything I said I would do. Plain words, no preamble.`;
 }

@@ -1,4 +1,4 @@
-import { isTemplate } from './fact-extraction';
+import { isStaleSuggestion, isTemplate } from './fact-extraction';
 import SidekickNative, { type JournalEntry } from '../../modules/sidekick-native';
 import { isDownloaded, modelPath } from '@/engine/downloads';
 import { EMBEDDER_FILE } from '@/engine/models';
@@ -44,6 +44,8 @@ import {
 import { applyAutoName, assignLabel, collectPersonInfo, type KeptLine } from './people';
 import { CONVERSATION_GAP_MS, speakerLabel } from './people-logic';
 import { liveTranscript } from '@/engine/live-transcript';
+import { noteFix } from '@/engine/location-track';
+import { momentIdsAtNamedPlace } from './places-store';
 
 export type Moment = {
   id: number;
@@ -219,6 +221,11 @@ async function ingestJournalNow(): Promise<number> {
     try {
       e = JSON.parse(line);
     } catch {
+      continue;
+    }
+    if (e.kind === 'location') {
+      // The location track (while listening); not a moment.
+      await noteFix(e).catch(() => false);
       continue;
     }
     if (e.kind === 'answer') {
@@ -771,7 +778,10 @@ async function narrowByPlaceOrPerson(question: string, ids: number[]): Promise<n
   ).rows.map((x) => x.place as string);
   const people = (await db.execute('SELECT id, name FROM speakers WHERE name IS NOT NULL')).rows;
   let wanted: Set<number> | null = null;
-  const place = mentionedName(question, places);
+  // A place the user named ("the gym"): moments recorded inside it.
+  const atNamed = await momentIdsAtNamedPlace(question).catch(() => null);
+  if (atNamed?.length) wanted = new Set(atNamed);
+  const place = atNamed?.length ? null : mentionedName(question, places);
   if (place) {
     const r = await db.execute(
       'SELECT id FROM moments WHERE place = ? ORDER BY at DESC LIMIT 500',
@@ -827,11 +837,19 @@ export async function savedFacts(): Promise<{ id: number; text: string; status: 
   const r = await db.execute(
     'SELECT id, text, status FROM facts WHERE speaker_id IS NULL ORDER BY at DESC',
   );
-  return r.rows.map((x) => ({
-    id: x.id as number,
-    text: x.text as string,
-    status: x.status as string,
-  }));
+  // Suggestions saved by older versions that today's checks reject ("My name is [Name].",
+  // "Please provide the conversation…") are dropped, not shown.
+  const stale = r.rows.filter(
+    (x) => x.status === 'suggested' && isStaleSuggestion(x.text as string),
+  );
+  for (const x of stale) await db.execute('DELETE FROM facts WHERE id = ?', [x.id as number]);
+  return r.rows
+    .filter((x) => !stale.includes(x))
+    .map((x) => ({
+      id: x.id as number,
+      text: x.text as string,
+      status: x.status as string,
+    }));
 }
 
 export async function listSpeakers() {

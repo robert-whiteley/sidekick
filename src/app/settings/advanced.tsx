@@ -18,6 +18,7 @@ export default function AdvancedSettings() {
           options={RESERVE_OPTIONS.map((g) => ({ value: g, label: `${g} GB` }))}
           value={s.storageReserveGB}
           recommended={rec.storageReserveGB}
+          format={(g) => `${g} GB`}
           onChange={(v) => set({ storageReserveGB: v })}
         />
         <NavRow label="Storage" hint="What uses space, keep periods, clean up" href="/storage" />

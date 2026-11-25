@@ -89,13 +89,13 @@ export function FirstRun({ onReady }: { onReady: () => void }) {
   );
 
   const decide = useCallback(async () => {
-    const { free, total: diskTotal } = diskSpace();
+    const { free } = diskSpace();
     const net = await connection();
     const s = firstRunStep({
       // What is already downloaded (partly) doesn't need the space again.
       neededBytes: spaceNeeded(files) - gotBytes.current,
       freeBytes: free,
-      reserveBytes: reserveBytes(diskTotal),
+      reserveBytes: reserveBytes(),
       wifi: net.wifi,
       mobilePref: waitChosen.current ? 'off' : (getSettings().mobileDataDownloads ?? 'ask'),
       mobileAllowed: mobileAllowed.current,

@@ -150,6 +150,16 @@ export type JournalEntry = JournalPlace &
         audioPath?: string;
       }
     | { kind: 'answer'; at: number; text: string; question: string }
+    | {
+        /** A position while listening (Places.kt); 'parked' when the car's Bluetooth went. */
+        kind: 'location';
+        at: number;
+        lat: number;
+        lon: number;
+        accM?: number;
+        speedMs?: number;
+        source: 'fix' | 'parked';
+      }
   );
 
 export type DeviceLocation = { lat: number; lon: number; accuracyM: number; at: number };

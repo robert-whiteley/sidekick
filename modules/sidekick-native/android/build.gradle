@@ -42,6 +42,8 @@ dependencies {
   // Apache Commons Compress (Apache-2.0): unpacks the speech model archives.
   implementation "org.apache.commons:commons-compress:1.28.0"
   implementation "androidx.core:core-ktx:1.13.1"
+  // React Native (MIT, already in the app): HeadlessJsTaskService runs routines without a screen.
+  implementation "com.facebook.react:react-android"
   // Google Identity Services (Android SDK licence, free for commercial use): Authorization API
   // for the gmail.send scope only. Used only when the user sends an email (ADR 0008).
   implementation "com.google.android.gms:play-services-auth:22.0.0"
@@ -54,6 +56,8 @@ dependencies {
   implementation("com.herohan:UVCAndroid:1.0.13") {
     exclude group: "cn.hutool"
   }
+  // ZXing core (Apache-2.0): QR codes and barcodes on the phone (ML Kit sends usage data to Google).
+  implementation "com.google.zxing:core:3.5.3"
   // Plain JVM tests of the pure logic (Turns.kt).
   testImplementation "junit:junit:4.13.2"
 }

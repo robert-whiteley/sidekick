@@ -36,6 +36,11 @@ export function isTemplate(line: string): boolean {
   return /[[\]{}<>]|\.{3}|…/.test(line);
 }
 
+/** A stored suggestion that today's parser would not suggest (it has no source lines to check). */
+export function isStaleSuggestion(text: string): boolean {
+  return parseFacts(text).length === 0;
+}
+
 /** Replies about the task rather than facts ("Please provide the conversation…"). */
 const META =
   /^(please|sorry|i|i'm|i am|you|your|could|can|there|it|this|based|as an|unfortunately|no )\b/i;

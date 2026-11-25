@@ -86,6 +86,8 @@ class SidekickNotificationListener : NotificationListenerService() {
   override fun onNotificationPosted(sbn: StatusBarNotification?) {
     sbn ?: return
     val ctx = applicationContext
+    // Routines ("whenever Sam messages me, …"): checked even when memory capture is off.
+    dev.sidekick.engine.routines.Routines.onNotification(ctx, sbn)
     if (!NotificationCapture.capturing(ctx)) return
     if (sbn.packageName == ctx.packageName || sbn.isOngoing) return
     val n = sbn.notification ?: return

@@ -3,7 +3,8 @@ import { PermissionsAndroid, Platform } from 'react-native';
 
 import SidekickNative from '../../modules/sidekick-native';
 import { downloadFile, isDownloaded, wifiOnlyDownloads } from './downloads';
-import { MODEL_FILES, OPTIONAL_SPEECH_FILES, SPEECH_FILES } from './models';
+import { applyLanguage, speechModelsReady } from './language';
+import { MODEL_FILES, OPTIONAL_SPEECH_FILES } from './models';
 import { modelsDir } from './paths';
 import { askLocationPermission, pushPauseRules } from './places';
 import { SYSTEM_PROMPT } from './prompts';
@@ -14,7 +15,7 @@ import { DEFAULT_WAKE_PHRASE, parseSentencepiece, wakeKeywordLines } from './wak
 const KWS_DIR = MODEL_FILES.wakeWord.unpackedCheck!.split('/')[0];
 
 export function speechReady(): boolean {
-  return SPEECH_FILES.every(isDownloaded);
+  return speechModelsReady();
 }
 
 function base64ToBytes(b64: string): Uint8Array {
@@ -48,6 +49,8 @@ export function wakeLine(phrase: string): { line: string; phrase: string } {
 export function configureListening() {
   const s = getSettings();
   const { line, phrase } = wakeLine(s.wakePhrase);
+  // Language first: it sets the prompt's answer language and the speech-to-text build.
+  applyLanguage();
   // The background service answers with the same instructions as the app.
   SidekickNative.kvSet('assistant.system', SYSTEM_PROMPT);
   const plan = listenPlan(s);

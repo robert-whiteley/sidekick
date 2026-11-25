@@ -5,14 +5,13 @@ import { Platform } from 'react-native';
 
 import { type Draft, setScheduledSendNotifier } from './actions';
 import { briefingText } from './hands-free-logic';
-import { getSettings, onSettingsChange } from './settings';
 import { eventsBetween } from '@/integrations/calendar';
 import { digestText, type Followup } from '@/memory/followup-logic';
 import { listFollowups, onFollowupsChange, rollRepeats } from '@/memory/followups';
 import { repeatTriggers } from '@/memory/repeat-logic';
 
 /**
- * Local notifications for approved reminders and the optional morning digest. Everything is
+ * Local notifications for approved reminders (the daily briefing is now a routine: routines.ts). Everything is
  * scheduled on the phone by the OS (no push, no server). The schedule is rebuilt from the
  * database after every change, so it can never drift from what the user approved.
  */
@@ -20,7 +19,6 @@ const CHANNEL = 'followups';
 const TAG = 'sidekick-followup';
 /** iOS keeps at most 64 pending notifications per app. */
 const MAX_SCHEDULED = 50;
-const DIGEST_DAYS = 3;
 
 async function ensureChannel() {
   if (Platform.OS !== 'android') return;
@@ -30,7 +28,7 @@ async function ensureChannel() {
   });
 }
 
-/** Asks for notification permission (only when the user approves a reminder or turns on the digest). */
+/** Asks for notification permission (only when the user approves a reminder or sets up a routine). */
 export async function askNotificationPermission(): Promise<boolean> {
   await ensureChannel(); // Android 13+ shows the prompt only once a channel exists
   const now = await Notifications.getPermissionsAsync();
@@ -75,7 +73,7 @@ async function sync() {
     (f) => f.status === 'approved' && f.kind === 'reminder' && f.dueAt != null,
   );
   // Recurring reminders repeat by themselves (DAILY / WEEKLY triggers).
-  let left = MAX_SCHEDULED - DIGEST_DAYS;
+  let left = MAX_SCHEDULED;
   for (const f of approved.filter((x) => x.repeat)) {
     for (const t of repeatTriggers(f.repeat!, f.dueAt!)) {
       if (left-- <= 0) break;
@@ -104,19 +102,6 @@ async function sync() {
     .sort((a, b) => a.dueAt! - b.dueAt!)
     .slice(0, Math.max(0, left));
   for (const f of due) await schedule('Reminder', f.title, f.dueAt!, f.id);
-
-  const s = getSettings();
-  if (!s.followupDigest) return;
-  for (let i = 0; i < DIGEST_DAYS; i++) {
-    const d = new Date();
-    d.setDate(d.getDate() + i);
-    d.setHours(s.digestHour, 0, 0, 0);
-    if (d.getTime() <= now) continue;
-    const dayStart = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
-    const events = await eventsBetween(dayStart, dayStart + 86_400_000).catch(() => []);
-    const body = briefingText(events, digestText(items, d), d);
-    if (body) await schedule('Your day', body, d.getTime(), null);
-  }
 }
 
 async function schedule(title: string, body: string, at: number, id: number | null) {
@@ -181,14 +166,6 @@ export function startFollowupNotifications() {
     }),
   });
   onFollowupsChange(() => void syncFollowupNotifications());
-  let digest = getSettings().followupDigest;
-  let hour = getSettings().digestHour;
-  onSettingsChange((s) => {
-    if (s.followupDigest === digest && s.digestHour === hour) return;
-    digest = s.followupDigest;
-    hour = s.digestHour;
-    void syncFollowupNotifications();
-  });
   void syncFollowupNotifications();
 }
 

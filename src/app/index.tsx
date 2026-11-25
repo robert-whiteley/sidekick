@@ -12,9 +12,14 @@ import { AskScreen } from '@/features/ask/AskScreen';
 import { startIntegrations } from '@/engine/actions';
 import { onLlmLoaded } from '@/engine/llm';
 import { noteLlmLoaded, startModelUpdates } from '@/engine/model-updates';
+import { startWave2 } from '@/engine/wave2-start';
 import { startStorageMonitor } from '@/engine/storage-monitor';
 import { FirstRun } from '@/features/onboarding/FirstRun';
 import { checkWhatsNew } from '@/content/whats-new-notice';
+import { startStepSampler } from '@/integrations/extras';
+import { startRoutines } from '@/engine/routines';
+import { startLocationMemory } from '@/engine/location';
+import { applyLanguage } from '@/engine/language';
 
 function modelsReady() {
   const ready = allRequiredFiles(SidekickNative.getDeviceInfo().soc).every(isDownloaded);
@@ -35,11 +40,16 @@ export default function HomeScreen() {
   useEffect(() => {
     if (!ready) return;
     checkWhatsNew();
+    applyLanguage();
     const stops = [
       onLlmLoaded(noteLlmLoaded),
       startModelUpdates(),
       startStorageMonitor(),
       startIntegrations(),
+      startStepSampler(),
+      startRoutines(),
+      startLocationMemory(),
+      startWave2(),
     ];
     return () => stops.forEach((s) => s());
   }, [ready]);

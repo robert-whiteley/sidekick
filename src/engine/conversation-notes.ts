@@ -2,55 +2,117 @@ import SidekickNative from '../../modules/sidekick-native';
 import { askLlmInBackground, cancelLlm } from './llm';
 import { notices } from './notices';
 import { getSettings } from './settings';
+import { templateFor } from '@/memory/note-templates';
 import {
   actionFollowups,
-  endedConversations,
+  type Conversation,
+  conversationEnded,
+  freshLive,
   joinNames,
-  noteText,
+  type LiveNote,
+  mergeNotes,
+  notePassDue,
   notePrompt,
+  noteText,
   parseNote,
+  splitConversations,
+  withSomeone,
 } from '@/memory/conversation-note-logic';
-import { heardLinesSince, notesUntil, saveNote, setNotesUntil } from '@/memory/conversation-notes';
-import { suggestFollowups } from '@/memory/followups';
+import {
+  heardLinesSince,
+  loadLive,
+  notesUntil,
+  saveLive,
+  saveNote,
+  setNotesUntil,
+  syncNoteFollowups,
+  updateNote,
+} from '@/memory/conversation-notes';
 
 let running: Promise<void> | null = null;
 let cancelled = false;
 
+/** One model pass over [c]: writes or rewrites its note. Null if cancelled (try again later). */
+async function notePass(c: Conversation, live: LiveNote, ended: boolean, now: number) {
+  const st = getSettings();
+  const template = templateFor(c, st.noteTemplateChoice, st.defaultNoteTemplate);
+  const { text } = await askLlmInBackground(
+    notePrompt(c, live.note, live.handled, template),
+    null,
+    {
+      maxTokens: 240,
+    },
+  );
+  if (cancelled) return null;
+  const parsed = parseNote(text, c, template);
+  const next: LiveNote = { ...live, handled: c.lines.length, passAt: now };
+  if (!parsed) return next; // nothing useful yet: the next pass reads the whole conversation again
+  const note = mergeNotes(live.note, parsed);
+  next.note = note;
+  if (next.noteId == null) next.noteId = await saveNote(c.from, c.to, noteText(note));
+  else if (!(await updateNote(next.noteId, c.from, c.to, noteText(note))))
+    return { ...next, deleted: true }; // deleted on its page while it went on
+  await syncNoteFollowups(next.noteId, actionFollowups(note.actions, c.to, next.noteId), note.done);
+  next.postedAt ??= now;
+  // One faint line per conversation, updated in place (same key, same position).
+  notices.post({
+    key: `conversation-note-${next.noteId}`,
+    kind: 'info',
+    text: `${ended ? 'Notes from' : 'Live notes:'} your chat with ${joinNames(note.people)}`,
+    href: `/note/${next.noteId}`,
+    at: next.postedAt,
+  });
+  return next;
+}
+
 /**
- * Writes a note for each conversation heard with Listen on that has ended (5 min of silence or
- * Listen off, at least ~2 min of speech, someone else in it). Like the other background passes:
- * only when the model is already loaded (a waiting conversation is written up later), after any
- * answer, in a scratch chat; a question cancels it. Off the record: nothing is written.
+ * Live notes of conversations heard with Listen on: a note as soon as someone else is in the
+ * conversation and something useful was said, updated every few lines or at a pause while it
+ * goes on. Like the other background passes it runs only when the model is already loaded,
+ * after any answer, in a scratch chat; a question cancels it. Off the record: nothing is written.
  */
-export function writeConversationNotesIfDue(now = Date.now()): Promise<void> {
+export function updateConversationNotes(now = Date.now()): Promise<void> {
   const s = getSettings();
   if (running || (s.conversationNotes ?? 'auto') === 'off') return running ?? Promise.resolve();
   cancelled = false;
   running = (async () => {
-    const lines = await heardLinesSince(await notesUntil(), now);
-    const { ready, until } = endedConversations(lines, now, SidekickNative.listenActive());
-    if (until == null) return;
+    const convs = splitConversations(await heardLinesSince(await notesUntil(), now));
+    if (!convs.length) return;
     if (getSettings().offTheRecord) {
-      await setNotesUntil(until);
+      await setNotesUntil(convs[convs.length - 1].to);
+      await saveLive(null);
       return;
     }
-    if (ready.length && !SidekickNative.llmIsLoaded()) return;
-    for (const c of ready) {
-      const { text } = await askLlmInBackground(notePrompt(c), null, { maxTokens: 220 });
-      if (cancelled) return; // partial output: try again later
-      const note = parseNote(text, c);
+    const listening = SidekickNative.listenActive();
+    let live = await loadLive();
+    for (let i = 0; i < convs.length; i++) {
+      const c = convs[i];
+      const ended = conversationEnded(c, i === convs.length - 1, now, listening);
+      let state = live?.from === c.from ? live : freshLive(c.from);
+      if (notePassDue(c, state, now, ended)) {
+        if (!SidekickNative.llmIsLoaded()) return; // written when the model is next loaded
+        const next = await notePass(c, state, ended, now);
+        if (!next) return;
+        state = next;
+        live = next;
+        await saveLive(next);
+      }
+      const finished = !withSomeone(c) || state.handled >= c.lines.length;
+      if (!ended || !finished) return;
+      if (state.noteId != null && state.note && !state.deleted) {
+        // The line says "Notes from…" once the conversation is over.
+        notices.post({
+          key: `conversation-note-${state.noteId}`,
+          kind: 'info',
+          text: `Notes from your chat with ${joinNames(state.note.people)}`,
+          href: `/note/${state.noteId}`,
+          at: state.postedAt ?? now,
+        });
+      }
       await setNotesUntil(c.to);
-      if (!note) continue;
-      const id = await saveNote(c.from, c.to, noteText(note));
-      await suggestFollowups(actionFollowups(note.actions, c.to, id));
-      notices.post({
-        key: `conversation-note-${id}`,
-        kind: 'info',
-        text: `Notes from your chat with ${joinNames(note.people)}`,
-        href: `/note/${id}`,
-      });
+      live = null;
+      await saveLive(null);
     }
-    await setNotesUntil(until);
   })()
     .catch((e) => {
       if (!cancelled) console.log(`[notes] conversation note failed: ${String(e)}`);

@@ -37,6 +37,7 @@ import { planPhoneControl } from '@/integrations/phone-controls';
 import { sendsAtText, splitSchedule } from '@/integrations/schedule-logic';
 import type { Draft, DraftKind, DraftFieldsByKind, PlannedAction } from '@/integrations/types';
 import type { MessageThread } from '@/integrations/native';
+import { planExtra } from '@/integrations/extras';
 import { notices } from './notices';
 import {
   confirmFromModel,
@@ -463,6 +464,10 @@ export async function planAction(
       return planned;
     }
   }
+  // Phone info, find my phone, birthdays, rides, Waze, search in apps (src/integrations/extras.ts):
+  // narrow phrases, checked before the general rules so "… with Waze" isn't a Maps hand-off.
+  const extra = await planExtra(question, now).catch(() => null);
+  if (extra) return extra;
   const intent = parseIntent(question, now, contacts);
   if (intent) return fromIntent(intent, now);
   // Sums, conversions, the time elsewhere, and phone controls (src/integrations/phone-controls.ts).

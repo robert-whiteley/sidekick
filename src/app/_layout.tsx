@@ -17,7 +17,6 @@ export default function RootLayout() {
         <Stack.Screen name="bench" options={{ title: 'Speed test' }} />
         <Stack.Screen name="person/[id]" options={{ title: 'Person' }} />
         <Stack.Screen name="note/[id]" options={{ title: 'Conversation notes' }} />
-        <Stack.Screen name="recap" options={{ title: 'Your day' }} />
       </Stack>
     </AppLockGate>
   );

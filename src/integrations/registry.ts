@@ -58,10 +58,39 @@ export const INTEGRATIONS: Integration[] = [
     needs: 'Do Not Disturb access and "Modify system settings" (asked the first time)',
   },
   {
+    id: 'phoneInfo',
+    name: 'Phone info',
+    description:
+      'Battery, storage, steps and screen time when you ask; read or copy the clipboard; ring the phone when you can’t find it.',
+    switches: [
+      { id: 'battery', label: 'Battery and storage', default: true },
+      { id: 'steps', label: 'Steps (from the phone’s step counter)', default: true },
+      { id: 'screenTime', label: 'Screen time per app', default: true },
+      { id: 'clipboard', label: 'Read and copy the clipboard', default: true },
+      { id: 'findPhone', label: 'Find my phone (rings for 30 s)', default: true },
+    ],
+    androidOnly: true,
+    needs: 'Physical activity for steps and Usage access for screen time (asked the first time)',
+  },
+  {
+    id: 'appLinks',
+    name: 'Other apps',
+    description:
+      'Order a ride (Uber with the destination set; Bolt, Lyft, FREENOW open ready), navigate with Waze, and search YouTube, Spotify, Amazon, the Play Store, Maps or the web. You finish in that app.',
+    switches: [
+      { id: 'rides', label: 'Rides', default: true },
+      { id: 'search', label: 'Search and Waze', default: true },
+    ],
+    androidOnly: true,
+  },
+  {
     id: 'contacts',
     name: 'Contacts',
     description: 'Find numbers and email addresses for the people you name.',
-    switches: [{ id: 'read', label: 'Look up contacts', default: true }],
+    switches: [
+      { id: 'read', label: 'Look up contacts', default: true },
+      { id: 'birthdays', label: 'Answer about birthdays', default: true },
+    ],
     needs: 'Contacts permission (asked the first time)',
   },
   {

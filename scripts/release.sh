@@ -69,7 +69,9 @@ check() {
   npx expo lint
   npx jest --silent
   node scripts/check-store-text.mjs
-  grep -q '"checkAutomatically": "NEVER"' app.json || { echo "app.json: updates must not check automatically" >&2; exit 1; }
+  if grep -q '"expo-updates"' package.json || grep -q '"updates"' app.json; then
+    echo "expo-updates must not be in the app (updates come only through Google Play)" >&2; exit 1
+  fi
 }
 
 case "$CMD" in

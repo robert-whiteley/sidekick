@@ -7,19 +7,35 @@ import type { HeardLine } from '@/memory/conversation-note-logic';
 import { getNote, noteLines, type StoredNote } from '@/memory/conversation-notes';
 import { deleteMoment } from '@/memory/store';
 
+/** A note this recent may still be updating (its conversation is going on). */
+const LIVE_MS = 10 * 60_000;
+
 const time = (at: number) =>
   new Date(at).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
 
-/** One automatic conversation note, with what was said during it. */
+/** One live conversation note, with what was said during it (refreshes while it goes on). */
 export default function NoteScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const [note, setNote] = useState<StoredNote | null | undefined>(undefined);
   const [lines, setLines] = useState<HeardLine[]>([]);
   useEffect(() => {
-    void getNote(Number(id)).then(async (n) => {
-      setNote(n);
-      if (n) setLines(await noteLines(n));
+    let live = true;
+    const load = () =>
+      getNote(Number(id)).then(async (n) => {
+        if (!live) return;
+        setNote(n);
+        if (n) setLines(await noteLines(n));
+        return n;
+      });
+    // A conversation still going on: its note updates while the page is open.
+    let timer: ReturnType<typeof setInterval> | null = null;
+    void load().then((n) => {
+      if (live && n && Date.now() - n.to < LIVE_MS) timer = setInterval(() => void load(), 15_000);
     });
+    return () => {
+      live = false;
+      if (timer) clearInterval(timer);
+    };
   }, [id]);
   if (note === undefined) return null;
   if (!note)

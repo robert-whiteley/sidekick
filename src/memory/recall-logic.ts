@@ -1,3 +1,4 @@
+import { withoutTimeWords } from './recap-logic';
 import { AGO } from './search-logic';
 
 /**
@@ -218,9 +219,7 @@ export function verifyKeeps(reply: string): boolean {
 
 /** The words of the question naming what to look for ("red car" from "where did I see a red car"); empty for a pure time question ("what did I see 5 minutes ago"). */
 export function lookFor(question: string): string {
-  return question
-    .toLowerCase()
-    .replace(/[?!.]/g, '')
+  return withoutTimeWords(question.toLowerCase().replace(/[?!.]/g, ''))
     .replace(new RegExp(AGO.source, 'g'), ' ')
     .replace(
       /\b(how many|did i|do i|have i|i|you|me|my|see|saw|seen|look(ed)?|at|when|where|what|was|were|the|a|an|is|it|that|last|time|today|yesterday|this|morning|afternoon|evening|earlier|show|say|said|on|of|there|any|number)\b/g,

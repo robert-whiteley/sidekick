@@ -16,6 +16,7 @@ import {
   stepBrightness,
 } from './phone-controls-logic';
 import { quickAnswer } from './quick-answers';
+import { extraSafeWhenLocked } from './extras';
 
 type Native = NonNullable<ReturnType<typeof integrationsNative>>;
 
@@ -44,6 +45,7 @@ export function lockedReply(question: string): string | null {
   if (!native?.isLocked?.()) return null;
   const c = parseControl(question);
   if (safeWhenLocked(c, question, quickAnswer(question) !== null)) return null;
+  if (extraSafeWhenLocked(question)) return null;
   return 'Unlock your phone first, then ask me again.';
 }
 

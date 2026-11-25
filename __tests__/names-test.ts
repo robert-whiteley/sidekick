@@ -1,5 +1,10 @@
 import { addresseeOf, findNameCues } from '../src/memory/names';
-import { factPrompt, isTemplate, parseFacts } from '../src/memory/fact-extraction';
+import {
+  factPrompt,
+  isStaleSuggestion,
+  isTemplate,
+  parseFacts,
+} from '../src/memory/fact-extraction';
 
 const names = (t: string) => findNameCues(t).map((c) => `${c.who}:${c.name}`);
 
@@ -89,5 +94,15 @@ describe('isTemplate', () => {
     expect(isTemplate('My plan is {Plan}.')).toBe(true);
     expect(isTemplate('My code is ...')).toBe(true);
     expect(isTemplate('My door code is 4321.')).toBe(false);
+  });
+});
+
+describe('isStaleSuggestion', () => {
+  it('drops old suggestions that today would be rejected, keeps real ones', () => {
+    expect(isStaleSuggestion('My birthday is [Date].')).toBe(true);
+    expect(
+      isStaleSuggestion('Please provide the conversation you are referring to. I need the text.'),
+    ).toBe(true);
+    expect(isStaleSuggestion('My preference is sparkling water.')).toBe(false);
   });
 });

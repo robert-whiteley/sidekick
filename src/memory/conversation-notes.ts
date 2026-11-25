@@ -1,10 +1,13 @@
-/** Storage for automatic conversation notes (moments of kind 'conversation_note'). */
+/** Storage for live conversation notes (moments of kind 'conversation_note'). */
 import { getDb } from './db';
-import type { HeardLine } from './conversation-note-logic';
+import type { HeardLine, LiveNote } from './conversation-note-logic';
+import { isDuplicate, type ProposedFollowup } from './followup-logic';
+import { notifyFollowupsChanged, suggestFollowups } from './followups';
 import { speakerLabel } from './people-logic';
 
 export const NOTE_KIND = 'conversation_note';
 const UNTIL_KEY = 'conversationNotes.until';
+const LIVE_KEY = 'conversationNotes.live';
 /** Older lines are not read (turning notes on doesn't write up last month). */
 const LOOKBACK_MS = 2 * 86_400_000;
 
@@ -21,6 +24,27 @@ export async function setNotesUntil(at: number) {
     UNTIL_KEY,
     String(at),
   ]);
+}
+
+/** The conversation being written up right now, if any. */
+export async function loadLive(): Promise<LiveNote | null> {
+  const db = await getDb();
+  const r = await db.execute('SELECT value FROM meta WHERE key = ?', [LIVE_KEY]);
+  try {
+    return r.rows[0] ? (JSON.parse(r.rows[0].value as string) as LiveNote) : null;
+  } catch {
+    return null;
+  }
+}
+
+export async function saveLive(live: LiveNote | null) {
+  const db = await getDb();
+  if (!live) await db.execute('DELETE FROM meta WHERE key = ?', [LIVE_KEY]);
+  else
+    await db.execute('INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)', [
+      LIVE_KEY,
+      JSON.stringify(live),
+    ]);
 }
 
 const toLine = (x: Record<string, unknown>): HeardLine => {
@@ -67,6 +91,68 @@ export async function saveNote(from: number, to: number, text: string): Promise<
     from,
   ]);
   return r.insertId!;
+}
+
+/** Rewrites a note as its conversation goes on (searchable again: re-embedded). */
+export async function updateNote(
+  id: number,
+  from: number,
+  to: number,
+  text: string,
+): Promise<boolean> {
+  const db = await getDb();
+  const r = await db.execute(
+    'UPDATE moments SET text = ?, at = ?, from_at = ?, embedded = 0 WHERE id = ? AND kind = ?',
+    [text, to, from, id, NOTE_KIND],
+  );
+  return (r.rowsAffected ?? 0) > 0;
+}
+
+/**
+ * A note's action items as follow-ups: one still awaiting approval that changed ("by Friday" →
+ * "by Monday") is updated rather than suggested again; one said to be done is withdrawn; new ones
+ * are suggested. Approved ones are left to the user.
+ */
+export async function syncNoteFollowups(
+  noteId: number,
+  proposed: ProposedFollowup[],
+  done: string[],
+) {
+  const db = await getDb();
+  const mine = (
+    await db.execute(
+      "SELECT id, title, due_at, when_text FROM followups WHERE source_moment_id = ? AND status = 'suggested'",
+      [noteId],
+    )
+  ).rows.map((r) => ({
+    id: r.id as number,
+    title: r.title as string,
+    dueAt: (r.due_at as number | null) ?? null,
+    whenText: (r.when_text as string | null) ?? '',
+  }));
+  const like = (a: string, b: string) =>
+    isDuplicate({ title: a, dueAt: null }, { title: b, dueAt: null });
+  const fresh: ProposedFollowup[] = [];
+  let touched = false;
+  for (const p of proposed) {
+    const m = mine.find((x) => like(x.title, p.title));
+    if (!m) fresh.push(p);
+    else if (m.dueAt !== p.dueAt || m.title !== p.title) {
+      touched = true;
+      await db.execute(
+        'UPDATE followups SET title = ?, due_at = ?, all_day = ?, when_text = ? WHERE id = ?',
+        [p.title, p.dueAt, p.allDay ? 1 : 0, p.whenText, m.id],
+      );
+    }
+  }
+  for (const d of done) {
+    const m = mine.find((x) => like(x.title, d));
+    if (!m) continue;
+    touched = true;
+    await db.execute("UPDATE followups SET status = 'dismissed' WHERE id = ?", [m.id]);
+  }
+  if (touched) notifyFollowupsChanged();
+  if (fresh.length) await suggestFollowups(fresh);
 }
 
 export type StoredNote = { id: number; from: number; to: number; text: string };

@@ -23,5 +23,5 @@ Other App content items:
 - Health / financial features / government app: No.
 - COVID-19 contact tracing: No.
 - Data safety: docs/store/data-safety.md.
-- Privacy policy URL: the hosted copy of docs/privacy-policy.md (docs/RELEASE.md, owner step).
+- Privacy policy URL: https://sidekick.sashy.ai/privacy
 - App access: "All functionality is available without an account. Some features (Gmail send, Google Tasks, Drive backup) need the reviewer's own Google account and are optional." No test login needed.

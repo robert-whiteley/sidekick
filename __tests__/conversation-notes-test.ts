@@ -1,21 +1,18 @@
 import {
   actionFollowups,
-  endedConversations,
+  conversationEnded,
+  freshLive,
   type HeardLine,
   joinNames,
+  mergeNotes,
+  NOTE_MIN_INTERVAL_MS,
+  notePassDue,
   noteText,
   notePrompt,
   parseNote,
+  splitConversations,
 } from '@/memory/conversation-note-logic';
 import { backupDue, backupName, nextSlot } from '../src/integrations/drive-backup';
-import {
-  type DayRecap,
-  distinctPlaces,
-  isEmptyRecap,
-  recapDue,
-  recapLine,
-  recapMinutes,
-} from '@/memory/day-recap-logic';
 
 const MIN = 60_000;
 // Monday 23 November 2026, 10:00 local time.
@@ -32,65 +29,105 @@ function talk(start: number, n: number, step = 30_000, idStart = 1): HeardLine[]
   }));
 }
 
-describe('conversation end detection', () => {
-  it('waits while it is still going, then writes after 5 min of silence', () => {
-    const lines = talk(T0, 10); // 10:00 to 10:04:30
-    const end = lines[lines.length - 1].at;
-    expect(endedConversations(lines, end + 2 * MIN, true)).toEqual({ ready: [], until: null });
-    const r = endedConversations(lines, end + 5 * MIN, true);
-    expect(r.ready).toHaveLength(1);
-    expect(r.ready[0]).toMatchObject({ from: T0, to: end });
-    expect(r.until).toBe(end);
-  });
-
-  it('ends at once when Listen is off', () => {
-    const lines = talk(T0, 10);
-    expect(endedConversations(lines, lines[9].at + MIN, false).ready).toHaveLength(1);
-  });
-
-  it('skips short exchanges and talking alone, but moves past them', () => {
-    const short = talk(T0, 4); // 1.5 min, 4 lines
-    expect(endedConversations(short, T0 + 30 * MIN, true)).toEqual({
-      ready: [],
-      until: short[3].at,
-    });
-    const alone = talk(T0, 10).map((l) => ({ ...l, who: 'Me', isOwner: true }));
-    expect(endedConversations(alone, T0 + 30 * MIN, true).ready).toEqual([]);
-  });
-
-  it('splits at 5-minute gaps and keeps the one still going', () => {
+describe('live notes: when a pass runs', () => {
+  it('splits at 5-minute gaps', () => {
     const a = talk(T0, 10);
     const b = talk(T0 + 20 * MIN, 10, 30_000, 100);
-    const r = endedConversations([...a, ...b], b[9].at + MIN, true);
-    expect(r.ready.map((c) => c.from)).toEqual([T0]);
-    expect(r.until).toBe(a[9].at);
+    const cs = splitConversations([...a, ...b]);
+    expect(cs.map((c) => c.from)).toEqual([T0, T0 + 20 * MIN]);
+    expect(conversationEnded(cs[0], false, b[9].at, true)).toBe(true);
+    expect(conversationEnded(cs[1], true, b[9].at + MIN, true)).toBe(false);
+    expect(conversationEnded(cs[1], true, b[9].at + 5 * MIN, true)).toBe(true);
+    expect(conversationEnded(cs[1], true, b[9].at + MIN, false)).toBe(true);
+  });
+
+  it('starts a note from the first line with someone else, at a short pause, no minimum length', () => {
+    const [c] = splitConversations(talk(T0, 1)); // Sam says one thing
+    const live = freshLive(c.from);
+    expect(notePassDue(c, live, c.to + 5_000, false)).toBe(false); // still talking
+    expect(notePassDue(c, live, c.to + 20_000, false)).toBe(true); // a pause
+    expect(notePassDue(c, live, c.to + 1_000, true)).toBe(true); // Listen off
+  });
+
+  it('updates every few new lines, not more often than the interval', () => {
+    const [c] = splitConversations(talk(T0, 8, 2_000));
+    const now = c.to + 1_000;
+    const live = { ...freshLive(c.from), noteId: 5, handled: 4, passAt: now - 10_000 };
+    expect(notePassDue(c, live, now, false)).toBe(false); // too soon after the last pass
+    expect(notePassDue(c, { ...live, passAt: now - NOTE_MIN_INTERVAL_MS }, now, false)).toBe(true);
+    expect(notePassDue(c, { ...live, handled: 8, passAt: 0 }, now, false)).toBe(false); // nothing new
+    expect(notePassDue(c, { ...live, deleted: true, passAt: 0 }, now, true)).toBe(false);
+  });
+
+  it('never for talking alone', () => {
+    const alone = talk(T0, 10).map((l) => ({ ...l, who: 'Me', isOwner: true }));
+    const [c] = splitConversations(alone);
+    expect(notePassDue(c, freshLive(c.from), c.to + 30 * MIN, true)).toBe(false);
   });
 });
 
 describe('note text', () => {
   const c = { from: T0, to: T0 + 5 * MIN, lines: talk(T0, 10) };
 
-  it('prompts with the live names', () => {
+  it('prompts with the live names; updates send the note and only the new lines', () => {
     expect(notePrompt(c)).toContain('Sam: line 0');
     expect(notePrompt(c)).toContain('Me: line 1');
+    const prev = parseNote(
+      'Topics: the launch\nActions: Sam will send the deck by Friday\nSummary: Launch.',
+      c,
+    )!;
+    const p = notePrompt(c, prev, 8);
+    expect(p).toContain('Topics: the launch');
+    expect(p).toContain('Said since:\nSam: line 8\nMe: line 9');
+    expect(p).toContain('Said just before:\nSam: line 4');
+    expect(p).not.toContain('line 0');
   });
 
   it('parses the four lines; people come from the voices, not the model', () => {
     const n = parseNote(
-      '**Topics:** the launch; budget\nDecisions: none\nActions: Sam will send the deck by Friday; I will book the room\nSummary: Planning the launch.',
+      '**Topics:** the launch; budget\nDecisions: none\nActions: Sam will send the deck by Friday; I will book the room (done)\nSummary: Planning the launch.',
       c,
     );
     expect(n).toEqual({
       people: ['Sam'],
       topics: ['the launch', 'budget'],
       decisions: [],
-      actions: ['Sam will send the deck by Friday', 'I will book the room'],
+      actions: ['Sam will send the deck by Friday'],
+      done: ['I will book the room'],
       summary: 'Planning the launch',
     });
     expect(noteText(n!)).toBe(
-      'Conversation with Sam\nPlanning the launch\nTopics: the launch; budget\nAction items: Sam will send the deck by Friday; I will book the room',
+      'Conversation with Sam\nPlanning the launch\nTopics: the launch; budget\nAction items: Sam will send the deck by Friday\nDone: I will book the room',
     );
     expect(parseNote('I cannot help with that.', c)).toBeNull();
+  });
+
+  it('merges an update: keeps dropped points, changed actions replace, done ones move out', () => {
+    const prev = {
+      people: ['Sam'],
+      topics: ['the launch'],
+      decisions: ['launch in May'],
+      actions: ['Sam will send the deck by Friday', 'I will call the venue'],
+      done: [],
+      summary: 'Planning.',
+    };
+    const next = {
+      people: ['Sam', 'Alex'],
+      topics: ['budget'],
+      decisions: [],
+      actions: ['Sam will send the deck by Monday'],
+      done: ['I will call the venue'],
+      summary: '',
+    };
+    expect(mergeNotes(prev, next)).toEqual({
+      people: ['Sam', 'Alex'],
+      topics: ['the launch', 'budget'],
+      decisions: ['launch in May'],
+      actions: ['Sam will send the deck by Monday'],
+      done: ['I will call the venue'],
+      summary: 'Planning.',
+    });
+    expect(mergeNotes(null, next)).toBe(next);
   });
 
   it('joins names', () => {
@@ -108,33 +145,6 @@ describe('note text', () => {
     expect(new Date(deck.dueAt!).getDate()).toBe(27);
     expect(deck.sourceMomentId).toBe(42);
     expect(room).toMatchObject({ title: 'I will book the room', dueAt: null, whenText: '' });
-  });
-});
-
-describe('day recap', () => {
-  it('is due once a day from the chosen time', () => {
-    const at8pm = new Date(2026, 10, 23, 20, 0).getTime();
-    expect(recapMinutes('20:00')).toBe(1200);
-    expect(recapMinutes('off')).toBeNull();
-    expect(recapDue('20:00', null, at8pm - MIN)).toBe(false);
-    expect(recapDue('20:00', null, at8pm + MIN)).toBe(true);
-    expect(recapDue('20:00', at8pm + MIN, at8pm + 60 * MIN)).toBe(false);
-    expect(recapDue('20:00', at8pm - 86_400_000, at8pm + MIN)).toBe(true);
-    expect(recapDue(null, null, at8pm + MIN)).toBe(false);
-  });
-
-  it('summarises in one line', () => {
-    const r: DayRecap = {
-      day: T0,
-      notes: [{ id: 1, at: T0, title: 'Conversation with Sam', text: '' }],
-      places: distinctPlaces(['Leeds, GB', null, 'York, GB', 'Leeds, GB']),
-      seen: [],
-      done: ['Call Mum'],
-      pending: [],
-    };
-    expect(r.places).toEqual(['Leeds, GB', 'York, GB']);
-    expect(recapLine(r)).toBe('Your day: 1 conversation, 2 places, 1 to-do done');
-    expect(isEmptyRecap({ ...r, notes: [], places: [], done: [] })).toBe(true);
   });
 });
 

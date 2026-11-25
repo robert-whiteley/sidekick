@@ -66,6 +66,28 @@ type IntegrationsNative = {
   setBrightness?(percent: number): boolean;
   openPanel?(kind: 'wifi' | 'internet' | 'bluetooth' | 'airplane' | 'nfc' | 'volume'): boolean;
   playFromSearch?(query: string, pkg: string): boolean;
+  // Phone extras (PhoneExtras.kt); optional so older builds degrade to "not on this phone".
+  /** Milliseconds until full while charging, else -1. */
+  chargeTimeRemaining?(): number;
+  /** Wall-clock time of the last restart (the step counter counts from here). */
+  bootAt?(): number;
+  hasStepCounter?(): boolean;
+  activityAllowed?(): boolean;
+  /** Steps since the last restart, or -1. */
+  stepCount?(): Promise<number>;
+  usageAccess?(): boolean;
+  openUsageAccess?(): boolean;
+  /** JSON [{pkg, label, ms}] foreground time per app, longest first. */
+  screenTime?(from: number, to: number): string;
+  clipboardText?(): string | null;
+  setClipboard?(text: string): boolean;
+  ringPhone?(seconds: number): boolean;
+  stopRing?(): boolean;
+  /** Opens [url] in [pkg] ('' = any app). */
+  openLink?(url: string, pkg: string): boolean;
+  /** JSON {text?, subject?, imagePath?, at} shared into Sidekick, once. */
+  takeShared?(): string | null;
+  addListener?(event: 'onShared', listener: () => void): { remove(): void };
   isLocked?(): boolean;
   requestUnlock?(): Promise<boolean>;
 };

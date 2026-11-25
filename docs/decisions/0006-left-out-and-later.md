@@ -151,3 +151,12 @@ Read this before proposing any of these again. Each line says why.
   with the embedder for memory on 4 GB phones. Conversations older than 2 days are not written up.
 - "Your day" is an in-chat line only, not a system notification at the chosen time (would need a
   scheduled background task to build the recap while the app is closed).
+
+## Location memory (25 Nov)
+
+- Built: a location track (encrypted DB) while Listening / Live camera runs (native, journaled) or the app is open (every 5 min); places named by voice ("call this place the gym", "this is home"); where am I / where was I at 3 / where did I park / when was I last at X / how long at X / where have I been; enter/leave events for routines (`onPlaceChange`, `src/engine/location-track.ts`); weather from MET Norway (Online lookup only, position rounded to ~1 km). Settings → Privacy → Location (switch, places, delete history).
+- No ACCESS_BACKGROUND_LOCATION: Play requires a declaration and review for it, and Android 14+ blocks while-in-use location in services started from the background. Positions are kept only while the user-started service runs or the app is open; when Android restarts the service on its own (in the background) it restarts without location (and stops instead of crashing if Android refuses the start).
+- Parking: marked when a car kit's Bluetooth (by name, as hands-free mode) disconnects while Sidekick runs; otherwise guessed from the first slow fix after driving speed, which can be a few hundred metres off (updates are at most every 5 min / 100 m to save battery).
+- Town names stay offline (GeoNames, towns ≥ 15 000 people). Rejected: bundling cities500 (~200 000 places, ~10 MB more) for village names. Street names come from Android's Geocoder (Google, online) only when Online lookup is on.
+- Rejected: Open-Meteo (free tier is non-commercial only). MET Norway needs an identifying User-Agent: "Sidekick/1.0 https://sidekick.sashy.ai" (no personal details).
+- Left out: named places in the Timeline (it shows the town); place-based reminders while the app is fully closed (needs background location); "frequent places" are only hinted ("you've been here on 5 days; name it"), never named automatically; Android 16 "home/work" from Google is not readable by apps.

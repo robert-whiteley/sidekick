@@ -4,10 +4,16 @@ import type { HandsFreeMode, ReadIncomingMode } from './hands-free-logic';
 import type { ReadBackMode } from './readback-logic';
 import { DEFAULT_WAKE_PHRASE } from './wake-word';
 import type { ConsentChoice } from '@/memory/consent-region';
+import type { NoteTemplateId, TemplateChoice } from '@/memory/note-templates';
 
 /** User settings, stored on the phone. Every feature can be switched off. */
 export type Settings = {
   wakePhrase: string;
+  /**
+   * Language Sidekick listens and answers in: 'auto' = the phone's language when the speech model
+   * knows it, else English; or an ISO 639-1 code (language-logic.ts).
+   */
+  speechLanguage: string;
   /** Show the conversation live on the Ask screen while listening (display only). */
   showConversation: boolean;
   /**
@@ -33,6 +39,11 @@ export type Settings = {
   quietEnd: number;
   /** Places where listening auto-pauses. */
   pausePlaces: PausePlace[];
+  /**
+   * Remember where you were (location track, named places, parking) while Sidekick listens or is
+   * open. Needs the location permission (asked on first use); stays on the phone.
+   */
+  locationMemory: boolean;
   /** Data sources (all off until the user turns them on; see features/settings/SourcesSection). */
   sourceNotes: boolean;
   sourceFolders: boolean;
@@ -97,14 +108,16 @@ export type Settings = {
   appLock: boolean;
   /** Minutes away before it asks again (0 = every time; null = Recommended, 1). */
   appLockAfterMin: number | null;
-  /** Notes of each conversation heard with Listen on, after it ends (null = 'auto'). */
+  /** Live notes of each conversation heard with Listen on, updated as it goes (null = 'auto'). */
   conversationNotes: 'auto' | 'off' | null;
-  /** Evening "Your day" recap: 'off' or a time 'HH:MM' (null = 'off'). */
-  dayRecap: string | null;
-  /** When the last day recap was posted (ms), so it is posted once a day. */
-  lastDayRecapAt: number | null;
   /** When Google Drive last took a backup (ms). */
   lastDriveBackupAt: number | null;
+  /** Speech speed of spoken answers, 0.5–2 (null = normal, 1). "Speak slower / faster". */
+  speechRate: number | null;
+  /** Note template used when none was chosen by voice (null = the general note). */
+  defaultNoteTemplate: NoteTemplateId | null;
+  /** The last "this is a meeting" choice (applies to the conversation going on then). */
+  noteTemplateChoice: TemplateChoice | null;
   /** Measured silently in the background; refine the Recommended values (null = not yet). */
   measuredTokPerSec: number | null;
   measuredVoiceFirstSoundMs: number | null;
@@ -119,6 +132,7 @@ export type SmartDefault = 'auto' | 'ask' | 'off';
 const NOT_SAVED = ['offTheRecord'] as const;
 
 export const DEFAULTS: Settings = {
+  speechLanguage: 'auto',
   wakePhrase: DEFAULT_WAKE_PHRASE,
   showConversation: true,
   instructionsOnly: false,
@@ -131,6 +145,7 @@ export const DEFAULTS: Settings = {
   quietStart: 22 * 60,
   quietEnd: 7 * 60,
   pausePlaces: [],
+  locationMemory: true,
   sourceNotes: false,
   sourceFolders: false,
   folderUris: [],
@@ -163,9 +178,10 @@ export const DEFAULTS: Settings = {
   appLock: false,
   appLockAfterMin: null,
   conversationNotes: null,
-  dayRecap: null,
-  lastDayRecapAt: null,
   lastDriveBackupAt: null,
+  speechRate: null,
+  defaultNoteTemplate: null,
+  noteTemplateChoice: null,
   measuredTokPerSec: null,
   measuredVoiceFirstSoundMs: null,
 };

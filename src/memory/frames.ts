@@ -50,6 +50,17 @@ export function parseFrameLine(line: string): FrameLine | null {
 
 let draining: Promise<number> | null = null;
 
+/** Told about each batch of new embedded frames (camera watches, see engine/focus-watch.ts). */
+const frameListeners = new Set<
+  (frames: { at: number; path: string; vector: number[] }[]) => void
+>();
+export function onNewFrames(
+  l: (frames: { at: number; path: string; vector: number[] }[]) => void,
+): () => void {
+  frameListeners.add(l);
+  return () => frameListeners.delete(l);
+}
+
 /** Moves new frames from the native journal into memory; returns how many were added. */
 export function ingestFrames(): Promise<number> {
   if (!android) return Promise.resolve(0);
@@ -88,6 +99,10 @@ async function ingestNow(): Promise<number> {
       if (f.ocrNeeded) toRead.push(id);
     }
   });
+  const embedded = frames.flatMap((f) =>
+    f.vector ? [{ at: f.at, path: f.path, vector: f.vector }] : [],
+  );
+  if (embedded.length) frameListeners.forEach((l) => l(embedded));
   // OCR after the batch is saved (each ~1 s); not awaited so ingest never blocks a question.
   for (const id of toRead) void readTextOf(id).catch(() => {});
   return frames.length;

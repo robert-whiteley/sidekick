@@ -27,3 +27,23 @@ test('labels', () => {
   expect(daysLabel(0)).toBe('Forever');
   expect(daysLabel(90)).toBe('3 months');
 });
+
+test('a Recommended value between the choices gets a labelled chip in order', () => {
+  const opts = [1, 2, 4, 8, 16].map((g) => ({ value: g, label: `${g} GB` }));
+  const chips = choiceChips(opts, null, 11, (g) => `${g} GB`);
+  expect(chips.map((c) => c.label)).toEqual([
+    '1 GB',
+    '2 GB',
+    '4 GB',
+    '8 GB',
+    '11 GB (Recommended)',
+    '16 GB',
+  ]);
+  expect(chips.find((c) => c.selected)?.value).toBe(11);
+});
+
+test('camera moments are labelled Camera, not a speaker', () => {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { who } = require('@/features/memory/timeline-logic');
+  expect(who({ kind: 'frame', speakerName: null, speakerId: null })).toBe('Camera');
+});

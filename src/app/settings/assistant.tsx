@@ -2,6 +2,8 @@ import { EntryPointsSection } from '@/features/settings/EntryPointsSection';
 import { FollowupsSection } from '@/features/settings/FollowupsSection';
 import { NotesRecapSection } from '@/features/settings/NotesRecapSection';
 import { ListeningSection } from '@/features/settings/ListeningSection';
+import { phoneLocale } from '@/engine/language';
+import { languageName, languagePlan } from '@/engine/language-logic';
 import { Page } from '@/features/settings/Page';
 import { ChoiceRow, NavRow, Section } from '@/features/settings/ui';
 import { useSettings } from '@/features/settings/useSettings';
@@ -9,6 +11,14 @@ import type { HandsFreeMode } from '@/engine/hands-free-logic';
 import { formatMinutes } from '@/engine/place-logic';
 import type { ReadBackMode } from '@/engine/readback-logic';
 import type { SmartDefault } from '@/engine/settings';
+import { NOTE_TEMPLATES, type NoteTemplateId } from '@/memory/note-templates';
+
+/** "Automatic (German)" / "Deutsch". */
+function languageHint(choice: string): string {
+  const plan = languagePlan(choice ?? 'auto', phoneLocale());
+  const name = languageName(plan.answer);
+  return choice === 'auto' || !choice ? `Automatic (${name})` : name;
+}
 
 const MODEL_TIER_LABEL = { small: 'Small and fast', standard: 'Standard', large: 'Large' };
 
@@ -16,6 +26,9 @@ export default function AssistantSettings() {
   const { s, rec, set } = useSettings();
   return (
     <Page title="Assistant">
+      <Section title="Language">
+        <NavRow label="Language" hint={languageHint(s.speechLanguage)} href="/settings/language" />
+      </Section>
       <Section title="Voice">
         <ChoiceRow
           label="Voice for answers"
@@ -27,6 +40,21 @@ export default function AssistantSettings() {
           value={s.voiceChoice === 'auto' ? null : s.voiceChoice}
           recommended={rec.voice}
           onChange={(v) => set({ voiceChoice: v ?? 'auto' })}
+        />
+        <ChoiceRow<number>
+          label="Speech speed"
+          hint={'Also by voice: "speak slower", "speak faster", "normal speed".'}
+          options={[
+            { value: 0.75, label: '75%' },
+            { value: 0.9, label: '90%' },
+            { value: 1, label: 'Normal' },
+            { value: 1.15, label: '115%' },
+            { value: 1.3, label: '130%' },
+            { value: 1.5, label: '150%' },
+          ]}
+          value={s.speechRate}
+          recommended={1}
+          onChange={(v) => set({ speechRate: v === 1 ? null : v })}
         />
       </Section>
       <Section title="Hands-free">
@@ -101,6 +129,21 @@ export default function AssistantSettings() {
       <ListeningSection part="assistant" />
       <FollowupsSection part="settings" />
       <NotesRecapSection />
+      <Section title="Note style">
+        <ChoiceRow<NoteTemplateId | 'general'>
+          label="Notes shaped for"
+          hint={
+            'Extra sections for one kind of conversation, e.g. a doctor\'s appointment: symptoms, medicines, next steps. Or say it at the time: "this is a meeting", "this is a lecture".'
+          }
+          options={[
+            { value: 'general', label: 'Any conversation' },
+            ...Object.values(NOTE_TEMPLATES).map((t) => ({ value: t.id, label: t.label })),
+          ]}
+          value={s.defaultNoteTemplate}
+          recommended="general"
+          onChange={(v) => set({ defaultNoteTemplate: v === 'general' ? null : v })}
+        />
+      </Section>
       <EntryPointsSection />
     </Page>
   );

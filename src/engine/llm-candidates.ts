@@ -63,11 +63,17 @@ export function requiredModelFiles(soc: string, chat: ActiveChat = currentChat()
   return modelFilesFor(chat.id, soc);
 }
 
+/** The required speech files; language.ts swaps in its language-aware list when it loads. */
+let speechFiles: () => ModelFile[] = () => SPEECH_FILES;
+export function setRequiredSpeechFiles(source: () => ModelFile[]) {
+  speechFiles = source;
+}
+
 /** Everything the app downloads on first run: chat model, speech, memory search, photo text. */
 export function allRequiredFiles(soc: string, chat: ActiveChat = currentChat()): ModelFile[] {
   return [
     ...requiredModelFiles(soc, chat),
-    ...SPEECH_FILES,
+    ...speechFiles(),
     EMBEDDER_FILE,
     ...Object.values(OCR_FILES),
   ];

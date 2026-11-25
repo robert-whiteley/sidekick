@@ -1,7 +1,12 @@
 import { autoSend, beginReadBack, draftSummary, planAction } from '@/engine/actions';
 import { readBackOn } from './hands-free';
-import { summaryPrompt, summaryWindow } from './hands-free-logic';
+import { runVoiceCommand, trackAnswer } from './voice-commands';
+import { postCodeCards, scanCodes } from './codes';
+import { codePromptLine } from './codes-logic';
+import { answerRecap } from './recap';
 import { recallContext } from '@/memory/recall';
+import { englishForRules } from '@/engine/rules-english';
+import { postRoutineCard, routineRequest } from './routines-store';
 import SidekickNative from '../../modules/sidekick-native';
 import {
   askLlm,
@@ -30,7 +35,6 @@ import type { Moment } from '@/memory/store';
 import { MEMORY_LIMIT, memoryContext, pickFacts } from './prompt-budget';
 import {
   rememberExchange,
-  momentsBetween,
   rememberPhotoQuestion,
   saveFact,
   savedFacts,
@@ -41,6 +45,7 @@ import { ocrPromptLine } from '@/memory/photo-text';
 import { photoTextOrNull } from './photo-ocr';
 import { memoryStatus } from './progress';
 import { lockedReply } from '@/integrations/phone-controls';
+import { withClipboard } from '@/integrations/extras';
 import { parseTranslate, translatePrompt } from '@/integrations/translate';
 import { answerLocally } from '@/memory/sources';
 import {
@@ -53,6 +58,7 @@ import { addFollowup, listFollowups } from '@/memory/followups';
 import { repeatLabel } from '@/memory/repeat-logic';
 import { personPromptContext } from '@/memory/people';
 import { askWithLookup, type WebSource } from '@/web/lookup';
+import { answerLocation } from './location';
 
 export { SYSTEM_PROMPT, memoryContext };
 
@@ -181,18 +187,43 @@ export async function answer(
     onStatus?: (line: string) => void;
     /** The recalled clip or photo, shown as soon as it is found (before the answer). */
     onFound?: (media: NonNullable<AnswerResult['media']>) => void;
+    /** Run by a routine (routines.ts): no new routines from it, and drafts wait for a tap. */
+    routine?: boolean;
   },
 ): Promise<AnswerResult> {
+  onText = trackAnswer(onText); // "repeat that"
   const status = opts?.onStatus ?? (() => {});
   const done = (text: string): AnswerResult => {
     onText(text);
     return { text, usedPhoto: null, sources: [], ms: 0, ttftMs: 0, local: true };
   };
+  // Another language: the rules below read English, so a likely command is put into English
+  // first (one short model pass, rules-english.ts); the answer is still in the user's language.
+  const asked = question;
+  if (!photoNow) question = (await englishForRules(question)) ?? question;
   // Phone locked (screen off, hands-free): nothing personal until it is unlocked.
   const locked = lockedReply(question);
   if (locked) return done(locked);
+  // Speech speed, repeat, "what can you do?", listening/camera on/off, watches, scan (no model).
+  const command = await runVoiceCommand(question, photoNow).catch(() => null);
+  if (command) return done(command);
   const offRecord = opts?.offTheRecord ?? getSettings().offTheRecord ?? false;
   if (!offRecord) offRecordStarted = false;
+  // Where am I / was I / did I park, "call this place the gym", the weather (location.ts).
+  // Before "remember …" so "remember this place as …" names a place instead of saving a fact.
+  const loc = photoNow ? null : await answerLocation(question, { offRecord }).catch(() => null);
+  if (loc) {
+    onText(loc.text);
+    return {
+      text: loc.text,
+      usedPhoto: null,
+      sources: [],
+      ms: 0,
+      ttftMs: 0,
+      local: !loc.web,
+      web: loc.web,
+    };
+  }
   const remember = REMEMBER.exec(question.trim());
   if (remember && offRecord && !photoNow && !question.trim().endsWith('?')) {
     const text =
@@ -246,6 +277,13 @@ export async function answer(
     return { text, usedPhoto: null, sources: [], ms: 0, ttftMs: 0, local: true };
   }
 
+  // "Every day at 6pm give me a recap", "whenever Sam messages me, read it out": a routine.
+  const routine = photoNow || opts?.routine || offRecord ? null : routineRequest(question);
+  if (routine) {
+    if (routine.routineId) postRoutineCard(routine.routineId);
+    return done(routine.text);
+  }
+
   // "Text Sam I'm running late", "add lunch with Jo tomorrow at 1": a draft card, sent only on OK.
   const plan = photoNow ? null : await planAction(question).catch(() => null);
   if (plan) {
@@ -253,11 +291,11 @@ export async function answer(
     // Driving-style read-back: "Text to Sam: I'm running late. Send it?" then the countdown.
     let readBackId = plan.kind === 'reply' ? plan.readBackId : undefined;
     let text = plan.kind === 'reply' ? plan.text : draftSummary(plan.draft);
-    if (draftId && readBackOn(!!opts?.spoken)) {
+    if (draftId && !opts?.routine && readBackOn(!!opts?.spoken)) {
       const said = beginReadBack(draftId);
       if (said) [text, readBackId] = [said, draftId];
     }
-    if (draftId && !readBackId) autoSend(draftId);
+    if (draftId && !readBackId && !opts?.routine) autoSend(draftId);
     onText(text);
     return {
       text,
@@ -271,30 +309,18 @@ export async function answer(
     };
   }
 
-  // "What did we talk about today / this week": that time's lines, summarised by the model.
-  const span = photoNow ? null : summaryWindow(question, new Date());
-  if (span) {
-    const lines = await momentsBetween(span.from, span.to).catch(() => []);
-    const prompt = summaryPrompt(
-      span,
-      lines.map((m) => ({
-        at: m.at,
-        who: m.kind === 'speech' ? (m.isOwner ? 'Me' : (m.speakerName ?? 'Someone')) : 'Q/A',
-        text: m.text,
-      })),
-    );
-    if (!prompt) {
-      const text = `I don't have any conversations from ${span.label}.`;
-      onText(text);
-      return { text, usedPhoto: null, sources: [], ms: 0, ttftMs: 0, local: true };
-    }
-    const t0 = Date.now();
-    const { text } = await askLlm(prompt, null, onText, {
-      system: SYSTEM_PROMPT,
-      maxTokens: 400,
-      scratch: true,
-    });
-    return { text, usedPhoto: null, sources: [], ms: Date.now() - t0, ttftMs: 0 };
+  // Recaps over any range or topic ("what did we talk about last Tuesday", "recap the last 2
+  // hours", "recap what we've been working on"), summarised by the model (src/engine/recap.ts).
+  const recap = photoNow ? null : await answerRecap(question, onText);
+  if (recap) {
+    return {
+      text: recap.text,
+      usedPhoto: null,
+      sources: [],
+      ms: recap.ms,
+      ttftMs: 0,
+      ...(recap.local ? { local: true } : {}),
+    };
   }
 
   // "What's Sam's number": straight from contacts (when on), no model needed.
@@ -303,6 +329,8 @@ export async function answer(
     onText(local);
     return { text: local, usedPhoto: null, sources: [], ms: 0, ttftMs: 0, local: true };
   }
+  // Past the rules: memory search and the model see what the user actually said.
+  question = asked;
 
   let sources: Moment[] = [];
   let facts: string[] = [];
@@ -351,7 +379,13 @@ export async function answer(
     );
   // The photo's exact text (OCR, ~1 s) helps the model read numbers and names right.
   if (image) status('Reading the picture…');
-  const seenText = ocrPromptLine(await photoTextOrNull(image));
+  const [ocrText, codes] = await Promise.all([
+    photoTextOrNull(image),
+    photoNow ? scanCodes(photoNow) : Promise.resolve([]),
+  ]);
+  // A QR code or barcode in the photo: its content for the model, and a card with its buttons.
+  if (codes.length) postCodeCards(codes);
+  const seenText = ocrPromptLine(ocrText) + codePromptLine(codes);
   const recallPart = recall?.promptPart ?? '';
   // A camera frame answers the question: unrelated notes would only pull the model away from it
   // ("I have no information about what you saw"), so they stay out of the prompt.
@@ -372,7 +406,7 @@ export async function answer(
     question,
     !!image,
     (webPart) =>
-      `${agenda}${person}${webPart}${notes}${seenText}${recallPart}Question: ${recall?.modelQuestion ?? question}`,
+      `${agenda}${person}${webPart}${notes}${seenText}${recallPart}Question: ${recall?.modelQuestion ?? withClipboard(question) ?? question}`,
     async (prompt, t, o) => {
       const r = await askLlm(prompt, image, t, {
         system,

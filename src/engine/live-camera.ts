@@ -31,9 +31,31 @@ export function liveCameraOn(): boolean {
   }
 }
 
+/** Camera watches need frames within seconds, not every 30 s (see focus-watch.ts). */
+const FAST_INGEST_MS = 2_000;
+let fast = false;
+let ingestEvery = 0;
+
+/** Drains frames every 2 s while a camera watch runs, else every 30 s. */
+export function setFastIngest(on: boolean) {
+  fast = on;
+  if (ingestTimer) {
+    clearInterval(ingestTimer);
+    ingestTimer = null;
+    setIngest(true);
+  }
+}
+
 function setIngest(on: boolean) {
-  if (on && !ingestTimer)
-    ingestTimer = setInterval(() => void ingestFrames().catch(() => 0), INGEST_MS);
+  const every = fast ? FAST_INGEST_MS : INGEST_MS;
+  if (on && ingestTimer && ingestEvery !== every) {
+    clearInterval(ingestTimer);
+    ingestTimer = null;
+  }
+  if (on && !ingestTimer) {
+    ingestEvery = every;
+    ingestTimer = setInterval(() => void ingestFrames().catch(() => 0), every);
+  }
   if (!on && ingestTimer) {
     clearInterval(ingestTimer);
     ingestTimer = null;

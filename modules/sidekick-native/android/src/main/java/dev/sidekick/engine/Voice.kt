@@ -37,6 +37,8 @@ object Voice {
   private const val KEY_CHOICE = "voice.choice"
   private const val KEY_MEASURED = "voice.measuredMs"
   private const val KEY_OVERRIDE = "voice.override"
+  /** BCP-47 tag of the language Sidekick speaks ("" = the phone's); see language-logic.ts. */
+  private const val KEY_LANGUAGE = "voice.language"
   private const val TEST_SENTENCE = "Sure, here is what I found."
   private const val DUCK_VOLUME = 0.25f
 
@@ -59,6 +61,22 @@ object Voice {
   private var referenceRate = 24000
   @Volatile private var track: AudioTrack? = null
   @Volatile private var volume = 1f
+  /** Speech speed (1 = normal, 0.5–2): "speak slower / faster" in Settings or by voice. */
+  @Volatile private var speechRate = 1f
+
+  fun setRate(r: Float) {
+    speechRate = r.coerceIn(0.5f, 2f)
+    track?.let { applyRate(it) }
+  }
+
+  // Time-stretch (pitch kept) on the neural voice's track.
+  private fun applyRate(t: AudioTrack) {
+    try {
+      t.playbackParams = android.media.PlaybackParams().setSpeed(speechRate).setPitch(1f)
+    } catch (e: Exception) {
+      Log.w(TAG, "speech speed $speechRate not supported", e)
+    }
+  }
 
   private var system: TextToSpeech? = null
   @Volatile private var systemReady = false
@@ -89,13 +107,27 @@ object Voice {
     decideSoon(ctx)
   }
 
+  /**
+   * The language answers are spoken in ("" = the phone's). Pocket TTS is English only, so any
+   * other language uses the system voice in that language.
+   */
+  fun setLanguage(ctx: Context, tag: String) {
+    prefs(ctx).edit().putString(KEY_LANGUAGE, tag).apply()
+    synchronized(this) { if (systemReady) system?.language = speakLocale(ctx) }
+  }
+
+  private fun speakLocale(ctx: Context): Locale {
+    val tag = prefs(ctx).getString(KEY_LANGUAGE, "") ?: ""
+    return if (tag.isBlank()) Locale.getDefault() else Locale.forLanguageTag(tag)
+  }
+
   /** Which voice answers now: "pocket" or "system". */
   fun engineName(ctx: Context): String {
     val p = prefs(ctx)
     return VoiceChoice.active(
       override = p.getString(KEY_OVERRIDE, "auto") ?: "auto",
       decided = p.getString(KEY_CHOICE, null),
-      pocketUsable = !ttsFailed && modelReady(ctx),
+      pocketUsable = !ttsFailed && modelReady(ctx) && VoiceChoice.pocketSpeaks(speakLocale(ctx).language),
     )
   }
 
@@ -320,6 +352,7 @@ object Voice {
         .setTransferMode(AudioTrack.MODE_STREAM)
         .build()
     t.setVolume(volume)
+    if (speechRate != 1f) applyRate(t)
     dev.sidekick.engine.usb.AudioRoutes.applyOutput(t) // headphones / chosen speaker
     track = t
     return t
@@ -344,6 +377,7 @@ object Voice {
     val t = systemTts(ctx) ?: return
     systemPending.incrementAndGet()
     val params = Bundle().apply { putFloat(TextToSpeech.Engine.KEY_PARAM_VOLUME, volume) }
+    t.setSpeechRate(speechRate)
     t.speak(text, TextToSpeech.QUEUE_ADD, params, "s${System.nanoTime()}")
   }
 
@@ -358,7 +392,7 @@ object Voice {
           ready.countDown()
         }
       ready.await(3, java.util.concurrent.TimeUnit.SECONDS)
-      system?.language = Locale.getDefault()
+      system?.language = speakLocale(ctx)
       system?.setOnUtteranceProgressListener(
         object : UtteranceProgressListener() {
           override fun onStart(id: String?) {}
@@ -398,6 +432,9 @@ object VoiceChoice {
   /** From the timing run: null (Pocket failed) or too slow means the system voice. */
   fun decide(firstSoundMs: Long?): String =
     if (firstSoundMs != null && firstSoundMs <= MAX_FIRST_SOUND_MS) "pocket" else "system"
+
+  /** Pocket TTS only speaks English. [language] is an ISO 639 code ("en", "de"). */
+  fun pocketSpeaks(language: String): Boolean = language.isEmpty() || language == "en"
 
   /** The voice that speaks: the owner's override, else the decision; system until decided. */
   fun active(override: String, decided: String?, pocketUsable: Boolean): String {

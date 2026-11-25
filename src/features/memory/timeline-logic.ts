@@ -1,3 +1,4 @@
+import type { Moment } from '@/memory/store';
 /** Groups items (newest first) into days with a plain heading: Today, Yesterday, "Mon 3 Nov". */
 export function groupByDay<T extends { at: number }>(
   items: T[],
@@ -32,4 +33,18 @@ export function groupByDay<T extends { at: number }>(
     out[out.length - 1].items.push(it);
   }
   return out;
+}
+
+/** Who or what a memory came from, as the Memory lists show it. */
+export function who(m: Moment): string {
+  if (m.kind === 'photo') return 'Photo';
+  if (m.kind === 'frame') return 'Camera';
+  if (m.kind === 'answer') return 'Asked Sidekick';
+  if (m.kind === 'note') return 'Your note';
+  if (m.kind === 'conversation_note') return 'Conversation notes';
+  if (m.kind === 'file') return 'File';
+  if (m.kind === 'event') return 'Calendar';
+  if (m.kind === 'notification') return 'Notification';
+  if (m.kind === 'question' || m.isOwner) return 'You';
+  return m.speakerName ?? (m.speakerId ? `Voice ${m.speakerId}` : 'Someone');
 }

@@ -17,10 +17,24 @@ export function voiceInfo(): VoiceInfo | null {
 }
 
 let appliedChoice: VoiceChoice | null = null;
+let appliedRate: number | null = null;
+
+/** Speech speed ("speak slower / faster", Settings): handed to the native voice when it changed. */
+function applyRate() {
+  const r = getSettings().speechRate ?? 1;
+  if (r === appliedRate) return;
+  try {
+    SidekickNative.voiceSetRate?.(r);
+    appliedRate = r;
+  } catch {
+    // Older native module: normal speed.
+  }
+}
 
 /** Hands Settings' voice choice ("auto" = recommended) to the native voice when it changed. */
 export function applyVoiceChoice() {
   if (Platform.OS !== 'android') return;
+  applyRate();
   const c = getSettings().voiceChoice ?? 'auto';
   if (c === appliedChoice) return;
   SidekickNative.voiceSetChoice(c);
@@ -96,6 +110,11 @@ export class StreamingSpeaker {
       this.pending = Math.max(0, this.pending - 1);
       if (this.pending === 0) SidekickNative.setMicPaused(false);
     };
-    Speech.speak(t, { onDone: done, onStopped: done, onError: done });
+    Speech.speak(t, {
+      rate: getSettings().speechRate ?? 1,
+      onDone: done,
+      onStopped: done,
+      onError: done,
+    });
   }
 }

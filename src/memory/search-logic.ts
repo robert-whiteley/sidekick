@@ -1,4 +1,5 @@
 /** Pure pieces of memory search; tested. */
+import { parseTimeRange } from './time-range';
 
 /** Reciprocal rank fusion: merges ranked id lists (vector, keyword) into one ranking. */
 export function fuseRankings(lists: number[][], k = 60): number[] {
@@ -25,48 +26,13 @@ export function ftsQuery(q: string): string | null {
   return words.map((w) => `"${w}"*`).join(' OR ');
 }
 
-/** Time window implied by the question ("this morning", "yesterday"…), or null. */
 /** "5 minutes ago", "a few hours ago", "a couple of days ago". */
 export const AGO = /\b(an?|\d+|(?:a )?(?:couple(?: of)?|few)|several) (minute|hour|day)s? ago\b/;
 
+/** Time window implied by the question ("this morning", "last Tuesday", "2 hours ago"…), or null. */
 export function timeWindow(q: string, now: Date): { from: number; to: number } | null {
-  const day = (offset: number) => {
-    const d = new Date(now);
-    d.setHours(0, 0, 0, 0);
-    d.setDate(d.getDate() + offset);
-    return d.getTime();
-  };
-  const at = (offset: number, h: number) => day(offset) + h * 3600_000;
-  const s = q.toLowerCase();
-  if (/\bthis morning\b/.test(s)) return { from: day(0), to: at(0, 12) };
-  if (/\bthis afternoon\b/.test(s)) return { from: at(0, 12), to: at(0, 18) };
-  if (/\b(this evening|tonight)\b/.test(s)) return { from: at(0, 17), to: day(1) };
-  if (/\btoday\b/.test(s)) return { from: day(0), to: day(1) };
-  if (/\byesterday morning\b/.test(s)) return { from: day(-1), to: at(-1, 12) };
-  if (/\byesterday\b/.test(s)) return { from: day(-1), to: day(0) };
-  if (/\blast night\b/.test(s)) return { from: at(-1, 17), to: at(0, 5) };
-  if (/\bthis week\b/.test(s)) return { from: day(-((now.getDay() + 6) % 7)), to: day(1) };
-  if (/\blast week\b/.test(s)) {
-    const monday = -((now.getDay() + 6) % 7);
-    return { from: day(monday - 7), to: day(monday) };
-  }
-  const ago = AGO.exec(s);
-  if (ago) {
-    const word = ago[1].replace(/\s+of$/, '');
-    const n =
-      (
-        { a: 1, an: 1, couple: 2, 'a couple': 2, few: 3, 'a few': 3, several: 5 } as Record<
-          string,
-          number
-        >
-      )[word] ?? Number(word);
-    const unit = { minute: 60_000, hour: 3600_000, day: 86_400_000 }[ago[2] as 'minute'];
-    const center = now.getTime() - n * unit;
-    // People round ("5 minutes ago" may mean 3 or 7), so the window grows with n.
-    const half = Math.max(unit, (n * unit) / 2);
-    return { from: center - half, to: Math.min(now.getTime(), center + half) };
-  }
-  return null;
+  const r = parseTimeRange(q, now);
+  return r ? { from: r.from, to: r.to } : null;
 }
 
 /** Does the question ask about a photo/something seen (so we re-read the original image)? */

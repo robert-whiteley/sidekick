@@ -5,9 +5,13 @@ import android.annotation.SuppressLint
 import android.content.Context
 import android.content.pm.PackageManager
 import android.location.Location
+import android.media.AudioDeviceCallback
+import android.media.AudioDeviceInfo
+import android.media.AudioManager
 import android.location.LocationListener
 import android.location.LocationManager
 import android.os.Build
+import android.os.Handler
 import android.os.Looper
 import android.util.Log
 import java.util.Calendar
@@ -38,6 +42,37 @@ object Places {
   private val listener = LocationListener { loc -> offer(loc) }
   private var tracking = false
 
+  /** While tracking: fixes go to the journal (JS stores them as the location track). */
+  @Volatile private var appCtx: Context? = null
+  private var lastJournaled: Location? = null
+  /** Stationary phones send no updates: ask for a fresh fix this often while listening. */
+  private const val HEARTBEAT_MS = 15 * 60_000L
+  private val handler = Handler(Looper.getMainLooper())
+  private val heartbeat =
+    object : Runnable {
+      override fun run() {
+        appCtx?.let { current(it) }
+        handler.postDelayed(this, HEARTBEAT_MS)
+      }
+    }
+
+  /** Car kits by Bluetooth name (pattern from JS, hands-free-logic.ts); null = no parking marks. */
+  @Volatile var carPattern: Regex? = null
+
+  private val audioCallback =
+    object : AudioDeviceCallback() {
+      override fun onAudioDevicesRemoved(removed: Array<out AudioDeviceInfo>) {
+        val pat = carPattern ?: return
+        val car =
+          removed.any {
+            (it.type == AudioDeviceInfo.TYPE_BLUETOOTH_A2DP || it.type == AudioDeviceInfo.TYPE_BLUETOOTH_SCO) &&
+              pat.containsMatchIn(it.productName?.toString() ?: "")
+          }
+        if (car) markParked()
+      }
+    }
+  private var parkedPending = false
+
   fun hasPermission(ctx: Context): Boolean =
     ctx.checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED ||
       ctx.checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
@@ -45,6 +80,38 @@ object Places {
   private fun offer(loc: Location) {
     val cur = last
     if (cur == null || loc.time >= cur.time) last = loc
+    val ctx = appCtx ?: return
+    if (parkedPending && System.currentTimeMillis() - loc.time < 60_000) {
+      parkedPending = false
+      journal(ctx, loc, "parked")
+    }
+    val prev = lastJournaled
+    if (prev != null && (loc.time <= prev.time || (loc.distanceTo(prev) < 40f && loc.time - prev.time < 4 * 60_000L))) return
+    if (loc.hasAccuracy() && loc.accuracy > 500f) return
+    lastJournaled = loc
+    journal(ctx, loc, "fix")
+  }
+
+  private fun journal(ctx: Context, loc: Location, source: String) {
+    val e =
+      JSONObject()
+        .put("kind", "location")
+        .put("at", if (source == "parked") System.currentTimeMillis() else loc.time)
+        .put("lat", loc.latitude)
+        .put("lon", loc.longitude)
+        .put("source", source)
+    if (loc.hasAccuracy()) e.put("accM", loc.accuracy.toDouble())
+    if (loc.hasSpeed()) e.put("speedMs", loc.speed.toDouble())
+    runCatching { Journal.append(ctx, e) }.onFailure { Log.w(TAG, "journal failed", it) }
+  }
+
+  /** The car's Bluetooth went away: where the phone is now is where the car was left. */
+  private fun markParked() {
+    val ctx = appCtx ?: return
+    val l = last
+    if (l != null && System.currentTimeMillis() - l.time < 2 * 60_000L) journal(ctx, l, "parked")
+    parkedPending = true
+    current(ctx)
   }
 
   /** Starts low-power updates (network + GPS + whatever other apps already requested). */
@@ -61,6 +128,9 @@ object Places {
         }
       }.onFailure { Log.w(TAG, "no updates from $p", it) }
     }
+    appCtx = ctx.applicationContext
+    handler.postDelayed(heartbeat, HEARTBEAT_MS)
+    runCatching { ctx.getSystemService(AudioManager::class.java)?.registerAudioDeviceCallback(audioCallback, handler) }
     tracking = true
   }
 
@@ -68,6 +138,10 @@ object Places {
   fun stopTracking(ctx: Context) {
     if (!tracking) return
     runCatching { ctx.getSystemService(LocationManager::class.java)?.removeUpdates(listener) }
+    handler.removeCallbacks(heartbeat)
+    runCatching { ctx.getSystemService(AudioManager::class.java)?.unregisterAudioDeviceCallback(audioCallback) }
+    appCtx = null
+    parkedPending = false
     tracking = false
   }
 

@@ -1,5 +1,5 @@
 import { Directory, File } from 'expo-file-system';
-import * as Updates from 'expo-updates';
+import { BackHandler } from 'react-native';
 
 import SidekickNative from '../../modules/sidekick-native';
 import { deleteEverything, exportEverything } from '@/memory/store';
@@ -85,5 +85,6 @@ export async function deleteAllData(): Promise<void> {
   SidekickNative.deleteFile(dataDir());
   SidekickNative.deleteFile(modelsDir());
   SidekickNative.deleteFile(`${SidekickNative.getDeviceInfo().filesDir}/exports`);
-  await Updates.reloadAsync().catch(() => {});
+  // wipeAllData normally ends the app itself; otherwise close it so it starts fresh.
+  BackHandler.exitApp();
 }

@@ -4,7 +4,8 @@ import { Platform } from 'react-native';
 import SidekickNative from '../../modules/sidekick-native';
 import { notices } from './notices';
 import { dataDir, modelsDir } from './paths';
-import { getSettings, updateSettings } from './settings';
+import { currentTuning } from './device-profile';
+import { updateSettings } from './settings';
 import {
   addSample,
   dailyRate,
@@ -16,7 +17,6 @@ import {
   type MediaFile,
   planCleanup,
   recommendedKeep,
-  recommendedReserve,
   type Sample,
   type Usage,
 } from './storage';
@@ -97,9 +97,9 @@ export function diskSpace(): { free: number; total: number } {
   }
 }
 
-export function reserveBytes(total = diskSpace().total): number {
-  const gb = getSettings().storageReserveGB;
-  return gb != null ? gb * 1e9 : recommendedReserve(total);
+/** Space always left free: the user's choice, else the Recommended value shown in Settings. */
+export function reserveBytes(): number {
+  return currentTuning().storageReserveGB * 1e9;
 }
 
 export function stillsKeepDays(): number | null {
@@ -112,13 +112,13 @@ export function setStillsKeepDays(days: number | null) {
 }
 
 /** Keep periods in force: the user's own, else Recommended for this phone. */
+/** Keep periods in force: the user's own, else Recommended for this phone (as Settings shows). */
 export function keepPeriods(total = diskSpace().total): KeepPeriods {
-  const rec = recommendedKeep(total);
-  const s = getSettings();
+  const t = currentTuning();
   return {
-    videoKeepHours: s.videoKeepHours ?? rec.videoKeepHours,
-    audioKeepDays: s.audioKeepDays ?? rec.audioKeepDays,
-    stillsKeepDays: stillsKeepDays() ?? rec.stillsKeepDays,
+    videoKeepHours: t.videoKeepHours,
+    audioKeepDays: t.audioKeepDays,
+    stillsKeepDays: stillsKeepDays() ?? recommendedKeep(total).stillsKeepDays,
   };
 }
 
@@ -170,12 +170,11 @@ export type StorageReport = {
 export function applyCameraRetention(total = diskSpace().total) {
   if (Platform.OS !== 'android') return;
   const keep = keepPeriods(total);
-  const gb = getSettings().storageReserveGB;
   try {
     SidekickNative.cameraConfigure({
       keepVideoHours: keep.videoKeepHours,
       keepStillsDays: keep.stillsKeepDays,
-      reserveMb: gb != null ? Math.round(gb * 1000) : 0,
+      reserveMb: Math.round(reserveBytes() / 1e6),
     });
   } catch (e) {
     console.log(`[storage] camera retention not set: ${String(e)}`);
@@ -185,7 +184,7 @@ export function applyCameraRetention(total = diskSpace().total) {
 /** Measure, record, clean up as the rules say, and post notices. */
 export function checkStorage(now = Date.now()): StorageReport {
   const { free, total } = diskSpace();
-  const reserve = reserveBytes(total);
+  const reserve = reserveBytes();
   const keep = keepPeriods(total);
   applyCameraRetention(total);
   const plan = planCleanup(listMedia(), Math.max(0, reserve - free), now, keep);

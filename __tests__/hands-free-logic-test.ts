@@ -8,8 +8,6 @@ import {
   newIncoming,
   readIncomingWanted,
   speechAllowed,
-  summaryPrompt,
-  summaryWindow,
 } from '@/engine/hands-free-logic';
 import type { MessageThread } from '@/integrations/native';
 
@@ -88,35 +86,6 @@ test('read incoming: off by default; headphones or car; newest per chat', () => 
     'Jo in Family on WhatsApp says: Running late',
   );
   expect(incomingSpeech(thread({ text: 'x'.repeat(400) })).length).toBeLessThan(340);
-});
-
-test('summary windows: today, yesterday, this week; other questions are not', () => {
-  const now = new Date(2026, 10, 25, 15, 0); // Wednesday
-  const today = summaryWindow('What did we talk about today?', now)!;
-  expect(today.label).toBe('today');
-  expect(today.from).toBe(new Date(2026, 10, 25).getTime());
-  expect(summaryWindow('what did we talk about yesterday', now)!.label).toBe('yesterday');
-  const week = summaryWindow('What have we discussed this week?', now)!;
-  expect(week.from).toBe(new Date(2026, 10, 23).getTime()); // Monday
-  expect(summaryWindow('Summarise my conversations last week', now)!.to).toBe(
-    new Date(2026, 10, 23).getTime(),
-  );
-  expect(summaryWindow('What did Sam say about the car?', now)).toBeNull();
-  expect(summaryWindow('what time is it', now)).toBeNull();
-});
-
-test('summary prompt: lines spread and capped; none → null', () => {
-  const w = { from: 0, to: 3_600_000, label: 'today' };
-  expect(summaryPrompt(w, [])).toBeNull();
-  const lines = Array.from({ length: 500 }, (_, i) => ({
-    at: i * 1000,
-    who: 'Me',
-    text: `line ${i}`,
-  }));
-  const p = summaryPrompt(w, lines)!;
-  expect(p.split('\n').filter((l) => l.startsWith('[')).length).toBe(120);
-  expect(p).toContain('line 0');
-  expect(p).toContain('what we talked about today');
 });
 
 test('briefing: due once a day after its time; calendar + digest', () => {

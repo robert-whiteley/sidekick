@@ -7,7 +7,8 @@
  * session stores it under ASSIST_KEY in the app's own settings, and we read it from there.
  */
 
-export type EntryKind = 'listen' | 'capture' | 'screen';
+/** listen: ask by voice; capture: Remember this; camera: live camera; listenmode: Listen on. */
+export type EntryKind = 'listen' | 'capture' | 'screen' | 'camera' | 'listenmode';
 
 export type EntryRequest = { kind: EntryKind; nonce: string };
 
@@ -17,6 +18,8 @@ export type ScreenGrab = {
   /** Text read from the screen's views (may be empty). */
   text: string;
   at: number;
+  /** A picture shared into Sidekick from another app (share sheet), not a screenshot. */
+  shared?: boolean;
 };
 
 /** Native key (SharedPreferences "sidekick") with the latest screen grab as JSON. */
@@ -24,10 +27,13 @@ export const ASSIST_KEY = 'assist.last';
 
 export const SCREEN_QUESTION = "What's on my screen?";
 
+/** Asked when a shared picture is sent with an empty composer. */
+export const SHARED_QUESTION = "What's in this picture?";
+
 /** A grab older than this is stale (e.g. left over from an earlier launch). */
 export const SCREEN_MAX_AGE_MS = 2 * 60_000;
 
-const KINDS: readonly EntryKind[] = ['listen', 'capture', 'screen'];
+const KINDS: readonly EntryKind[] = ['listen', 'capture', 'screen', 'camera', 'listenmode'];
 
 type Params = Record<string, string | string[] | undefined>;
 

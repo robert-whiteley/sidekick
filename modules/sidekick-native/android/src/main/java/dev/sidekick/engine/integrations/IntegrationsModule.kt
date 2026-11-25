@@ -48,6 +48,30 @@ class IntegrationsModule : Module() {
       PhoneControls.requestUnlock(activity) { promise.resolve(it) }
     }.runOnQueue(expo.modules.kotlin.functions.Queues.MAIN)
 
+    // Phone extras (PhoneExtras.kt): status, steps, screen time, clipboard, find my phone, links, share-in.
+    Events("onShared")
+    Function("chargeTimeRemaining") { PhoneExtras.chargeTimeRemaining(context) }
+    Function("bootAt") { PhoneExtras.bootAt().toDouble() }
+    Function("hasStepCounter") { PhoneExtras.hasStepCounter(context) }
+    Function("activityAllowed") { PhoneExtras.activityAllowed(context) }
+    AsyncFunction("stepCount") { promise: Promise -> PhoneExtras.stepCount(context) { promise.resolve(it) } }
+      .runOnQueue(expo.modules.kotlin.functions.Queues.MAIN)
+    Function("usageAccess") { PhoneExtras.usageAccess(context) }
+    Function("openUsageAccess") { PhoneExtras.openUsageAccess(context, activity) }
+    Function("screenTime") { from: Double, to: Double -> PhoneExtras.screenTime(context, from.toLong(), to.toLong()) }
+    Function("clipboardText") { PhoneExtras.clipboardText(context) }
+    Function("setClipboard") { text: String -> PhoneExtras.setClipboard(context, text) }
+    Function("ringPhone") { seconds: Int -> PhoneExtras.ringPhone(context, seconds) }
+    Function("stopRing") { PhoneExtras.stopRing(context) }
+    Function("openLink") { url: String, pkg: String -> PhoneExtras.openLink(context, activity, url, pkg) }
+    Function("takeShared") {
+      PhoneExtras.noteIntent(context, activity?.intent)
+      PhoneExtras.takeShared()
+    }
+    OnNewIntent { intent ->
+      if (PhoneExtras.noteIntent(context, intent)) sendEvent("onShared", mapOf<String, Any>())
+    }
+
     Function("notificationAccess") { NotificationCapture.accessGranted(context) }
     Function("openNotificationAccess") { NotificationCapture.openAccessSettings(context) }
     Function("messageThreads") { onlyMessages: Boolean -> NotificationHub.threads(context, onlyMessages) }

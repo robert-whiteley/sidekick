@@ -84,7 +84,7 @@ test('settings home lists the sections', async () => {
 test('assistant page shows voice with its Recommended value and follow-up settings', async () => {
   await render(<AssistantSettings />);
   expect(screen.getByText('Natural voice (Recommended)')).toBeTruthy();
-  expect(screen.getByText('Daily briefing')).toBeTruthy();
+  expect(screen.getByText('Routines')).toBeTruthy();
   expect(screen.getByText('Wake word')).toBeTruthy();
 });
 

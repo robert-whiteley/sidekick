@@ -69,8 +69,10 @@ export function ChoiceRow<T extends string | number>(props: {
   value: T | null;
   recommended: T;
   onChange: (v: T | null) => void;
+  /** Label for a Recommended value that isn't one of the options. */
+  format?: (v: T) => string;
 }) {
-  const chips = choiceChips(props.options, props.value, props.recommended);
+  const chips = choiceChips(props.options, props.value, props.recommended, props.format);
   return (
     <View style={styles.choice}>
       <Text style={styles.label}>{props.label}</Text>

@@ -22,7 +22,7 @@ import {
   onFollowupsChange,
   updateFollowup,
 } from '@/memory/followups';
-import { ChoiceRow, Row, Section, styles } from './ui';
+import { NavRow, Row, Section, styles } from './ui';
 
 const KINDS: FollowupKind[] = ['todo', 'event', 'reminder'];
 
@@ -32,8 +32,6 @@ export function FollowupsSection({ part = 'both' }: { part?: 'settings' | 'list'
   const showList = part !== 'settings';
   const [items, setItems] = useState<Followup[]>([]);
   const [suggest, setSuggest] = useState(getSettings().suggestFollowups);
-  const [digest, setDigest] = useState(getSettings().followupDigest);
-  const [hour, setHour] = useState(getSettings().digestHour);
   const [exact, setExact] = useState(true);
   const [editing, setEditing] = useState<number | null>(null);
   const [msg, setMsg] = useState('');
@@ -71,15 +69,6 @@ export function FollowupsSection({ part = 'both' }: { part?: 'settings' | 'list'
     }
   };
 
-  const setDigestOn = async (v: boolean) => {
-    if (v && !(await askNotificationPermission())) {
-      setMsg('Allow notifications for Sidekick to get the daily summary.');
-      return;
-    }
-    setDigest(v);
-    updateSettings({ followupDigest: v });
-  };
-
   const suggested = items.filter((f) => f.status === 'suggested');
   const approved = items.filter((f) => f.status === 'approved');
   const done = items.filter((f) => f.status === 'done');
@@ -108,23 +97,10 @@ export function FollowupsSection({ part = 'both' }: { part?: 'settings' | 'list'
         />
       )}
       {showSettings && (
-        <Row
-          label="Daily briefing"
-          hint={`At ${hour}:00: a notification with today's calendar, due to-dos and follow-ups, read out when you next open Sidekick. All on this phone.`}
-          value={digest}
-          onChange={(v) => void setDigestOn(v)}
-        />
-      )}
-      {showSettings && digest && (
-        <ChoiceRow<number>
-          label="Briefing time"
-          options={[6, 7, 8, 9, 10].map((h) => ({ value: h, label: `${h}:00` }))}
-          value={hour === 8 ? null : hour}
-          recommended={8}
-          onChange={(v) => {
-            setHour(v ?? 8);
-            updateSettings({ digestHour: v ?? 8 });
-          }}
+        <NavRow
+          label="Routines"
+          hint='Things Sidekick does by itself at a time or when something happens, e.g. "every weekday at 8 brief me".'
+          href="/settings/routines"
         />
       )}
       {showSettings && !exact && (

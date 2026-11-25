@@ -1,14 +1,9 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
-import { getSettings, updateSettings } from '@/engine/settings';
-import {
-  formatBytes,
-  KIND_LABELS,
-  recommendedKeep,
-  recommendedReserve,
-  type StorageKind,
-} from '@/engine/storage';
+import { AUDIO_KEEP_OPTIONS, RESERVE_OPTIONS, VIDEO_KEEP_OPTIONS } from '@/engine/device-profile';
+import { updateSettings } from '@/engine/settings';
+import { formatBytes, KIND_LABELS, recommendedKeep, type StorageKind } from '@/engine/storage';
 import {
   checkStorage,
   measureUsageNow,
@@ -16,6 +11,8 @@ import {
   stillsKeepDays,
   type StorageReport,
 } from '@/engine/storage-monitor';
+import { daysLabel, hoursLabel } from '@/features/settings/choice-logic';
+import { useSettings } from '@/features/settings/useSettings';
 
 const KINDS: StorageKind[] = ['video', 'stills', 'photos', 'audio', 'text', 'models'];
 const COLORS: Record<StorageKind, string> = {
@@ -29,12 +26,8 @@ const COLORS: Record<StorageKind, string> = {
 
 type Option = { label: string; value: number | null };
 
-function hours(h: number) {
-  return h < 24 ? `${h} h` : `${Math.round(h / 24)} days`;
-}
 function days(d: number) {
-  if (d === 0 || d >= 36500) return 'Forever';
-  return d >= 365 ? `${Math.round(d / 365)} year${d >= 730 ? 's' : ''}` : `${d} days`;
+  return d >= 36500 ? 'Forever' : daysLabel(d);
 }
 
 /** Storage: what uses space, the forecast, and how long things are kept. */
@@ -50,8 +43,9 @@ export function StorageScreen() {
     };
   }, [report.cleaned, report.keep]);
 
-  const rec = recommendedKeep(report.total);
-  const s = getSettings();
+  // The same Recommended values and choices as Settings › Camera & audio and › Advanced.
+  const { s, rec } = useSettings();
+  const stillsRec = recommendedKeep(report.total).stillsKeepDays;
   const used = KINDS.reduce((n, k) => n + report.usage[k], 0);
 
   const rows: {
@@ -66,14 +60,14 @@ export function StorageScreen() {
       title: 'Keep video for',
       current: s.videoKeepHours ?? null,
       recommended: rec.videoKeepHours,
-      fmt: hours,
-      options: [2, 8, 24, 72, 168],
+      fmt: hoursLabel,
+      options: VIDEO_KEEP_OPTIONS,
       set: (v) => updateSettings({ videoKeepHours: v }),
     },
     {
       title: 'Keep camera stills for',
       current: stillsKeepDays(),
-      recommended: rec.stillsKeepDays,
+      recommended: stillsRec,
       fmt: days,
       options: [30, 90, 365, 36500],
       set: setStillsKeepDays,
@@ -83,15 +77,15 @@ export function StorageScreen() {
       current: s.audioKeepDays ?? null,
       recommended: rec.audioKeepDays,
       fmt: days,
-      options: [7, 30, 90, 365, 0],
+      options: AUDIO_KEEP_OPTIONS,
       set: (v) => updateSettings({ audioKeepDays: v }),
     },
     {
       title: 'Always leave free for the phone',
       current: s.storageReserveGB ?? null,
-      recommended: Math.round(recommendedReserve(report.total) / 1e9),
+      recommended: rec.storageReserveGB,
       fmt: (g) => `${g} GB`,
-      options: [2, 5, 10, 20],
+      options: RESERVE_OPTIONS,
       set: (v) => updateSettings({ storageReserveGB: v }),
     },
   ];

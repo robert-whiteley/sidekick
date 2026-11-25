@@ -13,10 +13,18 @@ export type Chip<T> = {
  * Chips for a setting with a Recommended value. Picking the Recommended chip stores null, so the
  * setting keeps following the phone's Recommended value as it is refined.
  */
-export function choiceChips<T>(options: Option<T>[], value: T | null, rec: T): Chip<T>[] {
+export function choiceChips<T>(
+  options: Option<T>[],
+  value: T | null,
+  rec: T,
+  format: (v: T) => string = String,
+): Chip<T>[] {
+  // A Recommended value between the fixed choices (e.g. 11 GB) gets its own chip, in order.
   const all = options.some((o) => o.value === rec)
     ? options
-    : [...options, { value: rec, label: String(rec) }];
+    : [...options, { value: rec, label: format(rec) }].sort((a, b) =>
+        typeof a.value === 'number' && typeof b.value === 'number' ? a.value - b.value : 0,
+      );
   const current = value ?? rec;
   return all.map((o) => ({
     value: o.value,

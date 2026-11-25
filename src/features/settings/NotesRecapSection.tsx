@@ -1,15 +1,14 @@
-import { RECAP_TIMES } from '@/memory/day-recap-logic';
 import { ChoiceRow, Section } from './ui';
 import { useSettings } from './useSettings';
 
-/** Settings → Assistant: automatic conversation notes and the evening "Your day" recap. */
+/** Settings → Assistant: live conversation notes. Recaps are asked for, over any time. */
 export function NotesRecapSection() {
   const { s, set } = useSettings();
   return (
-    <Section title="Notes and recap">
+    <Section title="Notes and recaps">
       <ChoiceRow<'auto' | 'off'>
         label="Conversation notes"
-        hint="When a conversation heard with Listen on ends, a short note of who was there, topics, decisions and action items (offered as follow-ups). Not while off the record."
+        hint="While you talk with someone with Listen on, live notes of who is there, topics, decisions and action items, updated as it goes (action items are offered as follow-ups). Not while off the record. Recaps of any time are asked for: “recap the last 2 hours”, “what did we talk about on Tuesday”, “recap what we've been working on”."
         options={[
           { value: 'auto', label: 'Automatic' },
           { value: 'off', label: 'Off' },
@@ -17,17 +16,6 @@ export function NotesRecapSection() {
         value={s.conversationNotes}
         recommended="auto"
         onChange={(v) => set({ conversationNotes: v })}
-      />
-      <ChoiceRow<string>
-        label="Your day"
-        hint="An evening line in the chat: the day's conversations, places, things seen and to-dos. Tap it for the full recap."
-        options={[
-          { value: 'off', label: 'Off' },
-          ...RECAP_TIMES.map((t) => ({ value: t, label: t })),
-        ]}
-        value={s.dayRecap}
-        recommended="off"
-        onChange={(v) => set({ dayRecap: v })}
       />
     </Section>
   );

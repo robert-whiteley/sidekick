@@ -64,6 +64,10 @@ declare class SidekickNativeModule extends NativeModule<SidekickNativeModuleEven
   /** Freshest location ≤ 2 h old, or null (no permission / no fix). Also requests a new fix. */
   lastLocation(): DeviceLocation | null;
   hasLocationPermission(): boolean;
+  /** Car kit Bluetooth names (regex source, case-insensitive): disconnect marks "parked". */
+  placesSetCarPattern?(pattern: string | null): void;
+  /** "12 Park Row, Leeds" via Android's Geocoder (usually online); null when unavailable. */
+  reverseGeocode?(lat: number, lon: number): Promise<string | null>;
   /** Auto-pause rules as JSON: { quietStart, quietEnd (minutes or -1), places: PausePlace[] }. */
   listenPauseRules(json: string): void;
   /** Why listening is auto-paused right now, or null. */
@@ -104,6 +108,16 @@ declare class SidekickNativeModule extends NativeModule<SidekickNativeModuleEven
   voiceInfo(): VoiceInfo;
   /** Android: the owner's voice setting ("auto" = recommended: decided once by speed). */
   voiceSetChoice(choice: 'auto' | 'pocket' | 'system'): void;
+  /** Android: speech speed of spoken answers (1 = normal, 0.5–2). */
+  voiceSetRate?(rate: number): void;
+  /** Android: QR codes and barcodes in a JPEG (ZXing): JSON array of {format, text}. */
+  scanCodes?(path: string): Promise<string>;
+  /** Android 11+: the system "Save this network?" sheet for a Wi-Fi QR code; false if not shown. */
+  wifiAddNetwork?(ssid: string, password: string | null, security: string): boolean;
+  /** Android: long-press app icon shortcuts (Ask, Listen, Camera, Remember this). */
+  setAppShortcuts?(): boolean;
+  /** Android: language answers are spoken in ("" = the phone's); not English uses the system voice. */
+  voiceSetLanguage?(tag: string): void;
   /** Stops processing mic audio (e.g. while Sidekick is speaking). */
   setMicPaused(paused: boolean): void;
   pttStart(): void;
@@ -111,6 +125,10 @@ declare class SidekickNativeModule extends NativeModule<SidekickNativeModuleEven
   speechWarmUp(): Promise<boolean>;
   /** Parakeet CPU threads (1-8, default 4); reloads speech-to-text if already loaded. */
   speechSetAsrThreads(threads: number): Promise<boolean>;
+  /** Android: speech-to-text build folder (v2 English / v3 multilingual); false if not downloaded. */
+  speechSetAsrModel?(dir: string): Promise<boolean>;
+  /** Android: the phone's language setting as a BCP-47 tag ("de-AT"). */
+  phoneLocale?(): string;
   /** Everything heard since the last call (JSON lines), cleared on read. */
   journalDrain(): string[];
   /** Android: Sidekick holds the phone's assistant role. */

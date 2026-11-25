@@ -223,6 +223,28 @@ class SidekickNativeModule : Module() {
 
     Function("hasLocationPermission") { Places.hasPermission(context) }
 
+    // Car kits' Bluetooth names (regex source); when one disconnects, the spot is marked "parked".
+    Function("placesSetCarPattern") { pattern: String? ->
+      Places.carPattern = pattern?.let { runCatching { Regex(it, RegexOption.IGNORE_CASE) }.getOrNull() }
+    }
+
+    // Street and town for a position via Android's Geocoder (online on most phones; JS calls it
+    // only when Online lookup is on). Null when unavailable.
+    AsyncFunction("reverseGeocode") { lat: Double, lon: Double ->
+      if (!android.location.Geocoder.isPresent()) return@AsyncFunction null
+      runCatching {
+        @Suppress("DEPRECATION")
+        val a = android.location.Geocoder(context).getFromLocation(lat, lon, 1)?.firstOrNull()
+        a?.let {
+          listOfNotNull(
+            listOfNotNull(it.subThoroughfare, it.thoroughfare).joinToString(" ").ifBlank { null },
+            it.subLocality,
+            it.locality,
+          ).distinct().joinToString(", ").ifBlank { null }
+        }
+      }.getOrNull()
+    }
+
     // Quiet hours and paused places for auto-pause (JSON, see Places.setRules).
     Function("listenPauseRules") { json: String -> Places.setRules(json) }
 
@@ -263,6 +285,21 @@ class SidekickNativeModule : Module() {
 
     Function("voiceSetChoice") { choice: String -> Voice.setOverride(context, choice) }
 
+    // Speech speed of spoken answers (1 = normal, 0.5–2).
+    Function("voiceSetRate") { r: Double -> Voice.setRate(r.toFloat()) }
+
+    // QR codes and barcodes in a picture (ZXing, on the phone); JSON list of {format, text}.
+    AsyncFunction("scanCodes") { path: String -> Codes.scan(path) }
+
+    // Wi-Fi from a QR code: the system "Save this network?" sheet (Android 11+); false if not shown.
+    Function("wifiAddNetwork") { ssid: String, password: String?, security: String -> Codes.addWifi(context, ssid, password, security) }
+
+    // Long-press icon shortcuts: Ask, Listen, Camera, Remember this.
+    Function("setAppShortcuts") { Shortcuts.publish(context) }
+
+    // The language answers are spoken in ("" = the phone's); not English means the system voice.
+    Function("voiceSetLanguage") { tag: String -> Voice.setLanguage(context, tag) }
+
     Function("pttStart") { MicLoop.startPtt(context) }
 
     // Transcribes what was said while the button was held, plus a voiceprint of the speaker.
@@ -278,6 +315,12 @@ class SidekickNativeModule : Module() {
 
     // Parakeet CPU threads (default 4); reloads speech-to-text if loaded. For the speed bench.
     AsyncFunction("speechSetAsrThreads") { threads: Int -> SpeechEngine.configureAsrThreads(threads); true }
+
+    // Parakeet build (v2 English / v3 multilingual, see language-logic.ts); false if not downloaded.
+    AsyncFunction("speechSetAsrModel") { dir: String -> SpeechEngine.configureAsrModel(Speech.modelsDir(context), dir) }
+
+    // The phone's language setting as a BCP-47 tag ("de-AT").
+    Function("phoneLocale") { java.util.Locale.getDefault().toLanguageTag() }
 
     // Memory search vectors. Runs off the JS thread; returns one vector per text.
     AsyncFunction("embed") { modelPath: String, texts: List<String>, dims: Int ->

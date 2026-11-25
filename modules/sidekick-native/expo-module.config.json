@@ -6,7 +6,8 @@
   "android": {
     "modules": [
       "dev.sidekick.engine.SidekickNativeModule",
-      "dev.sidekick.engine.integrations.IntegrationsModule"
+      "dev.sidekick.engine.integrations.IntegrationsModule",
+      "dev.sidekick.engine.routines.RoutinesModule"
     ]
   }
 }

@@ -52,8 +52,10 @@ class ListenService : Service() {
       return START_NOT_STICKY
     }
     // Location type only with permission: declaring it without permission crashes the service.
-    // Camera type only while the camera is on and allowed (same reason).
-    val withLocation = Places.hasPermission(this)
+    // Camera type only while the camera is on and allowed (same reason). A restart by Android
+    // (intent == null) happens in the background, where while-in-use location isn't available
+    // (Android 14+ throws), so it restarts without location tagging.
+    val withLocation = Places.hasPermission(this) && intent != null
     val withCamera =
       cameraOn && ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
     var type = 0
@@ -63,7 +65,14 @@ class ListenService : Service() {
       if (withCamera) type = type or ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA
       if (type == 0) type = ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
     }
-    ServiceCompat.startForeground(this, NOTIFICATION_ID, notification(MicLoop.pauseReason), type)
+    try {
+      ServiceCompat.startForeground(this, NOTIFICATION_ID, notification(MicLoop.pauseReason), type)
+    } catch (e: Exception) {
+      // Android 14+: while-in-use types (mic, camera, location) can't start from the background.
+      Log.w("SidekickListen", "can't start in the foreground now", e)
+      stopSelf()
+      return START_NOT_STICKY
+    }
     if (withLocation) Places.startTracking(this)
     if (active) MicLoop.startAmbient(this) else MicLoop.stopAmbient()
     if (withCamera) LiveCapture.start(this) else LiveCapture.stop()

@@ -59,6 +59,15 @@ export const MODEL_FILES = {
     bytes: 482440461,
     unpackedCheck: 'sherpa-onnx-nemo-parakeet-tdt-0.6b-v2-int8/tokens.txt',
   },
+  // Parakeet TDT 0.6B v3 (NVIDIA, CC BY 4.0): 25 European languages incl. English. Replaces v2 on
+  // phones set to another of those languages (language-logic.ts). Must match SpeechEngine.kt AsrChoice.
+  speechToTextMulti: {
+    name: 'sherpa-onnx-nemo-parakeet-tdt-0.6b-v3-int8.tar.bz2',
+    url: `${SHERPA}/asr-models/sherpa-onnx-nemo-parakeet-tdt-0.6b-v3-int8.tar.bz2`,
+    sha256: '1495e91b59d7fc53ddca91f3431758ec99f8fa253fdb0e1e851be0f72b14b0f9',
+    bytes: 487211443,
+    unpackedCheck: 'sherpa-onnx-nemo-parakeet-tdt-0.6b-v3-int8/tokens.txt',
+  },
   voiceprint: {
     name: '3dspeaker_speech_campplus_sv_en_voxceleb_16k.onnx',
     url: 'https://huggingface.co/csukuangfj/speaker-embedding-models/resolve/main/3dspeaker_speech_campplus_sv_en_voxceleb_16k.onnx',
@@ -101,12 +110,23 @@ export const EMBEDDER_FILE: ModelFile = {
   bytes: 387710976,
 };
 
+/** The required speech models with English speech-to-text (v2); see speechFilesFor. */
 export const SPEECH_FILES: ModelFile[] = [
   MODEL_FILES.vad,
   MODEL_FILES.wakeWord,
   MODEL_FILES.speechToText,
   MODEL_FILES.voiceprint,
 ];
+
+/** The speech-to-text file for a Parakeet build (language-logic.ts). */
+export function speechToTextFile(model: 'parakeet-v2' | 'parakeet-v3'): ModelFile {
+  return model === 'parakeet-v3' ? MODEL_FILES.speechToTextMulti : MODEL_FILES.speechToText;
+}
+
+/** Required speech models for a Parakeet build: only one speech-to-text file is downloaded. */
+export function speechFilesFor(model: 'parakeet-v2' | 'parakeet-v3'): ModelFile[] {
+  return SPEECH_FILES.map((f) => (f === MODEL_FILES.speechToText ? speechToTextFile(model) : f));
+}
 
 /**
  * PaddleOCR PP-OCRv6 small (Apache-2.0), PaddlePaddle's own ONNX exports, pinned to a commit:

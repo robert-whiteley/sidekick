@@ -1,3 +1,4 @@
+import { onListeningByVoice } from '@/engine/voice-commands';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -45,6 +46,7 @@ import {
   HANDS_FREE_MAX_MS,
   parseScreenGrab,
   SCREEN_QUESTION,
+  SHARED_QUESTION,
   type ScreenGrab,
   screenNote,
   screenQuestion,
@@ -60,12 +62,13 @@ import {
 import { inferFactsIfIdle, stopFactInference } from '@/engine/fact-inference';
 import { inferFollowupsIfIdle, stopFollowupInference } from '@/engine/followup-inference';
 import { inferNamesIfIdle, stopNameInference } from '@/engine/name-inference';
-import { stopConversationNotes, writeConversationNotesIfDue } from '@/engine/conversation-notes';
-import { postDayRecapIfDue } from '@/engine/day-recap';
+import { stopConversationNotes, updateConversationNotes } from '@/engine/conversation-notes';
 import { driveBackupIfDue } from '@/engine/drive-backup-schedule';
 import { cancelLlm, ensureLlm, holdBackground, releaseBackground } from '@/engine/llm';
 import { readBackDone } from '@/engine/actions';
-import { startFollowupNotifications, todaysBriefing } from '@/engine/followup-notify';
+import { startFollowupNotifications } from '@/engine/followup-notify';
+import { setRoutineUi } from '@/engine/routines';
+import { routineLabel } from '@/engine/routines-logic';
 import {
   canSpeakNow,
   handsFreeOn,
@@ -74,9 +77,8 @@ import {
   noteHeadsetAsk,
   watchIncoming,
 } from '@/engine/hands-free';
-import { briefingDue } from '@/engine/hands-free-logic';
 import { READ_BACK_REPLY_MS } from '@/engine/readback-logic';
-import { getSettings, updateSettings } from '@/engine/settings';
+import { getSettings } from '@/engine/settings';
 import { StreamingSpeaker } from '@/engine/speaker';
 import { Conversation } from '@/engine/conversation';
 import { asksAboutWhatIsInView } from '@/memory/search-logic';
@@ -105,6 +107,7 @@ import { NoticeItem, useNotices } from './NoticeLines';
 import { ScreenGrabBar } from './ScreenGrabBar';
 import { DARK, LIGHT } from './theme';
 import { useEntry } from './useEntry';
+import { sharedComposerText, watchShares } from '@/engine/share-in';
 
 type Phase = 'idle' | 'loading' | 'thinking' | 'answering';
 
@@ -155,6 +158,9 @@ export function AskScreen({
   const awaitingVoiceRef = useRef(false);
   const busyRef = useRef(true);
   const askRef = useRef<(q: string, followUp?: boolean) => void>(() => {});
+  // A routine run shown like a question (routines.ts): its label and "routine" mode for ask().
+  const routineRef = useRef<{ label: string } | null>(null);
+  const routineAskRef = useRef<(q: string) => Promise<void>>(async () => {});
   // Spoken back-and-forth: follow-ups keep the chat; one heard mid-answer waits for it to stop.
   const conversation = useRef(new Conversation());
   const queuedRef = useRef<{ q: string; followUp: boolean } | null>(null);
@@ -200,6 +206,9 @@ export function AskScreen({
       });
   }, []);
 
+  // "Stop listening" / "start listening" said to Sidekick.
+  useEffect(() => onListeningByVoice(setListening), []);
+
   // Listening stays on across the app being killed and reopened.
   useEffect(() => {
     resumeListening()
@@ -238,26 +247,34 @@ export function AskScreen({
     };
   }, []);
 
-  // The daily briefing, said on the first open after its time (Settings > Assistant).
+  // Routines while the chat is open: shown and spoken like an answer (Settings › Routines).
   useEffect(() => {
-    const check = () => {
-      const s = getSettings();
-      if (!s.followupDigest || !briefingDue(new Date(), s.digestHour * 60, s.lastBriefingAt))
-        return;
-      updateSettings({ lastBriefingAt: Date.now() });
-      void todaysBriefing()
-        .then((text) => {
-          if (!text) return;
-          const at = Date.now();
-          setMessages((m) => [...m, { id: `b${at}`, role: 'assistant', text, at }]);
-          if (canSpeakNow() && !busyRef.current)
-            new StreamingSpeaker(true).finish(`Here's your day. ${text}`);
-        })
-        .catch(() => {});
-    };
-    check();
-    const sub = AppState.addEventListener('change', (st) => st === 'active' && check());
-    return () => sub.remove();
+    setRoutineUi(async (run) => {
+      const label = `Routine: ${routineLabel(run.routine)}`;
+      if (run.quick == null && !busyRef.current) {
+        routineRef.current = { label: run.late ? `${label} ${run.late}` : label };
+        await routineAskRef.current(run.question);
+        return null;
+      }
+      const text =
+        run.quick ?? (await answerQuestion(run.question, null, () => {}, { routine: true })).text;
+      const shown = run.late ? `${text} ${run.late}` : text;
+      const at = Date.now();
+      setMessages((m) => [
+        ...m,
+        { id: `ru${at}`, role: 'user', text: label, at },
+        { id: `ra${at}`, role: 'assistant', text: shown, at },
+      ]);
+      const speak =
+        shouldSpeak({
+          spoken: false,
+          headphones: headphonesOn(),
+          enabled: getSettings().speakAnswers,
+        }) && canSpeakNow();
+      if (speak && !busyRef.current) new StreamingSpeaker(true).finish(text);
+      return shown;
+    });
+    return () => setRoutineUi(null);
   }, []);
 
   useEffect(() => {
@@ -338,8 +355,7 @@ export function AskScreen({
         if (!busyRef.current) await inferFactsIfIdle();
         if (!busyRef.current) await inferFollowupsIfIdle();
         if (!busyRef.current) await inferNamesIfIdle();
-        if (!busyRef.current) await writeConversationNotesIfDue();
-        await postDayRecapIfDue();
+        if (!busyRef.current) await updateConversationNotes();
         void driveBackupIfDue();
       } catch (e) {
         console.log(`[memory] ingest failed: ${String(e)}`);
@@ -506,13 +522,31 @@ export function AskScreen({
     }
   };
 
+  // Shared into Sidekick from another app: a picture to ask about, or text in the composer.
+  useEffect(
+    () =>
+      watchShares((item) => {
+        if (item.imagePath)
+          setScreen({ shot: item.imagePath, text: '', at: Date.now(), shared: true });
+        const text = sharedComposerText(item);
+        if (text) setQuestion((cur) => (cur.trim() ? `${cur.trim()}\n${text}` : text));
+      }),
+    [],
+  );
+
   const ask = async (spoken?: string, followUp = false, offRecordNow = offRecordRef.current) => {
     // A screenshot from the assist key is for questions asked soon after, not ones much later.
     const grab = screen && Date.now() - screen.at < SCREEN_TTL_MS ? screen : null;
     if (screen && !grab) setScreen(null);
     const q =
       (spoken ?? question).trim() ||
-      (grab ? SCREEN_QUESTION : cameraOn ? DEFAULT_PHOTO_QUESTION : '');
+      (grab
+        ? grab.shared
+          ? SHARED_QUESTION
+          : SCREEN_QUESTION
+        : cameraOn
+          ? DEFAULT_PHOTO_QUESTION
+          : '');
     if (spoken && busyRef.current) {
       // Said over the answer (barge-in): the answer is being cancelled; ask once it has stopped.
       queuedRef.current = { q: spoken, followUp };
@@ -528,12 +562,14 @@ export function AskScreen({
     const userId = `u${at}`;
     const replyId = `a${at}`;
     setQuestion('');
+    const routine = routineRef.current;
+    routineRef.current = null;
     setMessages((m) => [
       ...m,
       {
         id: userId,
         role: 'user',
-        text: q,
+        text: routine?.label ?? q,
         at,
         spoken: spoken !== undefined,
         offRecord: offRecordNow,
@@ -582,6 +618,7 @@ export function AskScreen({
           if (!answered) setStatus(line);
         },
         onFound: (media: ChatMedia[]) => setMessages((m) => patchMessage(m, replyId, { media })),
+        routine: !!routine,
       } as Parameters<typeof answerQuestion>[3];
       holdLiveCamera(true);
       const r = await answerQuestion(
@@ -642,6 +679,7 @@ export function AskScreen({
   };
   useEffect(() => {
     askRef.current = (q: string, followUp?: boolean) => void ask(q, followUp);
+    routineAskRef.current = (q: string) => ask(q);
     holdEndRef.current = () => void holdEnd();
     holdStartRef.current = (free, maxMs) => void holdStart(free, maxMs);
   });
@@ -686,6 +724,9 @@ export function AskScreen({
     entry,
     (kind) => entryReady(kind, { idle: !busy && !busyRef.current, cameraOn, cameraReady }),
     (e) => {
+      // App icon shortcuts: live camera, Listen on.
+      if (e.kind === 'camera') return void (live ? undefined : toggleLive());
+      if (e.kind === 'listenmode') return void (listening ? undefined : toggleListening());
       if (e.kind === 'capture') {
         // Stays open (the entry is cleared next) until the photo is saved.
         setUseCamera(true);
@@ -733,7 +774,13 @@ export function AskScreen({
     [messages, noticeList],
   );
 
-  const placeholder = screen ? SCREEN_QUESTION : cameraOn ? DEFAULT_PHOTO_QUESTION : 'Ask Sidekick';
+  const placeholder = screen
+    ? screen.shared
+      ? SHARED_QUESTION
+      : SCREEN_QUESTION
+    : cameraOn
+      ? DEFAULT_PHOTO_QUESTION
+      : 'Ask Sidekick';
 
   return (
     <SafeAreaView style={[styles.flex, { backgroundColor: theme.bg }]}>
