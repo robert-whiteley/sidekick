@@ -187,3 +187,30 @@ Bugs:
 - Unplugging the USB camera mid-use: needs someone at the phone.
 - Sending, calls, real calendar/alarms/contacts: never done on the owner's phone; only the
   "Ask me first" draft card is checked.
+
+## Round 5 phone checks (25 Nov, installed build sk56)
+
+Stopped early: the phone fell from 33% to 10% battery in about 13 minutes (Live camera, Listen,
+background photo work, phone at 38.8 °C, Android thermal status "severe") and Android offered
+Extreme Battery Saver. Not run for that reason: place naming (fake GPS), locked "resume the camera"
+repeats, the full camera speed run.
+
+- **Offline queue, partly:** with airplane mode on, "what's the weather in Banbury tomorrow" showed
+  "Offline · no internet" but no "I'll get the forecast when you're back online" line; the answer
+  was still "…" after 30 s, then "Thinking…" more than 3 minutes after the internet came back.
+  Likely cause: the question waits for the embedder, which was busy with a run of background photo
+  vectors taking 74–79 s each on the hot phone ("[embed] 2 items, 86336 ms" for the question's own
+  text). Questions jump the model queue (llm-queue.ts) but not the embedder queue. To fix: questions
+  that don't need memory (weather, timers) shouldn't wait for the embedder, and background photo
+  vectors should stop for a question and when the phone is hot.
+- **When hot:** the camera slowed to 1 frame a second, then 1 frame every 2 seconds with video
+  recording paused, and said so in the chat.
+- **Text reading (OCR):** 1.0–2.9 s per frame (about 1.0 s cool, 1.1–2.9 s hot).
+- **Photo vectors:** 74–79 s per photo when hot (normally a few seconds).
+- **Free space:** 12 GB of 109 GB. The bigger Gemma (E4B, about 3 GB) would fit, but would go
+  below Sidekick's own reserve rule (keep 10% free, about 11 GB here). Don't download it on this
+  phone.
+- **Two mics at once:** the phone lists Bluetooth headset, wired headset and USB mics on one shared
+  input (only one at a time), but USB mics also have their own separate "hifi" input. So a headset
+  mic plus the USB camera's mic together looks possible but isn't proven; it needs a test with both
+  plugged in.

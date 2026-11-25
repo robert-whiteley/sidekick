@@ -1,3 +1,5 @@
+import { CAPTION_MIN_BATTERY, type CaptionFramesMode } from './photo-text';
+
 /** Phones with less RAM than this never hold the chat model and the embedder at once. */
 export const LOW_RAM_MB = 6 * 1024;
 
@@ -26,4 +28,23 @@ export function shouldEmbedNow(s: {
   if (!s.evictsLlm) return true;
   const k = s.evictsLlm ? 2 : 1;
   return s.pending >= EMBED_BATCH * k || s.waitedMs >= EMBED_MAX_WAIT_MS * k;
+}
+
+/**
+ * Whether slow background work on photos and camera frames (photo vectors, text reading) may run
+ * now. On the charger always (unless the phone is hot); on battery only when the owner chose
+ * "On battery too" for camera frames, above the battery floor and not in battery saver. Text
+ * memories are never held back by this: they are cheap.
+ */
+export function photoWorkAllowed(s: {
+  mode: CaptionFramesMode;
+  charging: boolean;
+  batteryLevel: number;
+  lowPowerMode: boolean;
+  /** Android PowerManager.THERMAL_STATUS_* (2 = moderate) */
+  thermalStatus: number;
+}): boolean {
+  if (s.thermalStatus >= 2) return false;
+  if (s.charging) return true;
+  return s.mode === 'always' && !s.lowPowerMode && s.batteryLevel >= CAPTION_MIN_BATTERY;
 }

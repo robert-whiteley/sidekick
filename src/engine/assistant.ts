@@ -1,6 +1,6 @@
 import { autoSend, beginReadBack, draftSummary, planAction } from '@/engine/actions';
 import { readBackOn } from './hands-free';
-import { runVoiceCommand, trackAnswer } from './voice-commands';
+import { runQuickCommand, trackAnswer } from './quick-commands';
 import { postCodeCards, scanCodes } from './codes';
 import { codePromptLine } from './codes-logic';
 import { answerRecap } from './recap';
@@ -211,7 +211,7 @@ export async function answer(
   const locked = opts?.routine ? null : lockedReply(question);
   if (locked) return done(locked);
   // Speech speed, repeat, "what can you do?", listening/camera on/off, watches, scan (no model).
-  const command = await runVoiceCommand(question, photoNow).catch(() => null);
+  const command = await runQuickCommand(question, photoNow).catch(() => null);
   if (command) return done(command);
   const offRecord = opts?.offTheRecord ?? getSettings().offTheRecord ?? false;
   if (!offRecord) offRecordStarted = false;

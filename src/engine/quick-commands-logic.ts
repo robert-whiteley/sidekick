@@ -2,8 +2,10 @@
  * Short spoken/typed commands answered without the model: speech speed, "repeat that", "what can
  * you do?", listening and camera on/off, camera watches ("tell me when you see my bus"), and
  * "scan this" (QR / barcode).
- * Pure parsing; tested in __tests__/voice-commands-test.ts.
+ * Pure parsing; tested in __tests__/quick-commands-test.ts.
  */
+
+import type { CameraChange } from './camera-settings-logic';
 
 export type VoiceCommand =
   | { type: 'speed'; rate: number | 'faster' | 'slower' | 'normal' }
@@ -14,7 +16,9 @@ export type VoiceCommand =
   | { type: 'watch'; what: string; every: boolean }
   | { type: 'unwatch'; what: string | null }
   | { type: 'watchList' }
-  | { type: 'scan' };
+  | { type: 'scan' }
+  /** Frame rate, phone lens, image detail (picked by the tool router, no fixed phrases). */
+  | { type: 'cameraSetting'; change: CameraChange };
 
 /** Speech speed limits (1 = normal). */
 export const MIN_RATE = 0.5;

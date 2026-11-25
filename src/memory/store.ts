@@ -570,6 +570,19 @@ export async function nextUndescribedPhoto(): Promise<{ id: number; photoPath: s
   return row ? { id: row.id as number, photoPath: row.photo_path as string } : null;
 }
 
+/** The newest stored camera keyframe without a caption yet (see engine/describe-photos.ts). */
+export async function nextUncaptionedFrame(): Promise<{ id: number; photoPath: string } | null> {
+  const db = await getDb();
+  const r = await db.execute(
+    `SELECT m.id, m.photo_path FROM moments m
+     LEFT JOIN photo_descriptions d ON d.moment_id = m.id
+     WHERE m.kind = 'frame' AND m.photo_path IS NOT NULL AND d.moment_id IS NULL
+     ORDER BY m.at DESC LIMIT 1`,
+  );
+  const row = r.rows[0];
+  return row ? { id: row.id as number, photoPath: row.photo_path as string } : null;
+}
+
 /** Stores what was read from a photo (or marks it done with null), and queues re-embedding. */
 export async function savePhotoDescription(momentId: number, description: string | null) {
   const db = await getDb();
@@ -620,13 +633,19 @@ async function reembedIfModelChanged() {
 }
 
 /** Gives saved photos a vector of the image itself, so they're found by what they show. */
-async function embedPendingPhotos(limit = PHOTO_EMBED_BATCH): Promise<number> {
+async function embedPendingPhotos(
+  limit = PHOTO_EMBED_BATCH,
+  isBusy: () => boolean = () => false,
+): Promise<number> {
   const db = await getDb();
   const r = await db.execute(
     'SELECT id, photo_path FROM moments WHERE photo_path IS NOT NULL AND image_embedded = 0 ORDER BY id DESC LIMIT ?',
     [limit],
   );
+  let done = 0;
   for (const row of r.rows) {
+    // One photo per native call, so a question waiting for the embedder gets it within one photo.
+    if (isBusy()) break;
     const id = row.id as number;
     const path = row.photo_path as string;
     try {
@@ -643,16 +662,25 @@ async function embedPendingPhotos(limit = PHOTO_EMBED_BATCH): Promise<number> {
       console.log(`[embed] photo ${id} failed: ${String(e)}`);
     }
     await db.execute('UPDATE moments SET image_embedded = 1 WHERE id = ?', [id]);
+    done++;
   }
-  return r.rows.length;
+  return done;
 }
 
-/** Embeds moments (text, and photos) that don't have a vector yet. Call when otherwise idle. */
-export async function embedPending(limit = 64): Promise<number> {
-  await readPendingPhotoText().catch(() => 0);
+/**
+ * Embeds moments that don't have a vector yet: text always; photos (slow: the vision encoder) and
+ * photo text reading only when [opts.photos] (idle time, never while a question waits). Photo
+ * work stops as soon as [opts.isBusy] says a question started.
+ */
+export async function embedPending(
+  limit = 64,
+  opts: { photos?: boolean; isBusy?: () => boolean } = {},
+): Promise<number> {
+  const photosToo = opts.photos ?? true;
+  if (photosToo) await readPendingPhotoText().catch(() => 0);
   if (!isDownloaded(EMBEDDER_FILE)) return 0;
   await reembedIfModelChanged();
-  const photos = await embedPendingPhotos();
+  const photos = photosToo ? await embedPendingPhotos(PHOTO_EMBED_BATCH, opts.isBusy) : 0;
   const db = await getDb();
   const r = await db.execute(
     "SELECT id, text, place FROM moments WHERE embedded = 0 AND text != '' ORDER BY id LIMIT ?",
@@ -707,7 +735,8 @@ export async function searchMemory(question: string, k = 8, now = new Date()): P
       // The embedder is loaded for the question anyway: first catch up on memories still waiting
       // for an idle-time batch, so every memory is searchable by meaning, not only by words.
       // Capped: at ~0.34 s per memory on a Pixel 5, 16 adds at most ~5 s; idle time does the rest.
-      await embedPending(16);
+      // Text only: a photo vector takes 10-80 s, so photos are left to idle time.
+      await embedPending(16, { photos: false });
       const [qv] = await SidekickNative.embed(
         modelPath(EMBEDDER_FILE),
         [embedQuery(question)],

@@ -69,6 +69,68 @@ export function shouldDescribeNow(s: {
   return s.charging || s.batteryLevel >= 0.5;
 }
 
+/**
+ * Rich caption for a stored camera keyframe, written while the phone charges. Counts, objects,
+ * text and motion make "how many people were at the bus stop?" answerable from memory later.
+ */
+export const FRAME_PROMPT =
+  'Look at this camera frame. First copy any readable text exactly as written. Then describe ' +
+  'what is in it: the main objects and people with counts, colours, where things are, and what ' +
+  'is happening or moving. Reply in this form and nothing else:\n' +
+  'Text: <the text, or none>\nScene: <two or three short sentences>';
+
+/** Most frames captioned per charge (~25 s each on a Pixel 5 CPU: about 25 minutes of work). */
+export const FRAME_CAPTIONS_PER_CHARGE = 60;
+
+/** No captions this soon after the owner opened the app or asked something. */
+export const FRAME_CAPTION_QUIET_MS = 2 * 60_000;
+
+/** Phones with this much RAM keep the model and the embedder loaded together (AGENTS.md). */
+export const BOTH_MODELS_RAM_MB = 5500;
+
+/**
+ * Whether to caption a camera frame now: 'skip', 'loaded' (use the model already loaded) or
+ * 'load' (load it first: only on phones that can hold both models while memory is not short).
+ * Idle, cool and within the cap; on the charger, or on battery too when the owner chose 'always'
+ * (then only above CAPTION_MIN_BATTERY).
+ */
+export type CaptionFramesMode = 'off' | 'charging' | 'always';
+/** Battery level (0..1) below which captions on battery stop. */
+export const CAPTION_MIN_BATTERY = 0.3;
+
+/** The saved setting (older versions stored a boolean) as a mode. */
+export function captionMode(v: CaptionFramesMode | boolean | undefined): CaptionFramesMode {
+  if (v === false) return 'off';
+  if (v === true || v === undefined) return 'charging';
+  return v;
+}
+
+export function frameCaptionPlan(s: {
+  mode: CaptionFramesMode;
+  charging: boolean;
+  /** 0..1, or -1 when unknown */
+  batteryLevel: number;
+  lowPowerMode: boolean;
+  busy: boolean;
+  /** ms since the owner last opened the app or asked something */
+  sinceActiveMs: number;
+  doneThisCharge: number;
+  llmLoaded: boolean;
+  ramMb: number;
+  lowMemory: boolean;
+  /** Android PowerManager.THERMAL_STATUS_* (0 none, 1 light, 2 moderate …) */
+  thermalStatus: number;
+}): 'skip' | 'loaded' | 'load' {
+  if (s.mode === 'off' || s.lowPowerMode || s.busy) return 'skip';
+  if (!s.charging && (s.mode !== 'always' || s.batteryLevel < CAPTION_MIN_BATTERY)) return 'skip';
+  if (s.sinceActiveMs < FRAME_CAPTION_QUIET_MS) return 'skip';
+  if (s.doneThisCharge >= FRAME_CAPTIONS_PER_CHARGE) return 'skip';
+  if (s.thermalStatus >= 2) return 'skip';
+  if (s.llmLoaded) return 'loaded';
+  if (s.lowMemory || s.ramMb < BOTH_MODELS_RAM_MB) return 'skip';
+  return 'load';
+}
+
 /** Text stored for a captured photo, before it has been described. */
 export function captureText(note: string | null): string {
   const n = note?.trim();

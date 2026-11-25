@@ -1,4 +1,4 @@
-import { onListeningByVoice } from '@/engine/voice-commands';
+import { onListeningByVoice } from '@/engine/quick-commands';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { useFocusEffect } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
@@ -48,7 +48,12 @@ import {
 } from '@/engine/live-camera';
 import { notices } from '@/engine/notices';
 import { takeIntroMessage } from '@/features/onboarding/after-setup';
-import { describeOnePhoto, yieldToQuestion } from '@/engine/describe-photos';
+import {
+  captionOneFrame,
+  describeOnePhoto,
+  noteUserActive,
+  yieldToQuestion,
+} from '@/engine/describe-photos';
 import {
   ASSIST_KEY,
   entryReady,
@@ -370,7 +375,11 @@ export function AskScreen({
         // New memories get vectors in batches, sooner while charging.
         await embedWhenIdle(() => busyRef.current);
         // Idle: read one saved photo's text into memory (only if the model is already loaded).
-        void describeOnePhoto(busyRef.current);
+        // Else, charging and idle: caption one stored camera frame (a question or opening the app
+        // stops it).
+        void describeOnePhoto(busyRef.current).then((did) =>
+          did || busyRef.current ? false : captionOneFrame(busyRef.current),
+        );
         // Uses the model only if it is already loaded; a question cancels it.
         if (!busyRef.current) await inferFactsIfIdle();
         if (!busyRef.current) await inferFollowupsIfIdle();
@@ -383,9 +392,14 @@ export function AskScreen({
       }
     };
     const timer = setInterval(tick, 30_000);
+    // Opening the app pauses frame captions for a while, so the phone is quick when picked up.
+    const appState = AppState.addEventListener('change', (st) => {
+      if (st === 'active') noteUserActive();
+    });
     void tick();
     return () => {
       subs.forEach((s) => s.remove());
+      appState.remove();
       clearInterval(timer);
     };
   }, []);

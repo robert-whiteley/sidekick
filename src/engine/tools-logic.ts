@@ -316,6 +316,19 @@ export const TOOLS: ToolSpec[] = [
     words: /\b(camera|video|recording)\b/,
   },
   {
+    name: 'camera_setting',
+    desc: 'change the live camera: frame rate, front or back camera, image detail / resolution',
+    kind: 'action',
+    args: {
+      frames: oneOf(['more', 'fewer', 'normal']),
+      fps: num(0.1, 10, false, 'frames per second, if a number is said'),
+      lens: oneOf(['front', 'back', 'flip']),
+      detail: oneOf(['low', 'medium', 'high', 'higher', 'lower', 'normal']),
+    },
+    words:
+      /\b(camera|frames?|fps|frame rate|front|back|rear|selfie|flip|resolution|detail|quality|sharper|clearer|hd|720p?|1080p?|480p?)\b/,
+  },
+  {
     name: 'feedback',
     desc: 'send feedback about Sidekick to its makers',
     kind: 'action',
@@ -355,6 +368,7 @@ export const NOT_IN_ROUTINES = new Set([
   'speech_speed',
   'listening',
   'camera',
+  'camera_setting',
 ]);
 export const NOT_OFF_RECORD = new Set(['routine', 'name_place']);
 

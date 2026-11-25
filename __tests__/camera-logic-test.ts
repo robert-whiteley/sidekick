@@ -3,12 +3,16 @@ import { cameraConfigFor, cameraNotice, cameraStartTook } from '@/engine/camera-
 test('settings become the camera config', () => {
   expect(cameraConfigFor({ fps: 2, imageDetail: 'medium', videoKeepHours: 48 })).toEqual({
     source: 'auto',
+    lens: 'back',
     sampleFps: 2,
     videoHeight: 720,
     keepVideoHours: 48,
     whileLocked: true,
   });
   expect(cameraConfigFor({ fps: 1, imageDetail: 'low', videoKeepHours: 24 }).videoHeight).toBe(480);
+  expect(
+    cameraConfigFor({ fps: 1, imageDetail: 'low', videoKeepHours: 24 }, true, 'front').lens,
+  ).toBe('front');
 });
 
 test('throttle and lost events in plain words', () => {

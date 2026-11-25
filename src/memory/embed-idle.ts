@@ -1,6 +1,8 @@
 import SidekickNative from '../../modules/sidekick-native';
 import { batteryState } from '@/engine/battery';
-import { LOW_RAM_MB, shouldEmbedNow } from './embed-policy';
+import { getSettings } from '@/engine/settings';
+import { LOW_RAM_MB, photoWorkAllowed, shouldEmbedNow } from './embed-policy';
+import { captionMode } from './photo-text';
 import { countPendingEmbeds, embedPending } from './store';
 
 let pendingSince: number | null = null;
@@ -21,14 +23,27 @@ export async function embedWhenIdle(
     return 0;
   }
   pendingSince ??= now;
-  const { charging, lowPowerMode } = await batteryState();
+  const { charging, lowPowerMode, batteryLevel } = await batteryState();
+  let thermalStatus = 0;
+  try {
+    thermalStatus = SidekickNative.deviceState().thermalStatus;
+  } catch {
+    // Not available on this platform: treat as cool.
+  }
   const evictsLlm =
     SidekickNative.getDeviceInfo().totalRamMb < LOW_RAM_MB && SidekickNative.llmIsLoaded();
   if (!shouldEmbedNow({ pending, waitedMs: now - pendingSince, charging, lowPowerMode, evictsLlm }))
     return 0;
+  const photos = photoWorkAllowed({
+    mode: captionMode(getSettings().captionFrames),
+    charging,
+    batteryLevel,
+    lowPowerMode,
+    thermalStatus,
+  });
   let total = 0;
   for (let i = 0; i < maxBatches && !isBusy(); i++) {
-    const n = await embedPending();
+    const n = await embedPending(64, { photos, isBusy });
     if (!n) break;
     total += n;
   }

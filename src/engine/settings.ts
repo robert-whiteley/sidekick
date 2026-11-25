@@ -1,3 +1,4 @@
+import type { CaptionFramesMode } from '@/memory/photo-text';
 import SidekickNative from '../../modules/sidekick-native';
 import type { PausePlace } from './place-logic';
 import type { HandsFreeMode, ReadIncomingMode } from './hands-free-logic';
@@ -80,6 +81,14 @@ export type Settings = {
   videoKeepHours: number | null;
   /** Keep the live camera filming with the screen off / locked (Recommended); off pauses it until unlocked. */
   cameraWhileLocked: boolean;
+  /** Which phone camera films (a USB camera, when used, has no lens choice). */
+  cameraLens: 'back' | 'front';
+  /**
+   * When Gemma writes a rich caption (objects, counts, text, movement) for each stored camera
+   * frame while idle, so later questions can be answered from memory: never, on the charger, or
+   * on battery too (above 30%). Older versions stored a boolean. On the phone only.
+   */
+  captionFrames: CaptionFramesMode | boolean;
   /** Days of conversation audio kept for listening back (0 = forever). */
   audioKeepDays: number | null;
   /** Space always left free for the phone, in GB. */
@@ -163,6 +172,8 @@ export const DEFAULTS: Settings = {
   imageDetail: null,
   videoKeepHours: null,
   cameraWhileLocked: true,
+  cameraLens: 'back',
+  captionFrames: 'charging',
   audioKeepDays: null,
   storageReserveGB: null,
   offTheRecord: false,

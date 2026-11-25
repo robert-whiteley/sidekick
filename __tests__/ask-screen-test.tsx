@@ -30,7 +30,9 @@ jest.mock('@/engine/llm', () => ({
   releaseBackground: jest.fn(),
 }));
 jest.mock('@/engine/describe-photos', () => ({
-  describeOnePhoto: jest.fn(),
+  describeOnePhoto: jest.fn(async () => false),
+  captionOneFrame: jest.fn(async () => false),
+  noteUserActive: jest.fn(),
   yieldToQuestion: async () => {},
 }));
 jest.mock('@/engine/fact-inference', () => ({

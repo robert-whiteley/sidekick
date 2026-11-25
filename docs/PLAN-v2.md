@@ -293,11 +293,13 @@ Owner steps needed later (not blocking the build):
       answer with refs + optional clip (seconds before/after). Fixed step plans per question type (≤ 5 hops), not a free model loop. Not phone-tested.
 - [x] Ranking: relevance gate, then recency for "where / last seen", else diversity (MMR)
       (old ADR 0003, the suncream case). Built + unit-tested.
-- [ ] Voice control of settings (frame rate, speech speed 50–200%, camera flip/resolution),
-      "repeat that", "what can you do?". Partly: speech speed, "repeat that", "what can you do?", pause camera built; frame rate, camera flip and resolution by voice not. → ROADMAP Future
-- [ ] Idle-time captions: while charging/idle, Gemma writes a rich description per keyframe
+- [x] Change settings by asking (typed or spoken) (frame rate, speech speed 50–200%, camera flip/resolution),
+      "repeat that", "what can you do?". Frame rate, front/back camera and image detail go through
+      the tool router (`camera_setting`, any phrasing; not offered to routines); front/back is also
+      in Settings → Camera & audio. Built and unit-tested; not yet checked on the phone.
+- [x] Idle-time captions: while charging/idle, Gemma writes a rich description per keyframe
       (objects, counts, text, motion) for counting questions; embeddings + OCR are the live
-      path. Not built: photo descriptions skip camera frames. → ROADMAP Future
+      path. Built + unit-tested, not phone-tested: on the charger only, 2 min after the app was last opened or asked, ≤ 60 frames per charge, stops at moderate heat; loads the model only on ≥ 6 GB phones not short of memory (else only when already loaded); Settings → Camera & audio → "Describe camera frames (Off, While charging, On battery too)" (on).
 - [x] Lessons: no growing context for frames (old: $1.17 vs $0.40 per walk; repeats "oak
       tree"); use a 2–3 frame window only. Cutting clips from a still-recording MP4 was
       unreliable → record in short segments (old: 3 s) / ring buffer. 2–3 frame window and short video segments built.
