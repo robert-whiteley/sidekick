@@ -42,8 +42,19 @@ Docs: https://docs.expo.dev/eas/index.md
 
 ## Project rules (Sidekick)
 
-- Read `docs/SPEC.md`, `ARCHITECTURE.md`, `ROADMAP.md` and `docs/decisions/` before larger changes.
+- Start every session by reading `docs/PLAN-v2.md` (all owner decisions for the current phase); tick items there as they land. Also `docs/SPEC.md`, `ARCHITECTURE.md`, `ROADMAP.md` and `docs/decisions/` before larger changes. Record anything left out or rejected (with why) in ADR 0006 and check it before proposing ideas.
 - Fully on-device: no network by default, no accounts, no telemetry.
 - Commercial-safe licences only; update `THIRD_PARTY_NOTICES.md` with each dependency/model.
 - Must work on Pixel 5 (CPU only, 8 GB) and iPhone 13 mini (4 GB): load big models on demand, never LLM + embedder together.
-- Tests for logic changes. Report what was verified on a device vs only built.
+- Tests for logic changes. Report what was verified on a device vs only built; verify on the phone before calling work done.
+- Distribution: Google Play flavour (default) and a direct-APK "full" flavour (Accessibility actions, direct SMS).
+
+## Owner working rules
+
+- The owner doesn't read code: choose on merit, explain in product terms, check checkable facts (licences, prices, support) instead of flagging them.
+- Do all the work to completion, in parallel where possible; ask only about money, one-way steps, what users see/keep, or taste. Merge own PRs once CI passes.
+- Never pay for anything; alert the owner first. Never delete the owner's files outside the project (phone or PC); report the space needed instead.
+- Phone testing: camera/mic use on the test phone is allowed for short test clips, deleted after; never open, read or send anything personal (messages, emails, photos) outside the app.
+- No personal data, keys, IPs, emails or device serials in the repo or its history; git email is the GitHub noreply address.
+- Answers to the owner: short, plain words, conclusion first, backed by data.
+- Claude tooling stays minimal: auto-memory is off for this repo (facts live in these docs); the only hook fast-forwards `main` at session start.
