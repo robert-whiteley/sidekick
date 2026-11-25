@@ -1,0 +1,114 @@
+import { Platform } from 'react-native';
+
+import SidekickNative from '../../modules/sidekick-native';
+import { cameraConfigFor, cameraNotice } from './camera-logic';
+import { currentTuning } from './device-profile';
+import { notices } from './notices';
+import { onSettingsChange } from './settings';
+import { ingestFrames } from '@/memory/frames';
+
+/**
+ * Live camera memory: the native recorder (in the listening service) samples frames, embeds
+ * them and keeps rolling video, also with the app closed. Here: start/stop, settings, holding
+ * frame work while an answer runs, moving frames into memory, and notices for its events.
+ */
+
+const android = Platform.OS === 'android';
+const INGEST_MS = 30_000;
+
+let ingestTimer: ReturnType<typeof setInterval> | null = null;
+const listeners = new Set<(live: boolean) => void>();
+
+export function liveCameraOn(): boolean {
+  if (!android) return false;
+  try {
+    return SidekickNative.cameraStatus().running;
+  } catch {
+    return false;
+  }
+}
+
+function setIngest(on: boolean) {
+  if (on && !ingestTimer)
+    ingestTimer = setInterval(() => void ingestFrames().catch(() => 0), INGEST_MS);
+  if (!on && ingestTimer) {
+    clearInterval(ingestTimer);
+    ingestTimer = null;
+    void ingestFrames().catch(() => 0);
+  }
+}
+
+/** Starts live camera memory. Needs the camera permission already granted; false if it can't. */
+export function startLiveCamera(): boolean {
+  if (!android) return false;
+  try {
+    const ok = SidekickNative.cameraStart(cameraConfigFor(currentTuning()));
+    setIngest(ok);
+    listeners.forEach((l) => l(ok));
+    return ok;
+  } catch (e) {
+    console.log(`[camera] start failed: ${String(e)}`);
+    return false;
+  }
+}
+
+export function stopLiveCamera() {
+  if (!android) return;
+  try {
+    SidekickNative.cameraStop();
+  } catch {
+    // Not running.
+  }
+  setIngest(false);
+  listeners.forEach((l) => l(false));
+}
+
+/** Hold frame embedding while an answer runs (frames are still saved, embedded after). */
+export function holdLiveCamera(hold: boolean) {
+  if (!android) return;
+  try {
+    SidekickNative.cameraHold(hold);
+  } catch {
+    // Camera module missing: nothing to hold.
+  }
+}
+
+/** Live on/off changes (from here or the recorder itself); returns an unsubscribe. */
+export function onLiveCamera(l: (live: boolean) => void): () => void {
+  listeners.add(l);
+  return () => listeners.delete(l);
+}
+
+/**
+ * Follows the recorder's events and the settings; call once at start-up. Returns a stop
+ * function (the camera itself keeps running).
+ */
+export function watchLiveCamera(): () => void {
+  if (!android) return () => {};
+  setIngest(liveCameraOn());
+  let last = JSON.stringify(cameraConfigFor(currentTuning()));
+  const stopSettings = onSettingsChange(() => {
+    const cfg = cameraConfigFor(currentTuning());
+    const now = JSON.stringify(cfg);
+    if (now === last) return;
+    last = now;
+    try {
+      SidekickNative.cameraConfigure(cfg);
+    } catch (e) {
+      console.log(`[camera] configure failed: ${String(e)}`);
+    }
+  });
+  const sub = SidekickNative.addListener('onCamera', (e) => {
+    if (e.kind === 'status') {
+      setIngest(e.running);
+      listeners.forEach((l) => l(e.running));
+      return;
+    }
+    const n = cameraNotice(e);
+    if (n) notices.post(n);
+  });
+  return () => {
+    stopSettings();
+    sub.remove();
+  };
+}

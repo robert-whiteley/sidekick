@@ -1,5 +1,9 @@
+import type { Href } from 'expo-router';
+import { router } from 'expo-router';
 import type { ReactNode } from 'react';
 import { Alert, Pressable, StyleSheet, Switch, Text, View } from 'react-native';
+
+import { choiceChips, type Option } from './choice-logic';
 
 export const ACCENT = '#2f6fed';
 
@@ -34,6 +38,57 @@ export function Button(props: { title: string; onPress: () => void; danger?: boo
     <Pressable style={styles.button} onPress={props.onPress} accessibilityRole="button">
       <Text style={[styles.buttonText, props.danger && styles.danger]}>{props.title}</Text>
     </Pressable>
+  );
+}
+
+/** A row that opens another page (settings section, integration, Memory…). */
+export function NavRow(props: { label: string; hint?: string; href: Href }) {
+  return (
+    <Pressable
+      style={[styles.item, styles.itemRow]}
+      onPress={() => router.push(props.href)}
+      accessibilityRole="link"
+    >
+      <View style={styles.flex}>
+        <Text style={styles.body}>{props.label}</Text>
+        {props.hint ? <Text style={styles.hint}>{props.hint}</Text> : null}
+      </View>
+      <Text style={styles.chevron}>›</Text>
+    </Pressable>
+  );
+}
+
+/**
+ * A choice with this phone's Recommended value marked. value null = following Recommended;
+ * onChange(null) = back to Recommended.
+ */
+export function ChoiceRow<T extends string | number>(props: {
+  label: string;
+  hint?: string;
+  options: Option<T>[];
+  value: T | null;
+  recommended: T;
+  onChange: (v: T | null) => void;
+}) {
+  const chips = choiceChips(props.options, props.value, props.recommended);
+  return (
+    <View style={styles.choice}>
+      <Text style={styles.label}>{props.label}</Text>
+      <View style={styles.chips}>
+        {chips.map((c) => (
+          <Pressable
+            key={String(c.value)}
+            onPress={() => props.onChange(c.store)}
+            style={[styles.chip, c.selected && styles.chipOn]}
+            accessibilityRole="radio"
+            accessibilityState={{ checked: c.selected }}
+          >
+            <Text style={[styles.chipText, c.selected && styles.chipTextOn]}>{c.label}</Text>
+          </Pressable>
+        ))}
+      </View>
+      {props.hint ? <Text style={styles.hint}>{props.hint}</Text> : null}
+    </View>
   );
 }
 
@@ -81,4 +136,6 @@ export const styles = StyleSheet.create({
   chipOn: { backgroundColor: ACCENT },
   chipText: { fontSize: 14, color: '#333' },
   chipTextOn: { color: 'white' },
+  chevron: { fontSize: 22, color: '#999' },
+  choice: { gap: 6 },
 });

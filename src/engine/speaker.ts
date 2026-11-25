@@ -1,7 +1,8 @@
 import * as Speech from 'expo-speech';
 import { Platform } from 'react-native';
 
-import SidekickNative from '../../modules/sidekick-native';
+import SidekickNative, { type VoiceInfo } from '../../modules/sidekick-native';
+import { getSettings, type VoiceChoice } from './settings';
 
 import { forSpeech, takeSentences } from './sentences';
 
@@ -10,6 +11,22 @@ import { forSpeech, takeSentences } from './sentences';
  * On Android the native voice speaks (Pocket TTS, else the system voice) and the microphone
  * keeps listening so the user can talk over it; elsewhere expo-speech with the mic paused.
  */
+/** The voice decided for this phone and what speaks now (Android; null elsewhere). */
+export function voiceInfo(): VoiceInfo | null {
+  return Platform.OS === 'android' ? SidekickNative.voiceInfo() : null;
+}
+
+let appliedChoice: VoiceChoice | null = null;
+
+/** Hands Settings' voice choice ("auto" = recommended) to the native voice when it changed. */
+export function applyVoiceChoice() {
+  if (Platform.OS !== 'android') return;
+  const c = getSettings().voiceChoice ?? 'auto';
+  if (c === appliedChoice) return;
+  SidekickNative.voiceSetChoice(c);
+  appliedChoice = c;
+}
+
 export class StreamingSpeaker {
   private buffer = '';
   private spokenUpTo = 0;
@@ -18,6 +35,7 @@ export class StreamingSpeaker {
   private readonly native = Platform.OS === 'android';
   private readonly answerId: number;
   constructor(private enabled: boolean) {
+    if (enabled && this.native) applyVoiceChoice();
     this.answerId = enabled && this.native ? SidekickNative.voiceBegin() : 0;
   }
 

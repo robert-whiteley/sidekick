@@ -404,7 +404,7 @@ export function followupContext(items: Followup[], now: Date, limit = 12): strin
 
 // --- Spoken "remind me …" ---
 
-const TIME_WORDS = [
+export const TIME_WORDS = [
   /\bin (half an|a|an|\d+|[a-z-]+) (minute|min|hour|hr|day|week|month)s?\b/g,
   /\b(the )?day after tomorrow\b/g,
   /\b(tomorrow|tmrw|today|tonight)( (morning|afternoon|evening|night))?\b/g,

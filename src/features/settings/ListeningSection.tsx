@@ -27,7 +27,16 @@ function consentHint(choice: ConsentChoice): string {
   return `${how} Automatic follows the recording law where you are (${where}): ${on ? 'on' : 'off'} here. Not legal advice.`;
 }
 
-export function ListeningSection() {
+/**
+ * part: 'assistant' = wake word and spoken answers; 'listening' = what is kept while listening;
+ * 'privacy' = consent and instructions-only; 'all' = everything (one page).
+ */
+export function ListeningSection({
+  part = 'all',
+}: {
+  part?: 'assistant' | 'listening' | 'privacy' | 'all';
+}) {
+  const show = (p: typeof part) => part === 'all' || part === p;
   const [s, setS] = useState<Settings>(getSettings());
   const [phrase, setPhrase] = useState(s.wakePhrase);
   const [msg, setMsg] = useState('');
@@ -52,67 +61,80 @@ export function ListeningSection() {
     setMsg(`Wake word set to "${p}".`);
   };
 
+  const title =
+    part === 'assistant' ? 'Talking to Sidekick' : part === 'privacy' ? 'Recording' : 'Listening';
+
   return (
-    <>
-      <Section title="Listening">
-        <Text style={styles.body}>Wake word</Text>
-        <TextInput
-          style={styles.input}
-          value={phrase}
-          onChangeText={setPhrase}
-          onSubmitEditing={saveWake}
-          placeholder="Hey Sidekick"
-          autoCapitalize="words"
-        />
-        <Button title="Save wake word" onPress={saveWake} />
-        {msg ? <Text style={styles.hint}>{msg}</Text> : null}
-        <Row
-          label="Remember conversations"
-          hint="Keep transcripts of what is said around you while listening, not just your questions."
-          value={s.recordConversations}
-          onChange={(v) => set({ recordConversations: v })}
-        />
-        <Row
-          label="Show conversation"
-          hint="Show what is said, and who said it, on the main screen while listening. Off only hides it; it doesn't change what is kept."
-          value={s.showConversation}
-          onChange={(v) => setS(updateSettings({ showConversation: v }))}
-        />
-        <Row
-          label="Instructions only"
-          hint='For when you are with other people: nothing around you is transcribed or kept. Only "Sidekick …" / "Hey Sidekick …" and holding the mic are taken.'
-          value={s.instructionsOnly}
-          onChange={(v) => set({ instructionsOnly: v })}
-        />
-        <Text style={styles.label}>Consent mode</Text>
-        <View style={styles.chips}>
-          {CONSENT_OPTIONS.map((o) => (
-            <Pressable
-              key={o.value}
-              onPress={() => set({ consent: o.value })}
-              style={[styles.chip, s.consent === o.value && styles.chipOn]}
-              accessibilityRole="radio"
-              accessibilityState={{ checked: s.consent === o.value }}
-            >
-              <Text style={[styles.chipText, s.consent === o.value && styles.chipTextOn]}>
-                {o.label}
-              </Text>
-            </Pressable>
-          ))}
-        </View>
-        <Text style={styles.hint}>{consentHint(s.consent)}</Text>
-        <Row
-          label="Speak answers"
-          value={s.speakAnswers}
-          onChange={(v) => set({ speakAnswers: v })}
-        />
-        <Row
-          label="Remember photos"
-          hint="Keep photos you ask about, so later questions can look at them again."
-          value={s.rememberPhotos}
-          onChange={(v) => set({ rememberPhotos: v })}
-        />
-      </Section>
-    </>
+    <Section title={title}>
+      {show('assistant') && (
+        <>
+          <Text style={styles.body}>Wake word</Text>
+          <TextInput
+            style={styles.input}
+            value={phrase}
+            onChangeText={setPhrase}
+            onSubmitEditing={saveWake}
+            placeholder="Hey Sidekick"
+            autoCapitalize="words"
+          />
+          <Button title="Save wake word" onPress={saveWake} />
+          {msg ? <Text style={styles.hint}>{msg}</Text> : null}
+          <Row
+            label="Speak answers"
+            value={s.speakAnswers}
+            onChange={(v) => set({ speakAnswers: v })}
+          />
+        </>
+      )}
+      {show('listening') && (
+        <>
+          <Row
+            label="Remember conversations"
+            hint="Keep transcripts of what is said around you while listening, not just your questions."
+            value={s.recordConversations}
+            onChange={(v) => set({ recordConversations: v })}
+          />
+          <Row
+            label="Show conversation"
+            hint="Show what is said, and who said it, on the main screen while listening. Off only hides it; it doesn't change what is kept."
+            value={s.showConversation}
+            onChange={(v) => setS(updateSettings({ showConversation: v }))}
+          />
+          <Row
+            label="Remember photos"
+            hint="Keep photos you ask about, so later questions can look at them again."
+            value={s.rememberPhotos}
+            onChange={(v) => set({ rememberPhotos: v })}
+          />
+        </>
+      )}
+      {show('privacy') && (
+        <>
+          <Row
+            label="Instructions only"
+            hint='For when you are with other people: nothing around you is transcribed or kept. Only "Sidekick …" / "Hey Sidekick …" and holding the mic are taken.'
+            value={s.instructionsOnly}
+            onChange={(v) => set({ instructionsOnly: v })}
+          />
+          <Text style={styles.label}>Consent mode</Text>
+          <View style={styles.chips}>
+            {CONSENT_OPTIONS.map((o) => (
+              <Pressable
+                key={o.value}
+                onPress={() => set({ consent: o.value })}
+                style={[styles.chip, s.consent === o.value && styles.chipOn]}
+                accessibilityRole="radio"
+                accessibilityState={{ checked: s.consent === o.value }}
+              >
+                <Text style={[styles.chipText, s.consent === o.value && styles.chipTextOn]}>
+                  {o.label}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
+          <Text style={styles.hint}>{consentHint(s.consent)}</Text>
+        </>
+      )}
+    </Section>
   );
 }

@@ -27,7 +27,9 @@ import { Row, Section, styles } from './ui';
 const KINDS: FollowupKind[] = ['todo', 'event', 'reminder'];
 
 /** Suggested and approved to-dos, events and reminders; nothing happens until approved. */
-export function FollowupsSection() {
+export function FollowupsSection({ part = 'both' }: { part?: 'settings' | 'list' | 'both' }) {
+  const showSettings = part !== 'list';
+  const showList = part !== 'settings';
   const [items, setItems] = useState<Followup[]>([]);
   const [suggest, setSuggest] = useState(getSettings().suggestFollowups);
   const [digest, setDigest] = useState(getSettings().followupDigest);
@@ -92,23 +94,27 @@ export function FollowupsSection() {
   };
 
   return (
-    <Section title="Follow-ups">
-      <Row
-        label="Suggest follow-ups"
-        hint="Proposes to-dos, events and reminders from what is said. Nothing is used until you approve it."
-        value={suggest}
-        onChange={(v) => {
-          setSuggest(v);
-          updateSettings({ suggestFollowups: v });
-        }}
-      />
-      <Row
-        label="Daily summary"
-        hint={`A notification at ${getSettings().digestHour}:00 with today's follow-ups and anything still open from yesterday.`}
-        value={digest}
-        onChange={(v) => void setDigestOn(v)}
-      />
-      {!exact && (
+    <Section title={part === 'list' ? 'To-dos and reminders' : 'Follow-ups'}>
+      {showSettings && (
+        <Row
+          label="Suggest follow-ups"
+          hint="Proposes to-dos, events and reminders from what is said. Nothing is used until you approve it."
+          value={suggest}
+          onChange={(v) => {
+            setSuggest(v);
+            updateSettings({ suggestFollowups: v });
+          }}
+        />
+      )}
+      {showSettings && (
+        <Row
+          label="Daily summary"
+          hint={`A notification at ${getSettings().digestHour}:00 with today's follow-ups and anything still open from yesterday.`}
+          value={digest}
+          onChange={(v) => void setDigestOn(v)}
+        />
+      )}
+      {showSettings && !exact && (
         <Pressable
           onPress={() =>
             void allowExactReminders()
@@ -121,59 +127,62 @@ export function FollowupsSection() {
       )}
       {msg ? <Text style={styles.hint}>{msg}</Text> : null}
 
-      {suggested.length > 0 && (
+      {showList && suggested.length > 0 && (
         <Text style={styles.body}>Suggested (approve, edit or dismiss)</Text>
       )}
-      {suggested.map((f) =>
-        editing === f.id ? (
-          <Editor key={f.id} f={f} onDone={() => setEditing(null)} />
-        ) : (
-          <View key={f.id} style={[styles.item, styles.itemRow]}>
-            {line(f)}
-            <Pressable onPress={() => void approve(f)}>
-              <Text style={styles.link}>Approve</Text>
-            </Pressable>
-            <Pressable onPress={() => setEditing(f.id)}>
-              <Text style={styles.link}>Edit</Text>
-            </Pressable>
-            <Pressable onPress={() => void dismissFollowup(f.id)}>
-              <Text style={[styles.link, styles.danger]}>Dismiss</Text>
-            </Pressable>
-          </View>
-        ),
-      )}
+      {showList &&
+        suggested.map((f) =>
+          editing === f.id ? (
+            <Editor key={f.id} f={f} onDone={() => setEditing(null)} />
+          ) : (
+            <View key={f.id} style={[styles.item, styles.itemRow]}>
+              {line(f)}
+              <Pressable onPress={() => void approve(f)}>
+                <Text style={styles.link}>Approve</Text>
+              </Pressable>
+              <Pressable onPress={() => setEditing(f.id)}>
+                <Text style={styles.link}>Edit</Text>
+              </Pressable>
+              <Pressable onPress={() => void dismissFollowup(f.id)}>
+                <Text style={[styles.link, styles.danger]}>Dismiss</Text>
+              </Pressable>
+            </View>
+          ),
+        )}
 
-      {approved.length === 0 && suggested.length === 0 && (
+      {showList && approved.length === 0 && suggested.length === 0 && (
         <Text style={styles.hint}>No follow-ups yet.</Text>
       )}
-      {approved.map((f) =>
-        editing === f.id ? (
-          <Editor key={f.id} f={f} onDone={() => setEditing(null)} />
-        ) : (
+      {showList &&
+        approved.map((f) =>
+          editing === f.id ? (
+            <Editor key={f.id} f={f} onDone={() => setEditing(null)} />
+          ) : (
+            <View key={f.id} style={[styles.item, styles.itemRow]}>
+              {line(f)}
+              <Pressable onPress={() => void updateFollowup(f.id, { status: 'done' })}>
+                <Text style={styles.link}>Done</Text>
+              </Pressable>
+              {f.kind === 'event' && f.dueAt != null && (
+                <Pressable onPress={() => void toCalendar(f)}>
+                  <Text style={styles.link}>Calendar</Text>
+                </Pressable>
+              )}
+              <Pressable onPress={() => setEditing(f.id)}>
+                <Text style={styles.link}>Edit</Text>
+              </Pressable>
+            </View>
+          ),
+        )}
+      {showList &&
+        done.map((f) => (
           <View key={f.id} style={[styles.item, styles.itemRow]}>
             {line(f)}
-            <Pressable onPress={() => void updateFollowup(f.id, { status: 'done' })}>
-              <Text style={styles.link}>Done</Text>
-            </Pressable>
-            {f.kind === 'event' && f.dueAt != null && (
-              <Pressable onPress={() => void toCalendar(f)}>
-                <Text style={styles.link}>Calendar</Text>
-              </Pressable>
-            )}
-            <Pressable onPress={() => setEditing(f.id)}>
-              <Text style={styles.link}>Edit</Text>
+            <Pressable onPress={() => void deleteFollowup(f.id)}>
+              <Text style={[styles.link, styles.danger]}>Delete</Text>
             </Pressable>
           </View>
-        ),
-      )}
-      {done.map((f) => (
-        <View key={f.id} style={[styles.item, styles.itemRow]}>
-          {line(f)}
-          <Pressable onPress={() => void deleteFollowup(f.id)}>
-            <Text style={[styles.link, styles.danger]}>Delete</Text>
-          </Pressable>
-        </View>
-      ))}
+        ))}
     </Section>
   );
 }

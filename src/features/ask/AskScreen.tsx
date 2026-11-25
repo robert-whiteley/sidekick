@@ -1,21 +1,42 @@
 import { CameraView, useCameraPermissions } from 'expo-camera';
-import { Link } from 'expo-router';
-import { useEffect, useRef, useState } from 'react';
+import { StatusBar } from 'expo-status-bar';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   AppState,
   KeyboardAvoidingView,
   Platform,
   Pressable,
   ScrollView,
+  type ScrollViewInstance,
   StyleSheet,
   Text,
-  TextInput,
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import SidekickNative from '../../../modules/sidekick-native';
-import { answer as answerQuestion, DEFAULT_PHOTO_QUESTION } from '@/engine/assistant';
+import {
+  answer as answerQuestion,
+  DEFAULT_PHOTO_QUESTION,
+  leaveOffTheRecord,
+} from '@/engine/assistant';
+import {
+  headphonesOn,
+  listenMediaButton,
+  openBestCamera,
+  setAsking,
+  watchDevices,
+} from '@/engine/devices';
+import {
+  holdLiveCamera,
+  liveCameraOn,
+  onLiveCamera,
+  startLiveCamera,
+  stopLiveCamera,
+  watchLiveCamera,
+} from '@/engine/live-camera';
+import { notices } from '@/engine/notices';
+import { takeIntroMessage } from '@/features/onboarding/after-setup';
 import { describeOnePhoto, yieldToQuestion } from '@/engine/describe-photos';
 import {
   ASSIST_KEY,
@@ -40,25 +61,42 @@ import { inferFollowupsIfIdle, stopFollowupInference } from '@/engine/followup-i
 import { inferNamesIfIdle, stopNameInference } from '@/engine/name-inference';
 import { startFollowupNotifications } from '@/engine/followup-notify';
 import { cancelLlm, ensureLlm, holdBackground, releaseBackground } from '@/engine/llm';
-import { getSettings, updateSettings } from '@/engine/settings';
+import { getSettings } from '@/engine/settings';
 import { StreamingSpeaker } from '@/engine/speaker';
 import { Conversation } from '@/engine/conversation';
 import { asksAboutWhatIsInView } from '@/memory/search-logic';
 import { embedWhenIdle } from '@/memory/embed-idle';
 import { syncSourcesIfDue } from '@/memory/sources';
 import { capturePhoto, ingestJournal, learnOwnerVoice, syncOwnerVoice } from '@/memory/store';
+import { loadChatHistory } from './chat-history';
+import {
+  type ChatMedia,
+  type ChatMessage,
+  isMicTap,
+  mediaForAnswer,
+  patchMessage,
+  shouldSpeak,
+  withoutOffRecord,
+} from './chat-logic';
+import { ChatHeader } from './ChatHeader';
+import { LiveFrame } from './LiveFrame';
+import { Composer } from './Composer';
+import { Icon } from './Icon';
 import { LiveConversation } from './LiveConversation';
+import { MessageBubble } from './MessageBubble';
+import { NoticeItem, useNotices } from './NoticeLines';
 import { ScreenGrabBar } from './ScreenGrabBar';
+import { DARK, LIGHT } from './theme';
 import { useEntry } from './useEntry';
-import { OnlineBadge, WebSearchLink, WebSources } from './WebLookupUi';
-import type { WebSource } from '@/web/lookup';
 
 type Phase = 'idle' | 'loading' | 'thinking' | 'answering';
 
 /** How long a screenshot from the assist key is used for questions. */
 const SCREEN_TTL_MS = 2 * 60_000;
 
-/** The main screen: point the camera, ask, hear the answer. */
+const stripFile = (uri?: string) => uri?.replace(/^file:\/\//, '') ?? null;
+
+/** The main screen: one continuous chat; the camera opens only while it is in use. */
 export function AskScreen({
   entry = null,
   onEntryHandled,
@@ -68,24 +106,33 @@ export function AskScreen({
   onEntryHandled?: () => void;
 } = {}) {
   const [permission, requestPermission] = useCameraPermissions();
-  const [useCamera, setUseCamera] = useState(true);
+  // Live camera memory: runs natively (also with the view closed) until stopped.
+  const [live, setLive] = useState(liveCameraOn);
+  const [useCamera, setUseCamera] = useState(false);
   const [question, setQuestion] = useState('');
-  const [answer, setAnswer] = useState('');
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [status, setStatus] = useState('');
-  const [web, setWeb] = useState<WebSource[]>([]);
-  /** The question behind the browser link ('' = no link) and the search words a lookup used. */
-  const [webAsk, setWebAsk] = useState<{ question: string; query?: string }>({ question: '' });
   const [phase, setPhase] = useState<Phase>('loading');
-  const [speak, setSpeakState] = useState(getSettings().speakAnswers);
   const [listening, setListening] = useState(isListening());
-  const [holding, setHolding] = useState(false);
+  const [holding, setHoldingState] = useState(false);
+  const holdingRef = useRef(false);
+  const setHolding = (v: boolean) => {
+    holdingRef.current = v;
+    setHoldingState(v);
+  };
   const [capturing, setCapturing] = useState(false);
+  const [offRecord, setOffRecordState] = useState(false);
+  const offRecordRef = useRef(false);
+  /** The answer being read out (its bubble shows a mute button). */
+  const [speakingId, setSpeakingId] = useState<string | null>(null);
+  const [webUsed, setWebUsed] = useState(false);
   const captureRef = useRef<{
     photo: Promise<string | null>;
     at: number;
     mic: Promise<boolean>;
   } | null>(null);
   const camera = useRef<CameraView>(null);
+  const scroll = useRef<ScrollViewInstance>(null);
   const speaker = useRef<StreamingSpeaker | null>(null);
   /** A spoken answer is still being said: background passes are held until the voice is idle. */
   const awaitingVoiceRef = useRef(false);
@@ -96,23 +143,85 @@ export function AskScreen({
   const queuedRef = useRef<{ q: string; followUp: boolean } | null>(null);
   const [screen, setScreen] = useState<ScreenGrab | null>(null);
   const [cameraReady, setCameraReady] = useState(false);
-  // Opened hands-free (tile, widget, assistant): a tap on the mic, or a timeout, ends listening.
+  // Opened hands-free (tile, widget, assistant) or the mic was tapped: a tap, or a timeout, ends it.
   const handsFree = useRef<ReturnType<typeof setTimeout> | null>(null);
   const holdEndRef = useRef<() => void>(() => {});
+  const holdStartRef = useRef<(free?: boolean) => void>(() => {});
+  /** The current mic press: when it started, or that it ends hands-free listening. */
+  const micPress = useRef<{ start: number } | 'end' | null>(null);
+  const noticeList = useNotices();
+  const theme = offRecord ? DARK : LIGHT;
 
-  const setSpeak = (v: boolean) => {
-    setSpeakState(v);
-    updateSettings({ speakAnswers: v });
+  const setOffRecord = (on: boolean) => {
+    offRecordRef.current = on;
+    setOffRecordState(on);
+    // Off the record: what is heard isn't kept as audio either.
+    try {
+      SidekickNative.audioSaveEnabled(!on);
+    } catch {
+      // Older native build.
+    }
+    // What was said Off the record disappears with it.
+    if (!on) {
+      setMessages(withoutOffRecord);
+      leaveOffTheRecord();
+    }
   };
 
   // Warm the model up in the background so the first question is quicker.
   useEffect(() => {
     ensureLlm(setStatus)
-      .then((r) => setStatus(`Ready · ${r.backend.toUpperCase()}`))
+      .then(() => setStatus(''))
       .catch((e) => setStatus(`Model failed to load: ${String(e)}`))
       .finally(() => {
         busyRef.current = false;
         setPhase('idle');
+      });
+  }, []);
+
+  // Plugged-in cameras, mics and headphones; the headset button asks a question (walk mode).
+  useEffect(() => {
+    openBestCamera();
+    const stopWatch = watchDevices();
+    const stopButton = listenMediaButton((action) => {
+      if (action !== 'ask') return;
+      if (holdingRef.current) return void holdEndRef.current();
+      setAsking(true);
+      holdStartRef.current(true);
+    });
+    return () => {
+      stopWatch();
+      stopButton();
+    };
+  }, []);
+
+  useEffect(() => {
+    const stopWatch = watchLiveCamera();
+    const stopLive = onLiveCamera(setLive);
+    return () => {
+      stopWatch();
+      stopLive();
+    };
+  }, []);
+
+  // The chat continues from where it was left.
+  useEffect(() => {
+    loadChatHistory()
+      .then((h) => setMessages((now) => [...h, ...now]))
+      .catch((e) => console.log(`[chat] history failed: ${String(e)}`))
+      .finally(() => {
+        // The first open after setup: a short hello with three things to try.
+        const intro = takeIntroMessage();
+        if (!intro) return;
+        notices.post(
+          {
+            key: 'intro',
+            kind: 'decision',
+            text: intro.text,
+            actions: intro.tries.map((t, i) => ({ label: t, id: String(i) })),
+          },
+          (id) => askRef.current(intro.tries[Number(id)]),
+        );
       });
   }, []);
 
@@ -128,6 +237,7 @@ export function AskScreen({
       SidekickNative.addListener('onBargeIn', () => setStatus('Listening…')),
       SidekickNative.addListener('onVoiceIdle', () => {
         conversation.current.answered(Date.now());
+        setSpeakingId(null);
         if (awaitingVoiceRef.current) {
           awaitingVoiceRef.current = false;
           releaseBackground();
@@ -163,13 +273,43 @@ export function AskScreen({
     };
   }, []);
 
-  const cameraOn = useCamera && permission?.granted === true;
+  // The widget's Capture opens the camera for that one photo.
+  const captureEntry = entry?.kind === 'capture';
+  const cameraOn = (useCamera || captureEntry) && permission?.granted === true;
   const busy = phase !== 'idle';
+
+  const toggleCamera = async () => {
+    if (useCamera) {
+      setUseCamera(false);
+      setCameraReady(false);
+      return;
+    }
+    if (!permission?.granted && !(await requestPermission()).granted) {
+      setStatus('Camera permission is needed.');
+      return;
+    }
+    setUseCamera(true);
+  };
+
+  const toggleLive = async () => {
+    if (live) {
+      stopLiveCamera();
+      return;
+    }
+    if (!permission?.granted && !(await requestPermission()).granted) {
+      setStatus('Camera permission is needed.');
+      return;
+    }
+    // The preview hands the camera to the recorder: one app can't hold it twice.
+    setCameraReady(false);
+    if (!startLiveCamera()) setStatus("Couldn't start the live camera.");
+  };
 
   const toggleListening = async () => {
     if (listening) {
       stopListening();
       setListening(false);
+      setStatus('');
       return;
     }
     const err = await startListening();
@@ -187,48 +327,74 @@ export function AskScreen({
       return;
     }
     speaker.current?.stop();
+    setSpeakingId(null);
     SidekickNative.pttStart();
     setHolding(true);
     if (free) {
       handsFree.current = setTimeout(() => holdEndRef.current(), HANDS_FREE_MAX_MS);
-      setStatus('Listening… tap 🎤 when done');
-    } else setStatus('Listening… let go when done');
+      setStatus('Listening… tap the mic when done');
+    } else if (!handsFree.current) setStatus('Listening… let go when done');
   };
 
   const holdEnd = async () => {
-    if (!holding) return;
+    setAsking(false);
     if (handsFree.current) clearTimeout(handsFree.current);
     handsFree.current = null;
+    if (!holdingRef.current) return;
     setHolding(false);
     setStatus('Transcribing…');
     try {
       const { text, voice } = await SidekickNative.pttStop();
-      if (voice) void learnOwnerVoice(voice).catch(() => {});
+      if (voice && !offRecordRef.current) void learnOwnerVoice(voice).catch(() => {});
       if (!text) {
         setStatus("I didn't catch that.");
         return;
       }
-      setQuestion(text);
+      setStatus('');
       await ask(text);
     } catch (e) {
       setStatus(`Couldn't hear you: ${e instanceof Error ? e.message : String(e)}`);
     }
   };
 
-  // Capture: tap saves a photo; hold to add a voice note (released = saved).
-  const captureStart = () => {
-    if (!cameraOn || captureRef.current) {
-      if (!cameraOn) setStatus('Turn the camera on to capture.');
+  // Mic: hold to talk (let go = ask), or tap to talk and tap again when done.
+  const micIn = () => {
+    if (holdingRef.current || handsFree.current) {
+      micPress.current = 'end';
       return;
     }
+    if (busyRef.current) return;
+    micPress.current = { start: Date.now() };
+    void holdStart();
+  };
+  const micOut = () => {
+    const p = micPress.current;
+    micPress.current = null;
+    if (!p) return;
+    if (p === 'end') return void holdEnd();
+    if (isMicTap(p.start)) {
+      handsFree.current = setTimeout(() => holdEndRef.current(), HANDS_FREE_MAX_MS);
+      setStatus('Listening… tap the mic when done');
+    } else void holdEnd();
+  };
+
+  const notSaved = () => {
+    if (!offRecordRef.current) return false;
+    setStatus('Off the record: nothing is saved. Leave it to save photos.');
+    return true;
+  };
+
+  // Capture: tap saves a photo; hold to add a voice note (released = saved).
+  const captureStart = () => {
+    if (!cameraOn || captureRef.current || notSaved()) return;
     const at = Date.now();
     const photo = (async () => {
       const pic = await camera.current?.takePictureAsync({ quality: 0.8, shutterSound: false });
-      return pic?.uri.replace(/^file:\/\//, '') ?? null;
+      return stripFile(pic?.uri);
     })();
     // Set synchronously so a quick tap's release always finds it.
     const mic = (async () => {
-      if (holding || !(await askMicPermission())) return false;
+      if (holdingRef.current || !(await askMicPermission())) return false;
       SidekickNative.pttStart();
       return true;
     })();
@@ -259,7 +425,7 @@ export function AskScreen({
     }
   };
 
-  const ask = async (spoken?: string, followUp = false) => {
+  const ask = async (spoken?: string, followUp = false, offRecordNow = offRecordRef.current) => {
     // A screenshot from the assist key is for questions asked soon after, not ones much later.
     const grab = screen && Date.now() - screen.at < SCREEN_TTL_MS ? screen : null;
     if (screen && !grab) setScreen(null);
@@ -277,13 +443,32 @@ export function AskScreen({
     awaitingVoiceRef.current = false;
     const keepHistory = conversation.current.keepHistory(followUp, Date.now());
     await yieldToQuestion();
-    if (spoken) setQuestion(spoken);
-    setAnswer('');
-    setWeb([]);
+    const at = Date.now();
+    const userId = `u${at}`;
+    const replyId = `a${at}`;
+    setQuestion('');
+    setMessages((m) => [
+      ...m,
+      {
+        id: userId,
+        role: 'user',
+        text: q,
+        at,
+        spoken: spoken !== undefined,
+        offRecord: offRecordNow,
+      },
+      { id: replyId, role: 'assistant', text: '', at, pending: true, offRecord: offRecordNow },
+    ]);
     setPhase('thinking');
     speaker.current?.stop();
+    const speak = shouldSpeak({
+      spoken: spoken !== undefined,
+      headphones: headphonesOn(),
+      enabled: getSettings().speakAnswers,
+    });
     const sp = new StreamingSpeaker(speak);
     speaker.current = sp;
+    setSpeakingId(speak ? replyId : null);
     try {
       await Promise.all([stopFactInference(), stopFollowupInference(), stopNameInference()]);
       let imagePath: string | null = null;
@@ -291,37 +476,53 @@ export function AskScreen({
       if (grab) imagePath = grab.shot;
       else if (cameraOn && visible && (q === DEFAULT_PHOTO_QUESTION || asksAboutWhatIsInView(q))) {
         const pic = await camera.current?.takePictureAsync({ quality: 0.6, shutterSound: false });
-        imagePath = pic?.uri.replace(/^file:\/\//, '') ?? null;
+        imagePath = stripFile(pic?.uri);
+      }
+      if (imagePath) {
+        const shown: ChatMedia[] = [{ momentAt: at, kind: 'photo', path: imagePath }];
+        setMessages((m) => patchMessage(m, userId, { media: shown }));
       }
       setStatus(imagePath ? 'Looking…' : 'Thinking…');
+      // offTheRecord: uses all memories, saves nothing (assistant.ts).
+      const opts = { keepHistory, offTheRecord: offRecordNow } as Parameters<
+        typeof answerQuestion
+      >[3];
+      holdLiveCamera(true);
       const r = await answerQuestion(
         grab ? screenQuestion(q, grab) : q,
         imagePath,
         (full) => {
           setPhase('answering');
-          setAnswer(full);
+          setMessages((m) => patchMessage(m, replyId, { text: full }));
           sp.update(full);
         },
-        { keepHistory },
+        opts,
       );
       // Android's voice says when it has finished (onVoiceIdle); background passes wait for that.
       awaitingVoiceRef.current = speak && Platform.OS === 'android' && r.text.trim().length > 0;
+      if (!awaitingVoiceRef.current) setSpeakingId(null);
       sp.finish(r.text);
-      setWeb(r.web ?? []);
-      setWebAsk(
-        imagePath || grab || r.local ? { question: '' } : { question: q, query: r.webQuery },
+      setWebUsed((r.web ?? []).length > 0);
+      setMessages((m) =>
+        patchMessage(m, replyId, {
+          text: r.text,
+          pending: false,
+          web: r.web ?? [],
+          webAsk:
+            imagePath || grab || r.local ? { question: '' } : { question: q, query: r.webQuery },
+          media: mediaForAnswer(r as typeof r & { media?: ChatMedia[] }),
+        }),
       );
       if (!speak) conversation.current.answered(Date.now());
+      setStatus('');
       const src = r.sources.length ? ` · ${r.sources.length} memories` : '';
-      const seen = r.usedPhoto && !imagePath ? ' · re-read a saved photo' : '';
-      setStatus(
-        `${(r.ms / 1000).toFixed(1)} s · first word ${(r.ttftMs / 1000).toFixed(1)} s${src}${seen}`,
-      );
-      console.log(`[ask] ${imagePath ? 'photo' : 'text'} ${r.ms} ms${src}${seen}: ${r.text}`);
-      setQuestion('');
+      console.log(`[ask] ${imagePath ? 'photo' : 'text'} ${r.ms} ms ttft ${r.ttftMs} ms${src}`);
     } catch (e) {
+      setSpeakingId(null);
+      setMessages((m) => patchMessage(m, replyId, { pending: false }));
       setStatus(`Something went wrong: ${e instanceof Error ? e.message : String(e)}`);
     } finally {
+      holdLiveCamera(false);
       busyRef.current = false;
       // Spoken answers release on onVoiceIdle; nothing spoken (or an error) releases now.
       if (!awaitingVoiceRef.current) releaseBackground();
@@ -334,27 +535,33 @@ export function AskScreen({
   useEffect(() => {
     askRef.current = (q: string, followUp?: boolean) => void ask(q, followUp);
     holdEndRef.current = () => void holdEnd();
+    holdStartRef.current = (free) => void holdStart(free);
   });
 
-  // Capture from the widget: one photo, no voice note.
+  // Capture from the widget: one photo, no voice note; the camera closes again after.
   const quickCapture = async () => {
     if (!cameraOn) {
-      setStatus('Turn the camera on to capture.');
+      setStatus('Allow the camera to capture.');
       return;
     }
+    if (notSaved()) return;
     try {
       const at = Date.now();
       const pic = await camera.current?.takePictureAsync({ quality: 0.8, shutterSound: false });
-      const path = pic?.uri.replace(/^file:\/\//, '');
+      const path = stripFile(pic?.uri);
       if (!path) throw new Error('no photo');
       await capturePhoto(path, null, at);
       setStatus('Saved photo');
     } catch (e) {
       setStatus(`Couldn't save: ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setUseCamera(false);
+      setCameraReady(false);
     }
   };
 
   const saveScreen = async () => {
+    if (notSaved()) return;
     if (!screen?.shot) {
       setStatus('No screenshot to save (the app on screen may block them).');
       return;
@@ -371,7 +578,11 @@ export function AskScreen({
     entry,
     (kind) => entryReady(kind, { idle: !busy && !busyRef.current, cameraOn, cameraReady }),
     (e) => {
-      if (e.kind === 'capture') return void quickCapture();
+      if (e.kind === 'capture') {
+        // Stays open (the entry is cleared next) until the photo is saved.
+        setUseCamera(true);
+        return void quickCapture();
+      }
       if (e.kind === 'screen') {
         const grab = parseScreenGrab(SidekickNative.kvGet(ASSIST_KEY));
         SidekickNative.kvSet(ASSIST_KEY, null);
@@ -389,61 +600,75 @@ export function AskScreen({
   const stop = () => {
     cancelLlm();
     speaker.current?.stop();
+    setSpeakingId(null);
     awaitingVoiceRef.current = false;
     releaseBackground();
   };
 
+  const mute = () => {
+    speaker.current?.stop();
+    setSpeakingId(null);
+    conversation.current.answered(Date.now());
+    if (awaitingVoiceRef.current) {
+      awaitingVoiceRef.current = false;
+      if (!busyRef.current) releaseBackground();
+    }
+  };
+
+  // Messages and notices in time order: a notice sits where it happened.
+  const items = useMemo(
+    () =>
+      [
+        ...messages.map((m) => ({ at: m.at, key: m.id, m })),
+        ...noticeList.map((n) => ({ at: n.at, key: `n:${n.key}`, n })),
+      ].sort((a, b) => a.at - b.at),
+    [messages, noticeList],
+  );
+
+  const placeholder = screen ? SCREEN_QUESTION : cameraOn ? DEFAULT_PHOTO_QUESTION : 'Ask Sidekick';
+
   return (
-    <SafeAreaView style={styles.safe}>
+    <SafeAreaView style={[styles.flex, { backgroundColor: theme.bg }]}>
+      <StatusBar style={offRecord ? 'light' : 'dark'} />
       <KeyboardAvoidingView style={styles.flex} behavior="padding">
-        <View style={styles.header}>
-          <Text style={styles.title}>Sidekick</Text>
-          <OnlineBadge used={web.length > 0} />
-          <Link href="/settings" style={styles.link}>
-            Settings
-          </Link>
-        </View>
+        <ChatHeader
+          theme={theme}
+          offRecord={offRecord}
+          onOffRecord={setOffRecord}
+          listening={listening}
+          onListen={() => void toggleListening()}
+          webUsed={webUsed}
+          live={live}
+          onStopLive={stopLiveCamera}
+        />
 
-        <View style={styles.cameraBox}>
-          {cameraOn ? (
-            <CameraView
-              ref={camera}
-              style={styles.flex}
-              facing="back"
-              onCameraReady={() => setCameraReady(true)}
-            />
-          ) : (
-            <Pressable
-              style={styles.cameraOff}
-              onPress={() => (permission?.granted ? setUseCamera(true) : requestPermission())}
-            >
-              <Text style={styles.cameraOffText}>
-                {permission?.granted ? 'Camera off — tap to turn on' : 'Tap to allow the camera'}
-              </Text>
-            </Pressable>
-          )}
-        </View>
-
-        <View style={styles.toggles}>
-          <Toggle label="Camera" value={useCamera} onChange={setUseCamera} />
-          <Toggle label="Speak" value={speak} onChange={setSpeak} />
-          <Toggle
-            label={listening ? 'Listening' : 'Listen'}
-            value={listening}
-            onChange={toggleListening}
-          />
-          <Pressable
-            style={[styles.chip, styles.capture, capturing && styles.micOn]}
-            onPressIn={captureStart}
-            onPressOut={captureEnd}
-            accessibilityRole="button"
-            accessibilityLabel="Capture photo, hold to add a voice note"
-          >
-            <Text style={[styles.chipText, styles.chipTextOn]}>
-              {capturing ? '● Note' : 'Capture'}
+        <ScrollView
+          ref={scroll}
+          style={styles.flex}
+          contentContainerStyle={styles.chat}
+          onContentSizeChange={() => scroll.current?.scrollToEnd({ animated: true })}
+          keyboardShouldPersistTaps="handled"
+        >
+          {items.length === 0 && phase !== 'loading' ? (
+            <Text style={[styles.empty, { color: theme.faint }]}>
+              {offRecord ? 'Nothing you say here is saved.' : 'Ask anything, or tap the camera.'}
             </Text>
-          </Pressable>
-        </View>
+          ) : null}
+          {items.map((it) =>
+            'm' in it && it.m ? (
+              <MessageBubble
+                key={it.key}
+                m={it.m}
+                theme={theme}
+                speaking={speakingId === it.m.id}
+                onMute={mute}
+              />
+            ) : 'n' in it && it.n ? (
+              <NoticeItem key={it.key} n={it.n} theme={theme} />
+            ) : null,
+          )}
+          {status ? <Text style={[styles.status, { color: theme.faint }]}>{status}</Text> : null}
+        </ScrollView>
 
         {screen ? (
           <ScreenGrabBar grab={screen} onSave={saveScreen} onClose={() => setScreen(null)} />
@@ -451,127 +676,116 @@ export function AskScreen({
 
         <LiveConversation listening={listening} />
 
-        <ScrollView style={styles.answerBox} contentContainerStyle={styles.answerContent}>
-          <Text style={styles.answer} selectable>
-            {answer || (phase === 'thinking' ? '…' : '')}
-          </Text>
-          <WebSources sources={web} />
-          {answer && phase !== 'thinking' ? (
-            <WebSearchLink question={webAsk.question} query={webAsk.query} />
-          ) : null}
-          <Text style={styles.status}>{status}</Text>
-        </ScrollView>
-
-        <View style={styles.inputRow}>
-          <TextInput
-            style={styles.input}
-            value={question}
-            onChangeText={setQuestion}
-            placeholder={
-              screen ? SCREEN_QUESTION : cameraOn ? DEFAULT_PHOTO_QUESTION : 'Ask anything'
-            }
-            returnKeyType="send"
-            onSubmitEditing={() => ask()}
-          />
-          <Pressable
-            style={[styles.ask, styles.mic, holding && styles.micOn]}
-            onPressIn={() => void holdStart()}
-            onPressOut={holdEnd}
-            accessibilityRole="button"
-            accessibilityLabel="Hold to talk"
-          >
-            <Text style={styles.askText}>{holding ? '●' : '🎤'}</Text>
-          </Pressable>
-          {phase === 'thinking' || phase === 'answering' ? (
-            <Pressable style={[styles.ask, styles.stop]} onPress={stop} accessibilityRole="button">
-              <Text style={styles.askText}>Stop</Text>
-            </Pressable>
-          ) : (
+        {cameraOn ? (
+          <View style={styles.cameraBox}>
+            {live ? (
+              <LiveFrame />
+            ) : (
+              <CameraView
+                ref={camera}
+                style={styles.flex}
+                facing="back"
+                onCameraReady={() => setCameraReady(true)}
+              />
+            )}
             <Pressable
-              style={[styles.ask, busy && styles.disabled]}
-              onPress={() => ask()}
-              disabled={busy}
-              accessibilityRole="button"
+              style={[styles.liveToggle, live && styles.liveToggleOn]}
+              onPress={() => void toggleLive()}
+              accessibilityRole="switch"
+              accessibilityState={{ checked: live }}
+              accessibilityLabel="Live camera memory"
+              hitSlop={8}
             >
-              <Text style={styles.askText}>Ask</Text>
+              <Text style={styles.liveText}>{live ? '● Live' : 'Live'}</Text>
             </Pressable>
-          )}
-        </View>
+            <Pressable
+              style={styles.cameraClose}
+              onPress={() => void toggleCamera()}
+              accessibilityRole="button"
+              accessibilityLabel="Close camera"
+              hitSlop={8}
+            >
+              <Icon name="close" size={22} color="#fff" />
+            </Pressable>
+            {live ? null : (
+              <Pressable
+                style={[styles.shutter, capturing && styles.shutterOn]}
+                onPressIn={captureStart}
+                onPressOut={captureEnd}
+                accessibilityRole="button"
+                accessibilityLabel="Capture photo, hold to add a voice note"
+              />
+            )}
+          </View>
+        ) : null}
+
+        <Composer
+          theme={theme}
+          value={question}
+          onChange={setQuestion}
+          placeholder={placeholder}
+          onSend={() => void ask()}
+          onSendLong={() => {
+            setOffRecord(true);
+            void ask(undefined, false, true);
+          }}
+          busy={busy}
+          answering={phase === 'thinking' || phase === 'answering'}
+          onStop={stop}
+          micOn={holding}
+          onMicIn={micIn}
+          onMicOut={micOut}
+          cameraOn={cameraOn}
+          onCamera={() => void toggleCamera()}
+        />
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
 
-function Toggle(props: { label: string; value: boolean; onChange: (v: boolean) => void }) {
-  return (
-    <Pressable
-      onPress={() => props.onChange(!props.value)}
-      style={[styles.chip, props.value && styles.chipOn]}
-      accessibilityRole="switch"
-      accessibilityState={{ checked: props.value }}
-    >
-      <Text style={[styles.chipText, props.value && styles.chipTextOn]}>{props.label}</Text>
-    </Pressable>
-  );
-}
-
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: 'white' },
   flex: { flex: 1 },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-  },
-  title: { fontSize: 24, fontWeight: '700' },
-  link: { fontSize: 16, color: '#2f6fed' },
-  // Shrinks (not overflows) when the keyboard takes space, so the input row stays above it.
+  chat: { paddingHorizontal: 16, paddingTop: 8, paddingBottom: 12, gap: 14 },
+  empty: { textAlign: 'center', marginTop: 40, fontSize: 15 },
+  status: { fontSize: 13, textAlign: 'center' },
+  // Shrinks (not overflows) when the keyboard takes space, so the composer stays above it.
   cameraBox: {
-    height: '38%',
+    height: '34%',
     flexShrink: 1,
     minHeight: 72,
-    marginHorizontal: 16,
+    marginHorizontal: 12,
     borderRadius: 16,
     overflow: 'hidden',
   },
-  cameraOff: { flex: 1, backgroundColor: '#eee', alignItems: 'center', justifyContent: 'center' },
-  cameraOffText: { fontSize: 16, color: '#555' },
-  toggles: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-    paddingHorizontal: 16,
-    paddingTop: 10,
+  cameraClose: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    borderRadius: 16,
+    padding: 4,
   },
-  chip: { paddingVertical: 6, paddingHorizontal: 12, borderRadius: 16, backgroundColor: '#eee' },
-  chipOn: { backgroundColor: '#2f6fed' },
-  chipText: { fontSize: 14, color: '#333' },
-  chipTextOn: { color: 'white' },
-  answerBox: { flex: 1, marginHorizontal: 16, marginTop: 10 },
-  answerContent: { paddingBottom: 12, gap: 8 },
-  answer: { fontSize: 19, lineHeight: 27 },
-  status: { fontSize: 13, color: '#777' },
-  inputRow: { flexDirection: 'row', gap: 8, padding: 12, borderTopWidth: 1, borderColor: '#eee' },
-  input: {
-    flex: 1,
-    fontSize: 17,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 24,
-    backgroundColor: '#f2f2f5',
+  shutter: {
+    position: 'absolute',
+    bottom: 10,
+    alignSelf: 'center',
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    borderWidth: 4,
+    borderColor: '#fff',
+    backgroundColor: 'rgba(255,255,255,0.25)',
   },
-  ask: {
-    backgroundColor: '#2f6fed',
-    borderRadius: 24,
-    paddingHorizontal: 22,
-    justifyContent: 'center',
+  shutterOn: { backgroundColor: '#b00020' },
+  liveToggle: {
+    position: 'absolute',
+    top: 8,
+    left: 8,
+    backgroundColor: 'rgba(0,0,0,0.45)',
+    borderRadius: 14,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
   },
-  stop: { backgroundColor: '#b00020' },
-  mic: { paddingHorizontal: 16, backgroundColor: '#444' },
-  micOn: { backgroundColor: '#b00020' },
-  capture: { backgroundColor: '#444', marginLeft: 'auto' },
-  disabled: { opacity: 0.5 },
-  askText: { color: 'white', fontSize: 17, fontWeight: '600' },
+  liveToggleOn: { backgroundColor: '#b00020' },
+  liveText: { color: '#fff', fontSize: 13, fontWeight: '600' },
 });

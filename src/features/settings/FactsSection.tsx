@@ -18,7 +18,7 @@ export function FactsSection({ facts, onChanged }: { facts: Fact[]; onChanged: (
   const suggested = facts.filter((f) => f.status === 'suggested');
   const saved = facts.filter((f) => f.status === 'saved');
   return (
-    <Section title="Facts">
+    <Section title="About you">
       <Text style={styles.hint}>{'Say "remember that…" to save a fact.'}</Text>
       {suggested.length > 0 && (
         <Text style={styles.body}>Suggested from what you said (only used once you approve)</Text>

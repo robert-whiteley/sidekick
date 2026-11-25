@@ -52,7 +52,41 @@ export type Settings = {
   searxngUrl: string;
   /** User-added RSS/Atom feeds (https) read for news questions; none by default. */
   newsFeeds: string[];
+
+  // Tunables: null = follow the Recommended value for this phone (device-profile.ts), which can
+  // change as Sidekick learns how fast the phone is. A number/choice = the user's own override.
+  /** Voice for spoken answers: 'auto' = the Recommended one for this phone, chosen once. */
+  voiceChoice: VoiceChoice;
+  /** Camera frames remembered per second. */
+  fps: number | null;
+  /** Frames shown to the model for live questions and around a recalled moment. */
+  frameWindow: number | null;
+  /** Resolution of frames given to the model. */
+  imageDetail: ImageDetail | null;
+  /** Hours of rolling video kept (stills, text and vectors are kept longer). */
+  videoKeepHours: number | null;
+  /** Days of conversation audio kept for listening back (0 = forever). */
+  audioKeepDays: number | null;
+  /** Space always left free for the phone, in GB. */
+  storageReserveGB: number | null;
+  /** Off the record: uses memories, saves nothing. Never persisted (off after a restart). */
+  offTheRecord: boolean;
+  /** Better models: download and switch automatically, ask first, or never. */
+  modelUpdates: SmartDefault;
+  /** Large downloads on mobile data. */
+  mobileDataDownloads: 'ask' | 'auto' | 'off';
+  /** Measured silently in the background; refine the Recommended values (null = not yet). */
+  measuredTokPerSec: number | null;
+  measuredVoiceFirstSoundMs: number | null;
 };
+
+export type VoiceChoice = 'auto' | 'pocket' | 'system';
+export type ImageDetail = 'low' | 'medium' | 'high';
+/** The smart-defaults pattern: Automatic (Recommended) / Ask me / Off. */
+export type SmartDefault = 'auto' | 'ask' | 'off';
+
+/** Settings that only last while the app runs. */
+const NOT_SAVED = ['offTheRecord'] as const;
 
 export const DEFAULTS: Settings = {
   wakePhrase: DEFAULT_WAKE_PHRASE,
@@ -79,6 +113,18 @@ export const DEFAULTS: Settings = {
   webLookup: false,
   searxngUrl: '',
   newsFeeds: [],
+  voiceChoice: 'auto',
+  fps: null,
+  frameWindow: null,
+  imageDetail: null,
+  videoKeepHours: null,
+  audioKeepDays: null,
+  storageReserveGB: null,
+  offTheRecord: false,
+  modelUpdates: 'auto',
+  mobileDataDownloads: 'ask',
+  measuredTokPerSec: null,
+  measuredVoiceFirstSoundMs: null,
 };
 
 const KEY = 'settings.v1';
@@ -93,13 +139,16 @@ export function getSettings(): Settings {
   } catch {
     saved = {};
   }
+  for (const k of NOT_SAVED) delete saved[k];
   cache = { ...DEFAULTS, ...saved };
   return cache;
 }
 
 export function updateSettings(patch: Partial<Settings>): Settings {
   cache = { ...getSettings(), ...patch };
-  SidekickNative.kvSet(KEY, JSON.stringify(cache));
+  const toSave: Partial<Settings> = { ...cache };
+  for (const k of NOT_SAVED) delete toSave[k];
+  SidekickNative.kvSet(KEY, JSON.stringify(toSave));
   listeners.forEach((l) => l(cache!));
   return cache;
 }
@@ -107,4 +156,9 @@ export function updateSettings(patch: Partial<Settings>): Settings {
 export function onSettingsChange(l: (s: Settings) => void): () => void {
   listeners.add(l);
   return () => listeners.delete(l);
+}
+
+/** Test hook: forget the cached copy so the next read comes from storage. */
+export function resetSettingsCache() {
+  cache = null;
 }

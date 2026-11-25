@@ -2,7 +2,7 @@ import { Camera } from 'expo-camera';
 import { PermissionsAndroid, Platform } from 'react-native';
 
 import SidekickNative from '../../modules/sidekick-native';
-import { downloadFile, isDownloaded } from './downloads';
+import { downloadFile, isDownloaded, wifiOnlyDownloads } from './downloads';
 import { MODEL_FILES, OPTIONAL_SPEECH_FILES, SPEECH_FILES } from './models';
 import { modelsDir } from './paths';
 import { askLocationPermission, pushPauseRules } from './places';
@@ -96,7 +96,7 @@ export function fetchVoiceInBackground() {
   const missing = OPTIONAL_SPEECH_FILES.filter((f) => !isDownloaded(f));
   if (!missing.length) return;
   voiceFetch = (async () => {
-    for (const f of missing) await downloadFile(f, () => {}, true);
+    for (const f of missing) await downloadFile(f, () => {}, wifiOnlyDownloads());
   })().catch((e) => {
     console.log(`[voice] download failed: ${String(e)}`);
     voiceFetch = null;

@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+  <string name="sidekick_autosend_label">Sidekick: send for me</string>
+  <string name="sidekick_autosend_summary">Presses Send in WhatsApp after you approve a message in Sidekick.</string>
+  <string name="sidekick_autosend_description">When you approve a message in Sidekick, it opens WhatsApp with your text and presses Send for you. It only acts in WhatsApp, only for a few seconds after you tap Send in Sidekick, and only looks for the Send button. It never reads or keeps your chats.</string>
+</resources>

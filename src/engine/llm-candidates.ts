@@ -1,5 +1,14 @@
 import type { LlmCandidate } from '../../modules/sidekick-native';
+import {
+  type ActiveChat,
+  catalogModel,
+  DEFAULT_CHAT,
+  modelFilesFor,
+  tensorGeneration,
+} from './model-catalog';
 import { EMBEDDER_FILE, MODEL_FILES, type ModelFile, OCR_FILES, SPEECH_FILES } from './models';
+
+export { tensorGeneration };
 
 /** Gemma 4 E2B builds published by Google (litert-community/gemma-4-E2B-it-litert-lm). */
 export const GEMMA_GENERIC = MODEL_FILES.gemmaGeneric.name;
@@ -8,37 +17,58 @@ export const GEMMA_TENSOR: Record<string, string> = {
   G6: MODEL_FILES.gemmaTensorG6.name,
 };
 
-/** Returns the Tensor generation ("G5", "G6") for a Pixel SoC string, or null. */
-export function tensorGeneration(soc: string): string | null {
-  const m = /tensor\s*(g\d+)/i.exec(soc);
-  return m ? m[1].toUpperCase() : null;
+const FALLBACK: ActiveChat = { id: DEFAULT_CHAT, sha: MODEL_FILES.gemmaGeneric.sha256 };
+
+/** The chat model in use (model-updates.ts); Gemma 4 E2B where that can't be read (tests). */
+function currentChat(): ActiveChat {
+  try {
+    // Lazy: model-updates reads native storage, which plain unit tests don't have.
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    return (require('./model-updates') as typeof import('./model-updates')).activeChat();
+  } catch {
+    return FALLBACK;
+  }
+}
+
+function candidatesFor(id: ActiveChat['id'], soc: string, dir: string): LlmCandidate[] {
+  const m = catalogModel(id);
+  const out: LlmCandidate[] = [];
+  const gen = tensorGeneration(soc);
+  const t = gen ? m.tensor[gen] : undefined;
+  if (t) out.push({ modelPath: `${dir}/${t.name}`, backend: 'tensor' });
+  out.push({ modelPath: `${dir}/${m.generic.name}`, backend: 'gpu' });
+  out.push({ modelPath: `${dir}/${m.generic.name}`, backend: 'cpu' });
+  return out;
 }
 
 /**
  * Ways to run the model on this phone, fastest first. The native side tries each in order and
- * keeps the first that loads, so unsupported hardware falls back without user action.
+ * keeps the first that loads, so unsupported hardware falls back without user action. Right
+ * after a model switch the previous model follows as the fallback.
  */
-export function llmCandidates(soc: string, modelsDir: string): LlmCandidate[] {
+export function llmCandidates(
+  soc: string,
+  modelsDir: string,
+  chat: ActiveChat = currentChat(),
+): LlmCandidate[] {
   const dir = modelsDir.replace(/\/$/, '');
-  const out: LlmCandidate[] = [];
-  const gen = tensorGeneration(soc);
-  if (gen && GEMMA_TENSOR[gen]) {
-    out.push({ modelPath: `${dir}/${GEMMA_TENSOR[gen]}`, backend: 'tensor' });
-  }
-  out.push({ modelPath: `${dir}/${GEMMA_GENERIC}`, backend: 'gpu' });
-  out.push({ modelPath: `${dir}/${GEMMA_GENERIC}`, backend: 'cpu' });
+  const out = candidatesFor(chat.id, soc, dir);
+  if (chat.previous && chat.previous !== chat.id)
+    out.push(...candidatesFor(chat.previous, soc, dir));
   return out;
 }
 
-/** Model files this phone needs: the AI-chip build on Pixels that have one, plus the generic one. */
-export function requiredModelFiles(soc: string): ModelFile[] {
-  const gen = tensorGeneration(soc);
-  const tensor =
-    gen === 'G5' ? MODEL_FILES.gemmaTensorG5 : gen === 'G6' ? MODEL_FILES.gemmaTensorG6 : null;
-  return tensor ? [tensor, MODEL_FILES.gemmaGeneric] : [MODEL_FILES.gemmaGeneric];
+/** Chat-model files this phone needs: the AI-chip build on Pixels that have one, plus the generic. */
+export function requiredModelFiles(soc: string, chat: ActiveChat = currentChat()): ModelFile[] {
+  return modelFilesFor(chat.id, soc);
 }
 
 /** Everything the app downloads on first run: chat model, speech, memory search, photo text. */
-export function allRequiredFiles(soc: string): ModelFile[] {
-  return [...requiredModelFiles(soc), ...SPEECH_FILES, EMBEDDER_FILE, ...Object.values(OCR_FILES)];
+export function allRequiredFiles(soc: string, chat: ActiveChat = currentChat()): ModelFile[] {
+  return [
+    ...requiredModelFiles(soc, chat),
+    ...SPEECH_FILES,
+    EMBEDDER_FILE,
+    ...Object.values(OCR_FILES),
+  ];
 }

@@ -27,10 +27,7 @@
       "predictiveBackGestureEnabled": false,
       "package": "app.ondevice.sidekick",
       "allowBackup": false,
-      "blockedPermissions": [
-        "android.permission.WRITE_CONTACTS",
-        "android.permission.WRITE_CALENDAR"
-      ],
+      "blockedPermissions": ["android.permission.WRITE_CONTACTS"],
       "permissions": ["android.permission.SCHEDULE_EXACT_ALARM"]
     },
     "web": {
@@ -69,11 +66,20 @@
       [
         "expo-calendar",
         {
-          "calendarPermission": "Sidekick reads your calendar so it can answer questions like \"when is my dentist\". Events stay on this phone."
+          "calendarPermission": "Sidekick reads your calendar to answer questions like \"when is my dentist\", and adds events only after you tap Add. Events stay on this phone."
         }
       ],
-      ["expo-notifications", { "enableRemoteNotifications": false }],
-      "./plugins/without-firebase-messaging"
+      [
+        "expo-notifications",
+        {
+          "enableRemoteNotifications": false
+        }
+      ],
+      "./plugins/without-firebase-messaging",
+      "./plugins/with-flavours",
+      "./plugins/with-usb-camera",
+      "expo-video",
+      "expo-audio"
     ],
     "scheme": "sidekick",
     "experiments": {
@@ -84,6 +90,9 @@
         "asyncRoutes": {
           "web": true
         }
+      },
+      "google": {
+        "androidClientId": ""
       },
       "eas": {
         "projectId": "9e5e57c2-26e2-4ca4-9191-3606924369f5"

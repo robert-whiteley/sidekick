@@ -1,6 +1,14 @@
 import { NativeModule, requireNativeModule } from 'expo';
 
 import type {
+  CameraConfig,
+  CameraStatus,
+  CameraStorage,
+  DeviceState,
+  FrameRef,
+  VideoSlice,
+  AudioDevices,
+  SplitAudioProbe,
   DeviceInfo,
   DeviceLocation,
   DownloadStatus,
@@ -10,6 +18,7 @@ import type {
   LlmStats,
   LlmTuning,
   SidekickNativeModuleEvents,
+  VoiceInfo,
 } from './SidekickNative.types';
 
 declare class SidekickNativeModule extends NativeModule<SidekickNativeModuleEvents> {
@@ -41,6 +50,11 @@ declare class SidekickNativeModule extends NativeModule<SidekickNativeModuleEven
   readText(path: string): string | null;
   copyFile(src: string, dst: string): boolean;
   deleteFile(path: string): boolean;
+  /**
+   * Android: wipes all app data (files, databases, settings, models) like an uninstall, then the
+   * system closes the app. False if the system refused.
+   */
+  wipeAllData?(): boolean;
   exportZip(json: string, files: string[], destPath: string): Promise<string>;
   readBase64(path: string): string | null;
   /** Unpacks a verified .tar.bz2 into destDir and deletes the archive. */
@@ -53,6 +67,8 @@ declare class SidekickNativeModule extends NativeModule<SidekickNativeModuleEven
   listenPauseRules(json: string): void;
   /** Why listening is auto-paused right now, or null. */
   listenPauseReason(): string | null;
+  /** Saves each kept speech line's audio (Opus) when on; Off the record turns it off. */
+  audioSaveEnabled(on: boolean): void;
   listenConfigure(
     wakeKeywords: string,
     wakePhrase: string,
@@ -83,6 +99,10 @@ declare class SidekickNativeModule extends NativeModule<SidekickNativeModuleEven
   voiceStop(): void;
   /** Android: which voice is in use: "pocket" or "system". */
   voiceEngine(): 'pocket' | 'system';
+  /** Android: the voice decided for this phone, its measured speed and the owner's override. */
+  voiceInfo(): VoiceInfo;
+  /** Android: the owner's voice setting ("auto" = recommended: decided once by speed). */
+  voiceSetChoice(choice: 'auto' | 'pocket' | 'system'): void;
   /** Stops processing mic audio (e.g. while Sidekick is speaking). */
   setMicPaused(paused: boolean): void;
   pttStart(): void;
@@ -150,6 +170,49 @@ declare class SidekickNativeModule extends NativeModule<SidekickNativeModuleEven
   notificationsSetCapture(enabled: boolean): void;
   /** Android: notifications kept since the last call (JSON lines), cleared on read. */
   notificationsDrain(): string[];
+  /**
+   * Android: live camera memory on (needs the camera permission; call while the app is visible).
+   * Runs in the listening service; frames are embedded natively and appear in cameraFramesDrain().
+   */
+  cameraStart(config?: CameraConfig): boolean;
+  /** New settings for the running camera (restarts it briefly) or the next start. */
+  cameraConfigure(config?: CameraConfig): void;
+  cameraStop(): void;
+  cameraStatus(): CameraStatus;
+  /** Hold (true) frame embedding while answering; frames are still saved and embedded after. */
+  cameraHold(hold: boolean): void;
+  /** Embedded keyframes since the last call (JSON lines, see FrameJournalEntry), cleared on read. */
+  cameraFramesDrain(max?: number | null): string[];
+  /** The newest [n] frames, oldest first (live while the camera runs, else recent keyframes). */
+  cameraLatestFrames(n: number): FrameRef[];
+  /** Finished video files overlapping the window, each with where to start and how long. */
+  cameraVideoBetween(fromMs: number, toMs: number): Promise<VideoSlice[]>;
+  /** Up to [n] keyframes [spacingMs] apart around [atMs], oldest first. */
+  cameraFramesAround(atMs: number, n: number, spacingMs: number): Promise<FrameRef[]>;
+  /** Camera storage per kind, plus free / total / reserve bytes. */
+  cameraStorageUsage(): Promise<CameraStorage>;
+  /** Heat, battery and memory right now. */
+  deviceState(): DeviceState;
+  /** Android: connected USB (UVC) cameras. */
+  usbCameraList(): { name: string; permission: boolean }[];
+  /** Android: use the first USB camera (asks permission; needs CAMERA granted). False if none. */
+  usbCameraOpen(width: number, height: number, fps: number): boolean;
+  /** Android: back to the phone camera, and don't reopen the USB camera on plug-in. */
+  usbCameraUsePhone(): void;
+  /** Android: the USB camera mode in use, or null. */
+  usbCameraMode(): { width: number; height: number; fps: number; mjpeg: boolean } | null;
+  /** Android: audio inputs/outputs and which are in use. */
+  audioDevices(): AudioDevices;
+  /** Android: headphones (wired / Bluetooth / USB headset) are connected. */
+  headphonesOn(): boolean;
+  /** Android: pin an input/output by key (null = recommended). */
+  audioSetOverride(input: string | null, output: string | null): void;
+  /** Android: a button-press ask started/ended (allows the Bluetooth headset mic meanwhile). */
+  audioSetAsking(on: boolean): void;
+  /** Android: can two mics record at once (headset + USB camera)? Run with Listen off. */
+  audioProbeSplit(): Promise<SplitAudioProbe>;
+  /** Android: receive the headset / Bluetooth button (walk mode). */
+  mediaButtonsEnable(on: boolean): void;
 }
 
 export default requireNativeModule<SidekickNativeModule>('SidekickNative');

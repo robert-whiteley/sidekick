@@ -27,8 +27,16 @@ export const MODEL_FILES = {
   gemmaTensorG6: {
     name: 'gemma-4-E2B-it_Google_Tensor_G6.litertlm',
     url: `${HF}/gemma-4-E2B-it_Google_Tensor_G6.litertlm`,
-    sha256: '181938105e0eefd105961417e8da75903eacda102c4fce9ce90f50b97139a63c',
-    bytes: 2588147712,
+    // Checked against the Hugging Face file list, 25 Nov 2026.
+    sha256: 'd6cbe8d625f4965a8c32565f65ae774d19598d0d967a4c2101a7e04988daaf58',
+    bytes: 3453960202,
+  },
+  // Gemma 4 E4B (Apache-2.0): smarter, slower; Recommended on phones with 12 GB+ RAM.
+  gemmaE4B: {
+    name: 'gemma-4-E4B-it.litertlm',
+    url: 'https://huggingface.co/litert-community/gemma-4-E4B-it-litert-lm/resolve/main/gemma-4-E4B-it.litertlm',
+    sha256: '0b2a8980ce155fd97673d8e820b4d29d9c7d99b8fa6806f425d969b145bd52e0',
+    bytes: 3659530240,
   },
   benchPhoto: {
     name: 'test.jpg',

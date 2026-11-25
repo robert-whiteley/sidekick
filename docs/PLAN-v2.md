@@ -55,6 +55,10 @@ with size and speed; new models update automatically unless "Ask before updating
 Uninstall: models (app-specific external files) and all data (app internal storage) are
 deleted by Android on uninstall; only files the user saved/exported to shared folders stay.
 Settings → Privacy → Delete all data does the same from inside the app.
+Checked 25 Nov 2026: every file is app-private (filesDir/data, databases, shared prefs,
+Android/data/<app>/files/models), allowBackup is off; Delete all data uses the system's
+clearApplicationUserData (identical to uninstall). A new Recommended model arrives with an app
+update (the catalog ships in the app; nothing is looked up online).
 
 Distribution: both, one codebase, two flavours.
 
@@ -84,8 +88,14 @@ AGENTS.md, ADRs). Minimal hooks only (see AGENTS.md).
 
 Owner steps needed later (not blocking the build):
 
-- Google Play developer account (one-time fee) — owner pays.
-- Google Cloud OAuth client for Gmail sending — owner's Google account.
+- Google Play developer account — owner already has one (other apps).
+- Google Cloud OAuth client for Gmail sending — owner's Google account, once, as publisher (free).
+  Users only see Google's normal sign-in popup when they turn Email on. Public release needs
+  Google's free OAuth app verification for the gmail.send scope (privacy policy + demo video).
+- No sign-in or setup on first open. The intro page says the app and AI run on the phone, not
+  in the cloud, and that it can connect to phone apps (calendar, contacts, messages…) and a few
+  optional online services (web lookup, Gmail, model downloads); each permission is asked the
+  first time that feature is used, not in one batch.
 - Plug in the USB camera for the device tests.
 
 ## Chat

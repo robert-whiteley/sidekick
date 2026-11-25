@@ -72,6 +72,17 @@ object NotificationCapture {
 }
 
 class SidekickNotificationListener : NotificationListenerService() {
+  // Live reads for the integrations (messages, replies, media): engine/integrations/NotificationHub.
+  override fun onListenerConnected() {
+    dev.sidekick.engine.integrations.NotificationHub.listener = this
+  }
+
+  override fun onListenerDisconnected() {
+    if (dev.sidekick.engine.integrations.NotificationHub.listener === this) {
+      dev.sidekick.engine.integrations.NotificationHub.listener = null
+    }
+  }
+
   override fun onNotificationPosted(sbn: StatusBarNotification?) {
     sbn ?: return
     val ctx = applicationContext

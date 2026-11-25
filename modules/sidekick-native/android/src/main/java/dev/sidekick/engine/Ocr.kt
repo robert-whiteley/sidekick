@@ -68,6 +68,18 @@ object Ocr {
       scheduleIdleUnload()
     }
 
+  /**
+   * Cheap check for live camera frames: runs only text detection (no recognition) and says whether
+   * at least [minBoxes] text areas are in view (a sign, a number plate). [img] is not recycled.
+   */
+  @Synchronized
+  fun hasText(detPath: String, recPath: String, dictPath: String, img: Bitmap, minBoxes: Int = 1): Boolean =
+    try {
+      detect(load(detPath, recPath, dictPath).det, img).size >= minBoxes
+    } finally {
+      scheduleIdleUnload()
+    }
+
   /** Called with the lock held, after each read. */
   private fun scheduleIdleUnload() {
     val token = idle.used()

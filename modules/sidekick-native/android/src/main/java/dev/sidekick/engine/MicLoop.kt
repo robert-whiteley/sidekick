@@ -184,6 +184,7 @@ object MicLoop {
       if (conversation && AcousticEchoCanceler.isAvailable()) {
         runCatching { AcousticEchoCanceler.create(rec.audioSessionId)?.apply { enabled = true } }.getOrNull()
       } else null
+    dev.sidekick.engine.usb.AudioRoutes.applyInput(rec) // best connected mic (USB > headset > phone)
     rec.startRecording()
     return rec to aec
   }
@@ -430,7 +431,11 @@ object MicLoop {
           .put("owner", isQuestion)
           .put("voice", voice?.let { v -> JSONArray().apply { v.forEach { put(it.toDouble()) } } })
       Places.tag(entry)
-      if (isQuestion || (recordAmbient && ambient)) Journal.append(ctx, entry)
+      if (isQuestion || (recordAmbient && ambient)) {
+        // The line's audio, for playback (off the record: not saved).
+        SpeechAudio.save(ctx, audio, atMs)?.let { entry.put("audioPath", it) }
+        Journal.append(ctx, entry)
+      }
       emit("onTranscript", mapOf("kind" to entry.getString("kind"), "text" to text, "at" to atMs.toDouble()))
       if (isQuestion) {
         if (jsAnswers && listener != null) emit("onQuestion", mapOf("text" to text, "followUp" to followUp))

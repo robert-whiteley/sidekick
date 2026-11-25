@@ -16,6 +16,8 @@ jest.mock('../modules/sidekick-native', () => ({
     voiceSay: jest.fn(),
     voiceEnd: jest.fn(),
     voiceStop: jest.fn(),
+    voiceSetChoice: jest.fn(),
+    kvGet: jest.fn(() => null),
   },
 }));
 
@@ -84,4 +86,17 @@ test('a reply that replaces the first one is spoken from its start', () => {
   sp.update('I do not know that. ');
   sp.update('The fund changed in 2021. It moved ');
   expect(mockSpoken).toEqual(['I do not know that.', 'The fund changed in 2021.']);
+});
+
+test('the voice setting reaches the native voice once, before an answer', () => {
+  const os = Platform.OS;
+  Platform.OS = 'android';
+  try {
+    new StreamingSpeaker(true);
+    new StreamingSpeaker(true);
+    expect(SidekickNative.voiceSetChoice).toHaveBeenCalledTimes(1);
+    expect(SidekickNative.voiceSetChoice).toHaveBeenCalledWith('auto');
+  } finally {
+    Platform.OS = os;
+  }
 });

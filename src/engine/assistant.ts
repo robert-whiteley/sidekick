@@ -1,5 +1,28 @@
-import { askLlm } from './llm';
+import { recallContext } from '@/memory/recall';
+import SidekickNative from '../../modules/sidekick-native';
+import {
+  askLlm,
+  askLlmInBackground,
+  backgroundPreemptions,
+  llmLoadCount,
+  prepareChat,
+  setChatSystemSource,
+} from './llm';
+import {
+  chatSystem,
+  compact,
+  type CompactReason,
+  Conversation,
+  historyBudgetTokens,
+  IDLE_COMPACT_MS,
+  SUMMARY_MAX_TOKENS,
+  SUMMARY_SYSTEM,
+} from './conversation';
+import { getSettings } from './settings';
+import { clearChatState, loadChatState, saveChatState } from '@/memory/chat-state';
 import { SYSTEM_PROMPT } from './prompts';
+import { keptFile } from '@/memory/media-files';
+import { speechClipFor } from './speech-clip';
 import type { Moment } from '@/memory/store';
 import { MEMORY_LIMIT, memoryContext, pickFacts } from './prompt-budget';
 import {
@@ -41,6 +64,8 @@ export type AnswerResult = {
   webQuery?: string;
   /** Answered here without the model (a saved fact, reminder or contact); no web link. */
   local?: boolean;
+  /** Stored moments the answer is about (video clip or still), shown in the chat player. */
+  media?: { momentAt: number; kind: 'video' | 'photo' | 'audio'; path?: string }[];
 };
 
 /**
@@ -48,17 +73,102 @@ export type AnswerResult = {
  * original photo of a remembered moment when the question is about something seen.
  */
 
-/** The last question asked, for a spoken follow-up's search words. */
+/** The last question asked, for a follow-up's search words. */
 let lastQuestion: string | undefined;
+
+let chat: Conversation | null = null;
+/** The model load the current chat was started under (another load means it is gone). */
+let chatLoad = -1;
+/** The "Off the record" chat has been started (the model keeps its turns until it is left). */
+let offRecordStarted = false;
+let idleTimer: ReturnType<typeof setTimeout> | null = null;
+
+function chatBudget(): number {
+  const own = (getSettings() as { chatMemoryTokens?: number | null }).chatMemoryTokens;
+  if (own) return own;
+  try {
+    return historyBudgetTokens(SidekickNative.getDeviceInfo().totalRamMb);
+  } catch {
+    return historyBudgetTokens(0);
+  }
+}
+
+/** The one continuous conversation (loaded from the phone on first use). */
+export function conversation(): Conversation {
+  if (!chat) {
+    chat = new Conversation(loadChatState(), chatBudget());
+    prepareChat(chatSystem(SYSTEM_PROMPT, chat.state));
+  }
+  return chat;
+}
+
+setChatSystemSource(() => chatSystem(SYSTEM_PROMPT, conversation().state));
+
+/** The running summary and recent turns (for a "what we talked about" view). */
+export const chatState = () => conversation().state;
+
+/** Summarises the older turns into the running summary, in the background. */
+export function compactChat(reason: CompactReason) {
+  const c = conversation();
+  console.log(
+    `[chat] compacting (${reason}): ${c.older().length} turns, ~${c.usedTokens()} tokens`,
+  );
+  void compact(
+    c,
+    {
+      summarise: (prompt) =>
+        askLlmInBackground(prompt, null, {
+          system: SUMMARY_SYSTEM,
+          maxTokens: SUMMARY_MAX_TOKENS,
+        }).then((r) => r.text),
+      preemptions: backgroundPreemptions,
+      save: saveChatState,
+      prepare: prepareChat,
+    },
+    SYSTEM_PROMPT,
+  );
+}
+
+function scheduleIdleCompaction() {
+  if (idleTimer) clearTimeout(idleTimer);
+  idleTimer = setTimeout(() => {
+    idleTimer = null;
+    if (conversation().compactReason(Date.now()) === 'idle') compactChat('idle');
+  }, IDLE_COMPACT_MS + 1000);
+}
+
+/** Leaving Off the record: the next question is back in the main chat (its own chat is closed then). */
+export function leaveOffTheRecord() {
+  offRecordStarted = false;
+}
+
+/** Delete all data: the conversation, its summary and the model's chat are forgotten. */
+export function forgetConversation() {
+  conversation().reset();
+  clearChatState();
+  prepareChat(SYSTEM_PROMPT);
+  lastQuestion = undefined;
+}
 
 export async function answer(
   question: string,
   photoNow: string | null,
   onText: (full: string) => void,
-  /** keepHistory: a follow-up in a spoken conversation; the model keeps the earlier turns. */
-  opts?: { keepHistory?: boolean },
+  /**
+   * The chat is always continuous (keepHistory is ignored, kept for older callers). offTheRecord:
+   * uses memories but saves nothing, in its own chat (default: the Off the record setting).
+   */
+  opts?: { keepHistory?: boolean; offTheRecord?: boolean },
 ): Promise<AnswerResult> {
+  const offRecord = opts?.offTheRecord ?? getSettings().offTheRecord ?? false;
+  if (!offRecord) offRecordStarted = false;
   const remember = REMEMBER.exec(question.trim());
+  if (remember && offRecord && !photoNow && !question.trim().endsWith('?')) {
+    const text =
+      "You're off the record, so I won't keep that. Leave Off the record and say it again.";
+    onText(text);
+    return { text, usedPhoto: null, sources: [], ms: 0, ttftMs: 0, local: true };
+  }
   if (remember && !photoNow && !question.trim().endsWith('?')) {
     await saveFact(remember[2].replace(/[.!]+$/, ''));
     const text = "Got it, I'll remember that.";
@@ -106,7 +216,7 @@ export async function answer(
 
   let image = photoNow;
   if (!image && asksAboutSomethingSeen(question)) {
-    image = sources.find((m) => m.photoPath)?.photoPath ?? null;
+    image = sources.map((m) => keptFile(m.photoPath)).find((p) => p !== null) ?? null;
   }
 
   // Only the best few notes reach the model: each prompt token delays the first word.
@@ -120,26 +230,60 @@ export async function answer(
   const person = await personPromptContext(question).catch(() => '');
   // The photo's exact text (OCR, ~1 s) helps the model read numbers and names right.
   const seenText = ocrPromptLine(await photoTextOrNull(image));
+  // What the camera saw (live frames, clips): empty unless the question is about it.
+  const recall = photoNow ? null : await recallContext(question).catch(() => null);
+  if (!image && recall?.images.length) image = recall.images[0];
+  const recallPart = recall?.promptPart ?? '';
+  const conv = conversation();
+  if (conv.keepHistory() && chatLoad !== llmLoadCount()) conv.restart(); // the model was reloaded
+  const idleBefore = conv.compactReason(Date.now()) === 'idle';
+  // The model's chat continues; a fresh one (first question, after a restart or a compaction)
+  // starts from the running summary and the last turns.
+  const system = chatSystem(SYSTEM_PROMPT, conv.state);
+  let keep = offRecord ? offRecordStarted : conv.keepHistory();
+  let promptChars = 0;
+  const recent = conv.idleFor(Date.now()) < IDLE_COMPACT_MS;
   // Online lookup (when on) sends only the question text; the prompt itself stays on the phone.
   const { text, stats, web, webQuery } = await askWithLookup(
     question,
     !!image,
     (webPart) =>
-      `${agenda}${person}${webPart}${memoryContext(sources, facts, sources.length, question)}${seenText}Question: ${question}`,
-    (prompt, t, o) =>
-      askLlm(prompt, image, t, {
-        system: SYSTEM_PROMPT,
-        keepHistory: opts?.keepHistory ?? false,
+      `${agenda}${person}${webPart}${memoryContext(sources, facts, sources.length, question)}${seenText}${recallPart}Question: ${question}`,
+    async (prompt, t, o) => {
+      const r = await askLlm(prompt, image, t, {
+        system,
+        keepHistory: keep,
         undoable: o?.undoable,
-      }),
+        offRecord,
+      });
+      // A second pass (after an online lookup) continues the same chat.
+      if (!keep) {
+        if (offRecord) offRecordStarted = true;
+        else {
+          conv.started(system.length);
+          chatLoad = llmLoadCount();
+        }
+        keep = true;
+      }
+      promptChars += prompt.length;
+      return r;
+    },
     onText,
     undefined,
-    opts?.keepHistory ? lastQuestion : undefined,
+    recent ? lastQuestion : undefined,
   );
   lastQuestion = question;
 
-  if (photoNow) await rememberPhotoQuestion(photoNow, question, text).catch(() => {});
-  else await rememberExchange(question, text).catch(() => {});
+  // Off the record: nothing is kept, and the main conversation never hears of it.
+  if (!offRecord) {
+    conv.record(question, text, promptChars, Date.now());
+    saveChatState(conv.state);
+    const reason = idleBefore ? 'idle' : conv.compactReason(Date.now(), question);
+    if (reason) compactChat(reason);
+    scheduleIdleCompaction();
+    if (photoNow) await rememberPhotoQuestion(photoNow, question, text).catch(() => {});
+    else await rememberExchange(question, text).catch(() => {});
+  }
 
   return {
     text,
@@ -149,5 +293,8 @@ export async function answer(
     ttftMs: stats.ttftMs,
     web,
     webQuery,
+    media: recall?.media
+      ? [{ momentAt: recall.media.at, kind: recall.media.kind, path: recall.media.path }]
+      : speechClipFor(question, sources),
   };
 }

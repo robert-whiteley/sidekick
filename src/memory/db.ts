@@ -189,6 +189,8 @@ export const MIGRATIONS: { table: string; column: string; ddl: string; after?: s
     column: 'description',
     ddl: 'ALTER TABLE speakers ADD COLUMN description TEXT',
   },
+  // The saved audio of a speech line (Opus), played back from the chat and Memory.
+  { table: 'moments', column: 'audio_path', ddl: 'ALTER TABLE moments ADD COLUMN audio_path TEXT' },
 ];
 
 function migrate(d: DB) {

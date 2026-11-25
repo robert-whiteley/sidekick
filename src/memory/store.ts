@@ -57,6 +57,8 @@ export type Moment = {
   withPeople?: string[];
   /** Offline place name ("Leeds, GB") when location was on. */
   place: string | null;
+  /** The line's saved audio (speech), while it is kept. */
+  audioPath?: string | null;
 };
 
 type Row = Record<string, unknown>;
@@ -70,6 +72,7 @@ const toMoment = (r: Row): Moment => ({
   isOwner: r.is_owner === 1,
   photoPath: (r.photo_path as string | null) ?? null,
   place: (r.place as string | null) ?? null,
+  audioPath: (r.audio_path as string | null) ?? null,
 });
 
 /** Stores where a moment happened (coordinates + offline place name). */
@@ -240,6 +243,8 @@ async function ingestJournalNow(): Promise<number> {
         }
       }
       if (!keepOtherSpeech({ consentMode, speakerConsented: consented })) {
+        // Not kept: nor is their voice recording.
+        if (e.audioPath) SidekickNative.deleteFile(e.audioPath);
         if (!s && e.voice) pendingClips.push({ at: e.at, voice: e.voice, momentId: null });
         liveTranscript.put({
           at: e.at,
@@ -252,8 +257,8 @@ async function ingestJournalNow(): Promise<number> {
       }
     }
     const ins = await db.execute(
-      'INSERT INTO moments (kind, at, text, speaker_id) VALUES (?, ?, ?, ?)',
-      [e.kind, e.at, e.text, s?.id ?? null],
+      'INSERT INTO moments (kind, at, text, speaker_id, audio_path) VALUES (?, ?, ?, ?, ?)',
+      [e.kind, e.at, e.text, s?.id ?? null, e.audioPath ?? null],
     );
     await tagPlace(ins.insertId!, entryPlace(e));
     if (!s && !isOwner && e.voice)
@@ -549,7 +554,7 @@ export async function nextUndescribedPhoto(): Promise<{ id: number; photoPath: s
   const r = await db.execute(
     `SELECT m.id, m.photo_path FROM moments m
      LEFT JOIN photo_descriptions d ON d.moment_id = m.id
-     WHERE m.photo_path IS NOT NULL AND d.moment_id IS NULL AND m.photo_ocr != ${OCR_FOUND}
+     WHERE m.photo_path IS NOT NULL AND m.kind != 'frame' AND d.moment_id IS NULL AND m.photo_ocr != ${OCR_FOUND}
      ORDER BY m.at DESC LIMIT 1`,
   );
   const row = r.rows[0];
@@ -861,13 +866,17 @@ export async function nameSpeaker(id: number, name: string) {
 
 // --- Deleting ---
 
+/** The photo and audio files of the moments being deleted go with them. */
 async function deletePhotos(where: string, params: (number | string)[]) {
   const db = await getDb();
   const r = await db.execute(
-    `SELECT photo_path FROM moments WHERE photo_path IS NOT NULL AND ${where}`,
+    `SELECT photo_path, audio_path FROM moments WHERE (photo_path IS NOT NULL OR audio_path IS NOT NULL) AND ${where}`,
     params,
   );
-  r.rows.forEach((x) => SidekickNative.deleteFile(x.photo_path as string));
+  for (const x of r.rows) {
+    if (x.photo_path) SidekickNative.deleteFile(x.photo_path as string);
+    if (x.audio_path) SidekickNative.deleteFile(x.audio_path as string);
+  }
 }
 
 async function deleteMoments(where: string, params: (number | string)[]) {
