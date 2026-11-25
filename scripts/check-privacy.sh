@@ -56,5 +56,5 @@ if [ -n "$text" ]; then
   fi
 fi
 
-[ "$fail" -eq 0 ] && echo "✓ privacy check passed"
+
 exit "$fail"
