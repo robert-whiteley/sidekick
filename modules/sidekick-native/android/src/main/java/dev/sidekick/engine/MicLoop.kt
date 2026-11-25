@@ -230,6 +230,9 @@ object MicLoop {
     val startedAt = System.currentTimeMillis()
     // Wall time of the VAD's sample 0 (moved on each reset).
     var vadEpochMs = startedAt
+    // Absolute index (in [heard]) of the VAD's sample 0, and where the last line ended.
+    var vadBase = 0L
+    var lastLineEnd = 0L
     var pauseCheckedAt = 0L
     try {
       while (running) {
@@ -309,6 +312,7 @@ object MicLoop {
             if (reason != null) {
               vad?.reset()
               vadEpochMs = nowMs
+              vadBase = heard.total
             }
             runCatching { onPauseChange?.invoke(reason) }
             emit("onListenPause", mapOf("reason" to reason))
@@ -362,8 +366,13 @@ object MicLoop {
         while (!vad.empty()) {
           val seg = vad.front()
           vad.pop()
-          val atMs = vadEpochMs + (seg.start * 1000 / SAMPLE_RATE)
-          val audio = seg.samples
+          // The line with a little audio from just before Silero noticed it (its first word).
+          val segStart = vadBase + seg.start
+          val from = PreRoll.start(segStart, lastLineEnd, PreRoll.MS * SAMPLE_RATE / 1000)
+          val before = heard.range(from, segStart)
+          lastLineEnd = segStart + seg.samples.size
+          val audio = if (before.isEmpty()) seg.samples else before + seg.samples
+          val atMs = vadEpochMs + ((seg.start - before.size) * 1000 / SAMPLE_RATE)
           // Ended while Sidekick was still talking and never confirmed as barge-in: its own echo.
           if (talking && !bargedIn) continue
           worker.execute { handleSegment(ctx, engine, audio, atMs) }
@@ -372,6 +381,7 @@ object MicLoop {
           // Flushing leaves Silero mid-speech; start it afresh so the pause isn't a second segment.
           vad.reset()
           vadEpochMs = System.currentTimeMillis()
+          vadBase = heard.total
           turnEnd.reset()
         }
       }

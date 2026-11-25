@@ -191,6 +191,8 @@ export const MIGRATIONS: { table: string; column: string; ddl: string; after?: s
   },
   // The saved audio of a speech line (Opus), played back from the chat and Memory.
   { table: 'moments', column: 'audio_path', ddl: 'ALTER TABLE moments ADD COLUMN audio_path TEXT' },
+  // Recurring reminders ("every Monday at 9"): repeat-logic.ts rule, null = once.
+  { table: 'followups', column: 'repeat', ddl: 'ALTER TABLE followups ADD COLUMN repeat TEXT' },
 ];
 
 function migrate(d: DB) {

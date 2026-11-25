@@ -96,3 +96,20 @@ export async function findEvent(
     location: hit.location ?? '',
   };
 }
+
+/** Events between [from] and [to] (the daily briefing). Empty without calendar access; never asks. */
+export async function eventsBetween(
+  from: number,
+  to: number,
+): Promise<{ title: string; start: number; allDay: boolean }[]> {
+  if (!(await calendarAllowed(false))) return [];
+  const Calendar = await api();
+  const cals = await Calendar.getCalendars(Calendar.EntityTypes.EVENT);
+  if (!cals.length) return [];
+  const events = await Calendar.listEvents(cals, new Date(from), new Date(to));
+  return events.map((e) => ({
+    title: e.title ?? 'Event',
+    start: new Date(e.startDate).getTime(),
+    allDay: !!e.allDay,
+  }));
+}

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 
 import { readDeviceProfile } from '@/engine/device-profile';
+import type { ReadIncomingMode } from '@/engine/hands-free-logic';
 import { INTEGRATIONS } from '@/integrations/registry';
 import { Page } from '@/features/settings/Page';
 import { SourcesSection } from '@/features/settings/SourcesSection';
@@ -25,6 +26,20 @@ export default function ConnectionsSettings() {
           value={settings.actionSend === 'countdown' ? null : settings.actionSend}
           recommended="countdown"
           onChange={(v) => set({ actionSend: v ?? 'countdown' })}
+        />
+        <ChoiceRow<ReadIncomingMode>
+          label="Read new messages aloud"
+          hint={
+            'Reads new messages as they arrive; say "reply …" to answer. Needs Notification access.'
+          }
+          options={[
+            { value: 'off', label: 'Off' },
+            { value: 'headphones', label: 'With headphones or in the car' },
+            { value: 'always', label: 'Always' },
+          ]}
+          value={settings.readIncoming}
+          recommended="off"
+          onChange={(v) => set({ readIncoming: v })}
         />
       </Section>
       <Section title="Apps Sidekick can use">

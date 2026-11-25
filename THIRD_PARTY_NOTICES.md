@@ -57,6 +57,7 @@ Every model and library shipped with or downloaded by Sidekick, with its licence
 | expo-network (online lookup: connection state)                                                                                | MIT                                                                     |
 | expo-video, expo-media-library (moment player: play, save to a folder)                                                        | MIT                                                                     |
 | expo-audio (playing saved speech clips)                                                                                       | MIT                                                                     |
+| expo-haptics (tick on send, cancel, listen)                                                                                   | MIT                                                                     |
 | expo-contacts, expo-file-system, expo-calendar (data sources, phone actions)                                                  | MIT                                                                     |
 | UVCAndroid (USB cameras; Java parts from saki4510t/UVCCamera)                                                                 | Apache-2.0                                                              |
 | libuvc (inside UVCAndroid)                                                                                                    | BSD-3-Clause                                                            |

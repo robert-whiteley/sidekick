@@ -165,3 +165,31 @@ export function briefingText(
   if (digest) parts.push(digest);
   return parts.length ? parts.join(' ') : null;
 }
+
+/** Lines kept for a summary prompt: spread over the window, each cut short. */
+export const SUMMARY_MAX_LINES = 120;
+
+export function summaryPrompt(
+  w: TimeWindow,
+  lines: { at: number; who: string; text: string }[],
+): string | null {
+  if (!lines.length) return null;
+  const step = Math.max(1, lines.length / SUMMARY_MAX_LINES);
+  const picked: typeof lines = [];
+  for (let i = 0; i < lines.length && picked.length < SUMMARY_MAX_LINES; i += step)
+    picked.push(lines[Math.floor(i)]);
+  const multiDay = w.to - w.from > 86_400_000 + 3_600_000;
+  const stamp = (at: number) =>
+    new Date(at).toLocaleString(undefined, {
+      ...(multiDay ? { weekday: 'short' } : {}),
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+  const body = picked
+    .map((l) => `[${stamp(l.at)}] ${l.who}: ${l.text.replace(/\s+/g, ' ').slice(0, 200)}`)
+    .join('\n');
+  return `These are my conversations ${w.label} (oldest first; "Me" is me, "Q/A" are my questions to you):
+${body}
+
+Summarise what we talked about ${w.label} in a few short points: topics, decisions and anything I said I would do. Plain words, no preamble.`;
+}

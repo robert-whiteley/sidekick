@@ -25,7 +25,6 @@ const phone = (p: Partial<DeviceProfile>): DeviceProfile => ({
   freeStorageBytes: 60 * GB,
   usbHost: true,
   thermalApi: true,
-  flavour: 'play',
   measuredTokPerSec: null,
   measuredVoiceFirstSoundMs: null,
   ...p,
@@ -83,7 +82,6 @@ test('phone features say why something is unavailable', () => {
   expect(usb.why).toMatch(/iPhone/);
   const play = phoneFeatures(phone({}));
   expect(play.find((f) => f.id === 'directSms')).toMatchObject({ available: false });
-  expect(play.find((f) => f.id === 'directSms')!.why).toMatch(/direct-download/);
-  const full = phoneFeatures(phone({ flavour: 'full' }));
-  expect(full.find((f) => f.id === 'accessibility')!.available).toBe(true);
+  expect(play.find((f) => f.id === 'directSms')!.why).toMatch(/Google Play/);
+  expect(play.find((f) => f.id === 'accessibility')!.available).toBe(false);
 });

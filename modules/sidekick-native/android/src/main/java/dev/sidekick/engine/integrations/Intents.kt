@@ -7,15 +7,12 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
-import android.os.Build
 import android.provider.AlarmClock
-import android.telephony.SmsManager
 import androidx.core.content.ContextCompat
 
 /**
  * Hand-offs to other apps through standard Android intents: alarms and timers (Clock), calls,
- * directions, and messages opened with the text ready. Nothing here sends anything by itself
- * except [sendSms], which exists only in the direct-download ("full") build.
+ * directions, and messages opened with the text ready. Nothing here sends anything by itself.
  */
 object Intents {
   val PACKAGES = mapOf(
@@ -118,36 +115,5 @@ object Intents {
       }
     }
   }
-
-  /** Full build only (SEND_SMS is declared only there). */
-  fun sendSms(ctx: Context, number: String, text: String): Boolean {
-    if (Flavour.get(ctx) != "full") return false
-    if (ContextCompat.checkSelfPermission(ctx, Manifest.permission.SEND_SMS) != PackageManager.PERMISSION_GRANTED) return false
-    return try {
-      @Suppress("DEPRECATION")
-      val sms = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) ctx.getSystemService(SmsManager::class.java) else SmsManager.getDefault()
-      val parts = sms.divideMessage(text)
-      sms.sendMultipartTextMessage(number, null, parts, null, null)
-      true
-    } catch (e: Exception) {
-      false
-    }
-  }
 }
 
-object Flavour {
-  @Volatile private var cached: String? = null
-
-  /** "full" when the direct-download manifest says so (plugins/with-flavours.js), else "play". */
-  fun get(ctx: Context): String {
-    cached?.let { return it }
-    val v = try {
-      val info = ctx.packageManager.getApplicationInfo(ctx.packageName, PackageManager.GET_META_DATA)
-      info.metaData?.getString("sidekick.flavour") ?: "play"
-    } catch (e: Exception) {
-      "play"
-    }
-    cached = v
-    return v
-  }
-}

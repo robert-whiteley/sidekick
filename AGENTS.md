@@ -47,7 +47,7 @@ Docs: https://docs.expo.dev/eas/index.md
 - Commercial-safe licences only; update `THIRD_PARTY_NOTICES.md` with each dependency/model.
 - Must work on Pixel 5 (CPU only, 8 GB) and iPhone 13 mini (4 GB): load big models on demand, never LLM + embedder together.
 - Tests for logic changes. Report what was verified on a device vs only built; verify on the phone before calling work done.
-- Distribution: Google Play flavour (default) and a direct-APK "full" flavour (Accessibility actions, direct SMS).
+- Distribution: one app, the Google Play build, the same for every user (no direct-APK variant).
 
 ## Owner working rules
 

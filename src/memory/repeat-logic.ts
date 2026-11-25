@@ -19,7 +19,7 @@ export function parseRepeat(q: string): { repeat: Repeat; words: string } | null
   if ((m = /\b(every (week ?day)|on weekdays|weekdays|each weekday)\b/i.exec(q)))
     return { repeat: 'weekdays', words: m[0] };
   if (
-    (m = /\b(?:every|each|on) (sunday|monday|tuesday|wednesday|thursday|friday|saturday)s?\b/i.exec(
+    (m = /\b(?:every|each) (sunday|monday|tuesday|wednesday|thursday|friday|saturday)s?\b/i.exec(
       q,
     )) ||
     (m = /\b(sunday|monday|tuesday|wednesday|thursday|friday|saturday)s\b/i.exec(q))

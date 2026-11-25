@@ -19,7 +19,6 @@ Date: 2026-11-25
 | Email              | Draft card → Send → Gmail API `users.messages.send`, token from Google's Authorization API                                | No                                       |
 | Google Tasks       | Optional switch (off by default): two-way sync of approved to-dos/reminders with the default Google Tasks list            | n/a                                      |
 | Drive backup       | Optional switch (off by default): uploads the export zip to Drive, replacing the previous backup                          | n/a                                      |
-| Full build only    | Direct SMS (SmsManager) and an Accessibility service that presses WhatsApp's Send once after approval                     | No                                       |
 
 Every integration has its own switches (`src/integrations/registry.ts`, Settings → Connections).
 Rules read common requests instantly (`src/integrations/parse.ts`); action-like wording the rules
@@ -31,31 +30,25 @@ Offline: WhatsApp, Messages, Telegram and Signal queue their own sends, so hand-
 once. An approved email with no connection waits in the `outbox` table (`src/memory/outbox.ts`),
 is shown on its card as "Waiting for internet" and sends itself when the phone is online.
 
-## Two builds
+## One build
 
-`plugins/with-flavours.js` adds Gradle product flavours `play` and `full`:
-
-- **play** (Google Play, default): no SEND_SMS, no Accessibility service.
-- **full** (direct-download APK): adds `android/app/src/full/AndroidManifest.xml` with SEND_SMS,
-  the `AutoSendService` Accessibility service and `sidekick.flavour = full` meta-data.
-
-Builds: `./gradlew assemblePlayRelease` / `assembleFullRelease` (`bundlePlayRelease` for the
-store). EAS: `production` → `:app:bundlePlayRelease`, `preview` → `:app:assembleFullRelease`.
-Same application id for both, so a phone runs one or the other.
+One app, the Google Play build, for everyone (`./gradlew assembleRelease`; EAS `production` for
+the store). A direct-APK "full" variant with direct SMS and an Accessibility auto-send service
+was built and then removed (owner decision 25 Nov; see ADR 0006).
 
 ## Permissions and Play policy
 
-| Permission / access                                        | Build | Why it is allowed                                                                                                                                                                                                |
-| ---------------------------------------------------------- | ----- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| READ_CALENDAR, WRITE_CALENDAR                              | both  | Normal runtime permissions; used to answer and to add events the user approved. WRITE_CALENDAR is no longer blocked in app.json.                                                                                 |
-| READ_CONTACTS                                              | both  | Runtime permission, read only. WRITE_CONTACTS stays blocked.                                                                                                                                                     |
-| CALL_PHONE                                                 | both  | Phone group, not the restricted Call Log group; only after the user taps Call.                                                                                                                                   |
-| com.android.alarm.permission.SET_ALARM                     | both  | Normal permission for the Clock intents.                                                                                                                                                                         |
-| Notification listener                                      | both  | Special access the user grants in system settings; core use (reading and replying to messages, media). Needs Play's prominent in-app disclosure, given on the decision card before opening the setting.          |
-| `<queries>` for WhatsApp, Telegram, Signal, Maps, Messages | both  | Package visibility for named apps only (no QUERY_ALL_PACKAGES).                                                                                                                                                  |
-| SEND_SMS                                                   | full  | Play allows the SMS group only for the default SMS/assistant handler, so it is left out of the Play build.                                                                                                       |
-| Accessibility service                                      | full  | Play's Accessibility API policy bars non-accessibility apps from using it to carry out actions, so it exists only in the APK. Android 13+ makes the user allow "restricted settings" for a sideloaded app first. |
-| gmail.send (OAuth scope)                                   | both  | A Google "sensitive" scope: free Google verification before more than 100 users. Read scopes are "restricted" (paid yearly assessment), so mail is never read; incoming mail comes from notifications.           |
+| Permission / access                                        | Used | Why it is allowed                                                                                                                                                                                       |
+| ---------------------------------------------------------- | ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| READ_CALENDAR, WRITE_CALENDAR                              | yes  | Normal runtime permissions; used to answer and to add events the user approved. WRITE_CALENDAR is no longer blocked in app.json.                                                                        |
+| READ_CONTACTS                                              | yes  | Runtime permission, read only. WRITE_CONTACTS stays blocked.                                                                                                                                            |
+| CALL_PHONE                                                 | yes  | Phone group, not the restricted Call Log group; only after the user taps Call.                                                                                                                          |
+| com.android.alarm.permission.SET_ALARM                     | yes  | Normal permission for the Clock intents.                                                                                                                                                                |
+| Notification listener                                      | yes  | Special access the user grants in system settings; core use (reading and replying to messages, media). Needs Play's prominent in-app disclosure, given on the decision card before opening the setting. |
+| `<queries>` for WhatsApp, Telegram, Signal, Maps, Messages | yes  | Package visibility for named apps only (no QUERY_ALL_PACKAGES).                                                                                                                                         |
+| SEND_SMS                                                   | none | Not used: Play allows the SMS group only for the default SMS/assistant handler.                                                                                                                         |
+| Accessibility service                                      | none | Not used: Play's Accessibility API policy bars non-accessibility apps from using it to carry out actions.                                                                                               |
+| gmail.send (OAuth scope)                                   | yes  | A Google "sensitive" scope: free Google verification before more than 100 users. Read scopes are "restricted" (paid yearly assessment), so mail is never read; incoming mail comes from notifications.  |
 
 Sources: Play Console Help "Use of SMS or Call Log permission groups" (answer 9047303), "Use of
 the AccessibilityService API" (answer 10964491), Android "Authorize access to Google user data"
@@ -100,6 +93,6 @@ non-sensitive.
 - Reading Gmail through the API (restricted scope, paid assessment) → notifications instead.
 - Prefilling a Telegram or Signal chat with a specific person: neither app has a supported
   link for "this number + this text"; their share screen is used and the user picks the chat.
-- Auto-send in Telegram and Signal (full build): the chat is picked by the user, so there is no
-  safe single Send to press.
+- Pressing Send in other apps (Accessibility) and sending SMS directly: not allowed on Google
+  Play; the direct-APK variant that had them was removed (ADR 0006).
 - An in-app SMS app (becoming the default SMS handler) to send texts on Play: too much scope.

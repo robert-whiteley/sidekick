@@ -33,8 +33,21 @@ import {
 import { integrationsNative, messageThreads, nowPlaying } from '@/integrations/native';
 import { mightBeAction, parseIntent, type Intent } from '@/integrations/parse';
 import { isOn } from '@/integrations/prefs';
+import { sendsAtText, splitSchedule } from '@/integrations/schedule-logic';
 import type { Draft, DraftKind, DraftFieldsByKind, PlannedAction } from '@/integrations/types';
+import type { MessageThread } from '@/integrations/native';
 import { notices } from './notices';
+import {
+  confirmFromModel,
+  confirmPrompt,
+  type ConfirmReply,
+  editedFields,
+  mightBeConfirmReply,
+  parseConfirmReply,
+  READ_BACK_REPLY_MS,
+  READ_BACK_TTL_MS,
+  readBackText,
+} from './readback-logic';
 import { getSettings } from './settings';
 
 export type { Draft, PlannedAction } from '@/integrations/types';
@@ -76,6 +89,7 @@ class Drafts {
     const d = this.get(id);
     if (d && (d.status === 'draft' || d.status === 'queued')) {
       if (d.status === 'queued') void outbox.remove(id).catch(() => {});
+      if (d.scheduledAt) void sendNotifier?.cancel(id).catch(() => {});
       this.put({ ...d, status: 'cancelled' } as Draft);
     }
   }
@@ -130,7 +144,10 @@ export function draftSummary(d: Draft): string {
       : '';
   const verb =
     d.kind === 'event' ? 'Tap Add' : d.kind === 'call' ? 'Tap Call' : 'Tap Send or say "send it"';
-  return `Here's the ${d.kind === 'event' ? 'event' : d.kind}. ${verb} when it looks right.${missing}`;
+  const sched = d.scheduledAt
+    ? ` It ${sendsAtText(d.scheduledAt, new Date()).replace(/^Sends/, 'sends')}.`
+    : '';
+  return `Here's the ${d.kind === 'event' ? 'event' : d.kind}. ${verb} when it looks right.${sched}${missing}`;
 }
 
 function makeDraft<K extends DraftKind>(
@@ -280,7 +297,12 @@ async function fromIntent(intent: Intent, now: Date): Promise<PlannedAction | nu
       if (!native) return notOnPhone();
       if (!isOn('messages', 'reply')) return off('Replying to messages');
       if (!native.notificationAccess()) return needNotificationAccess('reply to messages');
-      const thread = threadFor(readThreads(), intent.name);
+      const threads = readThreads();
+      // A bare "reply …" right after a message was read aloud answers that one.
+      const heard = !intent.name ? lastReadThread(t) : null;
+      const thread =
+        (heard && threads.find((x) => x.key === heard.key && x.canReply)) ||
+        threadFor(threads, intent.name);
       if (!thread) {
         if (!intent.name) return { kind: 'reply', text: 'There is no message to reply to.' };
         return fromIntent(
@@ -420,9 +442,26 @@ export async function planAction(
   opts: { now?: Date; useModel?: boolean } = {},
 ): Promise<PlannedAction | null> {
   const now = opts.now ?? new Date();
+  // An answer to a read-back ("yes", "cancel", "change it to …") comes first.
+  const confirm = await answerReadBack(question, now.getTime(), opts.useModel !== false);
+  if (confirm) return confirm;
   const contacts = /\b(text|message|tell|email|e-mail|whatsapp|reply|let)\b/i.test(question)
     ? await contactNameList()
     : [];
+  // "Text Sam at 6pm …": the draft sends at that time (kept in the outbox until then).
+  const sched = splitSchedule(question, now);
+  if (sched) {
+    const si = parseIntent(sched.rest, now, contacts);
+    if (si && (si.type === 'message' || si.type === 'email')) {
+      const planned = await fromIntent(si, now);
+      if (planned?.kind === 'draft') {
+        const draft = { ...planned.draft, scheduledAt: sched.at } as Draft;
+        drafts.put(draft);
+        return { kind: 'draft', draft };
+      }
+      return planned;
+    }
+  }
   const intent = parseIntent(question, now, contacts);
   if (intent) return fromIntent(intent, now);
   const moved = await moveEvent(question, now).catch(() => null);
@@ -430,6 +469,100 @@ export async function planAction(
   if (opts.useModel === false || !mightBeAction(question)) return null;
   const guessed = await intentFromLlm(question, now);
   return guessed ? fromIntent(guessed, now) : null;
+}
+
+// --- Read back before sending ---
+
+let lastRead: MessageThread | null = null;
+/** The message last read aloud (engine/hands-free.ts): a bare "reply …" answers it. */
+export function noteThreadRead(t: MessageThread | null) {
+  lastRead = t;
+}
+function lastReadThread(now: number): MessageThread | null {
+  return lastRead && now - lastRead.at < 5 * 60_000 ? lastRead : null;
+}
+
+/** The draft just read aloud, waiting for "yes" / "no" / a change. */
+let awaiting: { id: string; until: number; text: string } | null = null;
+let readBackFallback: ReturnType<typeof setTimeout> | null = null;
+
+/** The draft being read back, if any (the chat opens the mic for the answer). */
+export function awaitingReadBack(now = Date.now()): string | null {
+  if (!awaiting || now > awaiting.until) return null;
+  return drafts.get(awaiting.id)?.status === 'draft' ? awaiting.id : null;
+}
+
+/**
+ * The draft will be read aloud: returns what to say. Its countdown starts when the voice
+ * finishes (`readBackDone`), or after a guess at the speaking time if that never comes.
+ */
+export function beginReadBack(id: string, now = Date.now()): string | null {
+  const d = drafts.get(id);
+  if (!d || d.status !== 'draft') return null;
+  holdDraft(id);
+  const text = readBackText(d);
+  awaiting = { id, until: now + READ_BACK_TTL_MS, text };
+  if (readBackFallback) clearTimeout(readBackFallback);
+  readBackFallback = setTimeout(() => readBackDone(id), Math.max(8000, text.length * 90));
+  return text;
+}
+
+/**
+ * The read-back has been spoken: the user has READ_BACK_REPLY_MS to answer, then the usual
+ * sending setting applies (countdown → 5 s more; at once → sends; ask first → waits).
+ */
+export function readBackDone(id: string, now = Date.now()) {
+  if (readBackFallback) clearTimeout(readBackFallback);
+  readBackFallback = null;
+  if (awaiting?.id !== id) return;
+  const mode = getSettings().actionSend ?? 'countdown';
+  if (mode === 'ask') return;
+  autoSend(id, 'countdown', now, READ_BACK_REPLY_MS + (mode === 'instant' ? 0 : AUTO_SEND_MS));
+}
+
+async function confirmFromLlm(text: string, heard: string): Promise<ConfirmReply | null> {
+  try {
+    const { askLlm } = await import('@/engine/llm');
+    const r = await askLlm(confirmPrompt(text, heard), null, () => {}, {
+      system: 'You read a yes/no answer for a phone assistant. Reply with JSON only.',
+      maxTokens: 120,
+      scratch: true,
+    });
+    return confirmFromModel(r.text);
+  } catch {
+    return null;
+  }
+}
+
+async function answerReadBack(
+  heard: string,
+  now: number,
+  useModel: boolean,
+): Promise<PlannedAction | null> {
+  const id = awaitingReadBack(now);
+  if (!id || !awaiting) return null;
+  let r = parseConfirmReply(heard);
+  if (!r && useModel && mightBeConfirmReply(heard)) r = await confirmFromLlm(awaiting.text, heard);
+  if (!r) return null;
+  if (r.kind === 'yes') {
+    awaiting = null;
+    const done = await runAction(id);
+    return {
+      kind: 'reply',
+      text: done.status === 'failed' ? `Not sent: ${done.note}` : (done.note ?? 'Done.'),
+    };
+  }
+  if (r.kind === 'no') {
+    awaiting = null;
+    drafts.cancel(id);
+    return { kind: 'reply', text: 'Cancelled.' };
+  }
+  const d = drafts.get(id)!;
+  const fields = editedFields(d, r);
+  if (!fields) return { kind: 'reply', text: "I can't change that one by voice. Tap Edit." };
+  drafts.update(id, fields);
+  const text = beginReadBack(id, now) ?? 'Changed.';
+  return { kind: 'reply', text, readBackId: id };
 }
 
 // --- Running an approved draft ---
@@ -459,20 +592,28 @@ export function autoSend(
   id: string,
   mode: 'countdown' | 'instant' | 'ask' = getSettings().actionSend ?? 'countdown',
   now = Date.now(),
+  delayMs = AUTO_SEND_MS,
 ): void {
   const d = drafts.get(id);
   if (!d || d.status !== 'draft' || mode === 'ask') return;
   // Without a resolved recipient it can't go anywhere: leave it for the user to fix.
-  if ((d.kind === 'message' || d.kind === 'email' || d.kind === 'call') && !d.fields.to) return;
+  const replying = d.kind === 'message' && !!d.fields.replyKey;
+  if (
+    (d.kind === 'message' || d.kind === 'email' || d.kind === 'call') &&
+    !d.fields.to &&
+    !replying
+  )
+    return;
   if (mode === 'instant') return void runAction(id);
-  drafts.put({ ...d, sendAt: now + AUTO_SEND_MS } as Draft);
+  stopAutoSend(id);
+  drafts.put({ ...d, sendAt: now + delayMs } as Draft);
   timers.set(
     id,
     setTimeout(() => {
       timers.delete(id);
       const cur = drafts.get(id);
       if (cur?.status === 'draft' && cur.sendAt) void runAction(id);
-    }, AUTO_SEND_MS),
+    }, delayMs),
   );
 }
 
@@ -488,7 +629,18 @@ export async function runAction(id: string): Promise<Draft> {
   const d = drafts.get(id);
   if (!d) throw new Error('No such draft');
   if (d.status !== 'draft' && d.status !== 'failed') return d;
+  if (awaiting?.id === id) awaiting = null;
   try {
+    // Scheduled: kept in the outbox; a local notification at that time opens Sidekick to send.
+    if (
+      d.scheduledAt &&
+      d.scheduledAt > Date.now() &&
+      (d.kind === 'message' || d.kind === 'email')
+    ) {
+      await outbox.enqueue(d.id, JSON.stringify(d));
+      void sendNotifier?.schedule(d).catch(() => {});
+      return finish(d, 'queued', sendsAtText(d.scheduledAt, new Date()));
+    }
     switch (d.kind) {
       case 'message': {
         const r = await sendMessage(d.fields);
@@ -532,9 +684,24 @@ export async function runAction(id: string): Promise<Draft> {
 
 // --- Outbox ---
 
-/** Sends everything queued; returns how many went. */
-export async function flushOutbox(): Promise<number> {
+/** Set by followup-notify.ts: a local notification at a scheduled send's time. */
+type SendNotifier = { schedule(d: Draft): Promise<void>; cancel(id: string): Promise<void> };
+let sendNotifier: SendNotifier | null = null;
+export function setScheduledSendNotifier(n: SendNotifier | null) {
+  sendNotifier = n;
+}
+
+const isDue = (d: Draft, now: number) => !d.scheduledAt || d.scheduledAt <= now;
+
+/**
+ * Sends what is queued and due: emails waiting for the internet, and scheduled messages and
+ * emails whose time has come. `scheduledOnly` skips plain queued emails (the 30 s check).
+ * Returns how many went.
+ */
+export async function flushOutbox(opts: { scheduledOnly?: boolean; now?: number } = {}) {
+  const now = opts.now ?? Date.now();
   let sent = 0;
+  let offline = false;
   for (const row of await outbox.pending()) {
     let d: Draft;
     try {
@@ -543,21 +710,44 @@ export async function flushOutbox(): Promise<number> {
       await outbox.remove(row.id);
       continue;
     }
-    if (d.kind !== 'email') {
+    if (d.kind !== 'email' && !(d.kind === 'message' && d.scheduledAt)) {
       await outbox.remove(row.id);
       continue;
     }
-    if (!drafts.get(d.id)) drafts.put({ ...d, status: 'queued' } as Draft);
-    try {
-      await sendGmail(d.fields);
+    const cur = drafts.get(d.id);
+    if (cur?.status === 'cancelled') {
       await outbox.remove(row.id);
-      finish(d, 'sent', 'Email sent');
+      continue;
+    }
+    if (!cur) {
+      const note = d.scheduledAt
+        ? sendsAtText(d.scheduledAt, new Date(now))
+        : 'Waiting for internet';
+      drafts.put({ ...d, status: 'queued', note } as Draft);
+    }
+    if (!isDue(d, now) || (opts.scheduledOnly && !d.scheduledAt)) continue;
+    if (d.kind === 'email' && offline) continue;
+    try {
+      if (d.kind === 'message') {
+        const r = await sendMessage(d.fields);
+        await outbox.remove(row.id);
+        finish(d, 'sent', r.note);
+      } else if (d.kind === 'email') {
+        await sendGmail(d.fields);
+        await outbox.remove(row.id);
+        finish(d, 'sent', 'Email sent');
+      }
       sent++;
     } catch (e) {
-      if (e instanceof OfflineError) break;
+      if (e instanceof OfflineError) {
+        offline = true;
+        if (d.scheduledAt)
+          drafts.put({ ...d, status: 'queued', note: 'Waiting for internet' } as Draft);
+        continue;
+      }
       const msg = e instanceof Error ? e.message : String(e);
       await outbox.noteFailure(row.id, msg);
-      if (row.tries + 1 >= 5) {
+      if (row.tries + 1 >= 5 || d.kind === 'message') {
         await outbox.remove(row.id);
         finish(d, 'failed', msg);
       }
@@ -565,6 +755,9 @@ export async function flushOutbox(): Promise<number> {
   }
   return sent;
 }
+
+/** How often a running app checks for scheduled sends that are due. */
+const SCHEDULE_CHECK_MS = 30_000;
 
 const TASK_SYNC_MS = 15 * 60_000;
 
@@ -581,6 +774,10 @@ export function startIntegrations(): () => void {
     if (!stopped) void syncGoogleTasks().catch(() => {});
   };
   const timer = setInterval(sync, TASK_SYNC_MS);
+  const due = setInterval(
+    () => void flushOutbox({ scheduledOnly: true }).catch(() => {}),
+    SCHEDULE_CHECK_MS,
+  );
   const offFollowups = onFollowupsChange(() => {
     if (debounce) clearTimeout(debounce);
     debounce = setTimeout(sync, 30_000);
@@ -594,11 +791,14 @@ export function startIntegrations(): () => void {
         await flushOutbox();
         sync();
       } else {
+        void flushOutbox({ scheduledOnly: true }).catch(() => {});
         for (const row of await outbox.pending()) {
           try {
             const d = JSON.parse(row.draft) as Draft;
-            if (!drafts.get(d.id))
-              drafts.put({ ...d, status: 'queued', note: 'Waiting for internet' } as Draft);
+            const note = d.scheduledAt
+              ? sendsAtText(d.scheduledAt, new Date())
+              : 'Waiting for internet';
+            if (!drafts.get(d.id)) drafts.put({ ...d, status: 'queued', note } as Draft);
           } catch {}
         }
       }
@@ -616,6 +816,7 @@ export function startIntegrations(): () => void {
     stopped = true;
     sub?.remove();
     clearInterval(timer);
+    clearInterval(due);
     if (debounce) clearTimeout(debounce);
     offFollowups();
   };

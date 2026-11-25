@@ -100,3 +100,23 @@ Read this before proposing any of these again. Each line says why.
 - Gap: Gemma's search words on a Pixel-5-class CPU may often miss the 1.5 s budget (then rules are used); a `[lookup]` log line now shows which was used and the timings.
 - Measured on the Pixel 5 (Wi-Fi, UK): "who won the 2022 world cup?" answered from Wikipedia in 9.6 s (lookup ~2.5 s). GDELT took 9 s+ to answer at all (even its 429 "busy" reply), so with a 4 s limit news questions got no news source. A later test (24 Nov) waited 9 s and GDELT still only replied 429 after 10–11 s on every try (also from the laptop), so it is back to 4 s. Gap: GDELT is unreliable from here, so news on niche topics often falls back to Wikipedia facts or "no current information"; Wikipedia current events (0.3 s) and user-added RSS feeds work. No free, key-less, commercial-safe general news search was found to replace it (Nov 2026: Currents allows commercial use free but needs a key/registration; GNews and Mediastack free plans are non-commercial). Owner decision 24 Nov: leave news as is. Built-in RSS feeds rejected: most news feeds (BBC, Guardian, Reuters) are personal/non-commercial use only.
 - Online lookup stays off by default (owner decision 24 Nov). The Ask screen's badge is the Online/Offline button: tap to switch; it shows "Offline" whenever there is no internet (airplane mode, no signal), and "Offline · no internet" if lookup is on but unreachable. Widget verified on the Pixel 5: Ask opens Sidekick listening, Capture takes a photo.
+
+## Distribution: one Google Play app only (25 Nov)
+
+- Removed: the direct-download APK ("full" flavour) with an Accessibility service that pressed Send in WhatsApp after approval, and direct SMS sending. Owner decision: keep it simple, every user gets the same app; two variants are too much to manage.
+- Why they can't be in the Play app: Play's Accessibility API policy bars apps that aren't accessibility tools from using it to carry out actions (including autonomous AI actions), and Play allows SEND_SMS only for the default SMS/assistant handler.
+- Result: new chats in WhatsApp, Messages, Telegram and Signal open with the text ready and the user taps Send there; replies to a message notification are sent directly by Sidekick through the notification's reply action.
+
+## Hands-free and quality of life (25 Nov)
+
+- Car detection uses the Bluetooth device's name (car makes, "car", "Uconnect", "SYNC"…), not the Bluetooth device class: reading the class needs the extra Nearby devices permission. Gap: a car kit with an unusual name isn't seen; "Driving and walking mode: Always on" covers it.
+- Walk mode = the headset button was used in the last 15 minutes (there is no separate walk switch).
+- Read-back covers messages, emails, calendar events and calls. Notes and to-dos aren't drafts: "remind me …" already says what it saved, so it isn't read back.
+- Voice edits change the message / email text or the event title ("add …" on an event sets its place). Recipient, subject and time can't be changed by voice yet: tap Edit.
+- After a read-back the mic opens for 6 s (no end-of-speech detection in push-to-talk). With Listen on, its follow-up window hears the answer instead.
+- Scheduled send: emails and replies to a message notification go by themselves at the time if Sidekick is running. A new chat in WhatsApp / Messages / Telegram / Signal can only be opened with the text ready (no direct SMS or Accessibility in the Play app), and Android doesn't let an app open another from the background, so the notification at the send time asks to open Sidekick, which then sends or opens the chat. Scheduled calls and events: left out (events already have a time).
+- Read incoming messages: only while Sidekick is running (checked every 5 s), and only messages Notification access can see. Not while an answer is being given.
+- Quiet at night uses the same times as Auto-pause. Do Not Disturb is read with NotificationManager.getCurrentInterruptionFilter (no permission needed). iPhone: no DND or headphone check yet, so only quiet hours apply.
+- Daily briefing reuses the follow-up digest switch and hour (one setting, not two). Calendar events only when calendar access was already given; it never asks. Spoken once a day, on the first open after its time.
+- Recurring reminders: daily, weekdays or one weekday. "Every month", "every other week" and end dates are left out. Done moves the reminder to its next time; it never closes.
+- "What did we talk about": summarises up to 120 lines spread over the time asked (today, yesterday, this week, last week, this morning, last hour), on the phone.

@@ -60,14 +60,10 @@ Android/data/<app>/files/models), allowBackup is off; Delete all data uses the s
 clearApplicationUserData (identical to uninstall). A new Recommended model arrives with an app
 update (the catalog ships in the app; nothing is looked up online).
 
-Distribution: both, one codebase, two flavours.
-
-- Play (default for everyone): no Accessibility control; messages sent through notification
-  replies, else the app opens prefilled.
-- Direct APK ("full"): Accessibility can complete actions in other apps (tap Send) and direct
-  SMS. Not against Google's terms; Android 13+ makes the user allow "restricted settings"
-  for Accessibility, and Google's developer verification for sideloaded apps needs the owner's
-  verified developer identity.
+Distribution: one app, the Google Play build, the same for every user (owner decision 25 Nov:
+keep it simple; the direct-APK "full" variant was removed, see ADR 0006). No Accessibility
+control and no direct SMS: messages are sent through notification replies, else the app opens
+prefilled and the user taps Send there.
 
 Integrations now (each with its own switches in Connections):
 
@@ -76,7 +72,7 @@ Integrations now (each with its own switches in Connections):
   (already), notifications read (Android).
 - Messages (WhatsApp, Messages, Telegram, Signal…): read incoming via notification access;
   reply in the chat, sent through the notification's reply action; new conversations: draft
-  in chat → opens the app prefilled (full APK: sent automatically).
+  in chat → opens the app prefilled (the user taps Send there).
 - Email: Google sign-in (gmail.send) so Sidekick sends directly; draft card first (Send / Edit
   / Cancel / Open in Gmail). Reading mail uses notifications (Gmail's read scopes need a paid
   yearly security assessment). Needs the owner's Google Cloud OAuth client (free) — owner step.
@@ -202,6 +198,24 @@ Owner steps needed later (not blocking the build):
 - [ ] Battery, heat and storage limits with notices (above).
 - [ ] One-tap Pause, clear recording indicator.
 - [ ] Export and delete all data.
+- [x] Read back before sending, like a car: "Text to Sam: … Send it?", then yes / no / "change
+      it to …" / "add …" by voice (rules first, a short model pass if needed); the countdown starts
+      after. Setting: When I speak (Recommended) / Always / Off. Built + unit-tested, not phone-tested.
+- [x] Driving / walking mode: car Bluetooth (by name) or the headset button → spoken answers,
+      read-back, bigger buttons. Automatic / Always on / Off. Built, not phone-tested.
+- [x] Read new messages aloud (off by default; with headphones or the car, or always); "reply …"
+      answers the one just read. Built, not phone-tested.
+- [x] Scheduled send ("text Sam at 6pm …", "email Jo tomorrow morning …"): kept in the outbox, a
+      notification at that time, card shows "Sends at 18:00". Built, not phone-tested.
+- [x] Recurring reminders ("every Monday at 9", "every day", "every weekday"). Built, not
+      phone-tested.
+- [x] Quiet at night: no speaking out loud 22:00–07:00 or in Do Not Disturb, except into
+      headphones / the car (on by default). Built, not phone-tested.
+- [x] Daily briefing (off by default): notification at the chosen hour with today's calendar,
+      due to-dos and follow-ups, read out on the next open. Built, not phone-tested.
+- [x] "What did we talk about today / this week": that time's lines, summarised on the phone.
+      Built, not phone-tested.
+- [x] Haptic tick on send, cancel and listen start (expo-haptics, MIT; needs a new build).
 
 ## From livestream-ai (the old cloud prototype; reviewed 25 Nov 2026)
 
@@ -249,4 +263,4 @@ Owner steps needed later (not blocking the build):
 
 ## Open questions (owner)
 
-None open (answered 25 Nov: both flavours; email via Google sign-in).
+None open (answered 25 Nov: one Google Play app; email via Google sign-in).

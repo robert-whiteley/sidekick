@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { type Draft, drafts, holdDraft, runAction } from '@/engine/actions';
+import { sendsAtText } from '@/integrations/schedule-logic';
 import type { ChatTheme as Theme } from './theme';
 
 /** The editable text of a draft: the message, email body or event title. */
@@ -71,10 +72,14 @@ export function DraftCard({ id, theme }: { id: string; theme: Theme }) {
     else if (d.kind === 'event') drafts.update(id, { ...d.fields, title: text });
   };
   const open = d.status === 'draft' || d.status === 'failed';
+  const scheduled =
+    d.scheduledAt && d.status === 'draft' ? sendsAtText(d.scheduledAt, new Date(now)) : '';
   const status =
     left > 0
-      ? `${ACTION[d.kind] === 'Add' ? 'Adding' : ACTION[d.kind] === 'Call' ? 'Calling' : 'Sending'} in ${left} s`
-      : [STATUS[d.status], d.note].filter(Boolean).join(': ');
+      ? `${d.scheduledAt ? 'Scheduling' : ACTION[d.kind] === 'Add' ? 'Adding' : ACTION[d.kind] === 'Call' ? 'Calling' : 'Sending'} in ${left} s`
+      : d.status === 'queued' && d.scheduledAt
+        ? (d.note ?? '')
+        : [STATUS[d.status], d.note].filter(Boolean).join(': ');
 
   return (
     <View style={[styles.card, { borderColor: theme.faint }]}>
@@ -92,7 +97,13 @@ export function DraftCard({ id, theme }: { id: string; theme: Theme }) {
         ) : (
           <Text style={[styles.body, { color: theme.text }]}>{mainText(d)}</Text>
         ))}
+      {scheduled ? <Text style={{ color: theme.faint }}>{scheduled}</Text> : null}
       {status ? <Text style={{ color: theme.faint }}>{status}</Text> : null}
+      {d.status === 'queued' && d.scheduledAt ? (
+        <View style={styles.row}>
+          <Btn label="Cancel" onPress={() => drafts.cancel(id)} theme={theme} />
+        </View>
+      ) : null}
       {open && (
         <View style={styles.row}>
           {editing ? (

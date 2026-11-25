@@ -1,12 +1,9 @@
 /**
  * Messages in other apps. Reading and replying go through the app's own notification (its reply
  * action), so nothing needs the app's login. A new conversation opens the app with the text
- * ready; in the direct-download ("full") version Sidekick can also press Send there, or send a
- * text itself. Message text from notifications is untrusted: it is read out, never obeyed.
+ * ready (Android doesn't let Play apps press Send in other apps). Message text from notifications is untrusted: it is read out, never obeyed.
  */
-import { PermissionsAndroid, Platform } from 'react-native';
 import {
-  flavour,
   integrationsNative,
   messageThreads,
   type MessageThread,
@@ -77,12 +74,6 @@ export function readThreads(): MessageThread[] {
   return messageThreads(true);
 }
 
-async function allowed(permission: 'android.permission.SEND_SMS'): Promise<boolean> {
-  if (Platform.OS !== 'android') return false;
-  if (await PermissionsAndroid.check(permission)) return true;
-  return (await PermissionsAndroid.request(permission)) === PermissionsAndroid.RESULTS.GRANTED;
-}
-
 export type SendOutcome = { sent: boolean; note: string };
 
 /** Runs an approved message draft. */
@@ -97,26 +88,12 @@ export async function sendMessage(f: MessageFields): Promise<SendOutcome> {
   }
   if (!isOn('messages', 'compose')) throw new Error('New messages are off in Settings');
   const app = chooseApp(f.app, f.name, readThreads());
-  const full = flavour() === 'full';
-  if (app === 'sms' && full && isOn('autoSend', 'sms') && f.to) {
-    if (await allowed('android.permission.SEND_SMS')) {
-      if (native.sendSms(f.to, f.text)) return { sent: true, note: 'Text sent' };
-    }
-  }
   if (app !== 'sms' && app !== 'whatsapp' && !f.to) {
     // Telegram/Signal open their share screen; the user picks the chat.
   } else if (!f.to) {
     throw new Error(`No number for ${f.name}`);
   }
-  const autoTap =
-    full &&
-    app === 'whatsapp' &&
-    !!f.to &&
-    isOn('autoSend', 'tapSend') &&
-    native.accessibilityEnabled();
-  if (autoTap) native.armAutoSend(PACKAGES.whatsapp[0], 10_000);
   if (!native.openMessage(app, f.to, f.text)) throw new Error(`${APP_LABEL[app]} isn't installed`);
-  if (autoTap) return { sent: true, note: `Sent in ${APP_LABEL[app]}` };
   const pick = app === 'telegram' || app === 'signal' ? `pick ${f.name} and ` : '';
   return { sent: true, note: `Opened ${APP_LABEL[app]}: ${pick}tap Send there` };
 }

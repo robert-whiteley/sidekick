@@ -73,4 +73,4 @@ export type PlannedAction =
   /** Show a card and wait for Send. */
   | { kind: 'draft'; draft: Draft }
   /** Already done (alarm set, music paused) or an answer (what's playing): say this. */
-  | { kind: 'reply'; text: string };
+  | { kind: 'reply'; text: string; readBackId?: string };

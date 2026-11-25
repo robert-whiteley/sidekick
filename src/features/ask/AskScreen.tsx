@@ -59,9 +59,20 @@ import {
 import { inferFactsIfIdle, stopFactInference } from '@/engine/fact-inference';
 import { inferFollowupsIfIdle, stopFollowupInference } from '@/engine/followup-inference';
 import { inferNamesIfIdle, stopNameInference } from '@/engine/name-inference';
-import { startFollowupNotifications } from '@/engine/followup-notify';
 import { cancelLlm, ensureLlm, holdBackground, releaseBackground } from '@/engine/llm';
-import { getSettings } from '@/engine/settings';
+import { readBackDone } from '@/engine/actions';
+import { startFollowupNotifications, todaysBriefing } from '@/engine/followup-notify';
+import {
+  canSpeakNow,
+  handsFreeOn,
+  haptic,
+  hapticsForDrafts,
+  noteHeadsetAsk,
+  watchIncoming,
+} from '@/engine/hands-free';
+import { briefingDue } from '@/engine/hands-free-logic';
+import { READ_BACK_REPLY_MS } from '@/engine/readback-logic';
+import { getSettings, updateSettings } from '@/engine/settings';
 import { StreamingSpeaker } from '@/engine/speaker';
 import { Conversation } from '@/engine/conversation';
 import { asksAboutWhatIsInView } from '@/memory/search-logic';
@@ -147,7 +158,11 @@ export function AskScreen({
   // Opened hands-free (tile, widget, assistant) or the mic was tapped: a tap, or a timeout, ends it.
   const handsFree = useRef<ReturnType<typeof setTimeout> | null>(null);
   const holdEndRef = useRef<() => void>(() => {});
-  const holdStartRef = useRef<(free?: boolean) => void>(() => {});
+  const holdStartRef = useRef<(free?: boolean, maxMs?: number) => void>(() => {});
+  /** A draft read aloud: when the voice ends, its countdown starts and the mic opens for the answer. */
+  const readBackRef = useRef<string | null>(null);
+  // Driving / walking: bigger buttons, answers spoken, drafts read back.
+  const [handsFreeMode, setHandsFreeMode] = useState(() => handsFreeOn());
   /** The current mic press: when it started, or that it ends hands-free listening. */
   const micPress = useRef<{ start: number } | 'end' | null>(null);
   const noticeList = useNotices();
@@ -183,17 +198,54 @@ export function AskScreen({
   // Plugged-in cameras, mics and headphones; the headset button asks a question (walk mode).
   useEffect(() => {
     openBestCamera();
-    const stopWatch = watchDevices();
+    const stopWatch = watchDevices(() => setHandsFreeMode(handsFreeOn()));
     const stopButton = listenMediaButton((action) => {
       if (action !== 'ask') return;
+      noteHeadsetAsk();
+      setHandsFreeMode(handsFreeOn());
       if (holdingRef.current) return void holdEndRef.current();
       setAsking(true);
       holdStartRef.current(true);
     });
+    const stopTicks = hapticsForDrafts();
+    // New messages read aloud (Settings > Connections > Read incoming messages).
+    const stopIncoming = watchIncoming((text) => {
+      if (busyRef.current) return;
+      const at = Date.now();
+      setMessages((m) => [...m, { id: `in${at}`, role: 'assistant', text, at }]);
+      new StreamingSpeaker(true).finish(text);
+    });
+    // The car connects / disconnects, or walk mode times out.
+    const poll = setInterval(() => setHandsFreeMode(handsFreeOn()), 30_000);
     return () => {
       stopWatch();
       stopButton();
+      stopTicks();
+      stopIncoming();
+      clearInterval(poll);
     };
+  }, []);
+
+  // The daily briefing, said on the first open after its time (Settings > Assistant).
+  useEffect(() => {
+    const check = () => {
+      const s = getSettings();
+      if (!s.followupDigest || !briefingDue(new Date(), s.digestHour * 60, s.lastBriefingAt))
+        return;
+      updateSettings({ lastBriefingAt: Date.now() });
+      void todaysBriefing()
+        .then((text) => {
+          if (!text) return;
+          const at = Date.now();
+          setMessages((m) => [...m, { id: `b${at}`, role: 'assistant', text, at }]);
+          if (canSpeakNow() && !busyRef.current)
+            new StreamingSpeaker(true).finish(`Here's your day. ${text}`);
+        })
+        .catch(() => {});
+    };
+    check();
+    const sub = AppState.addEventListener('change', (st) => st === 'active' && check());
+    return () => sub.remove();
   }, []);
 
   useEffect(() => {
@@ -242,6 +294,14 @@ export function AskScreen({
         if (awaitingVoiceRef.current) {
           awaitingVoiceRef.current = false;
           releaseBackground();
+        }
+        // Read back: the countdown starts now, and the mic listens for "yes / no / change it"
+        // (with Listen on, its follow-up window hears the answer instead).
+        const rb = readBackRef.current;
+        readBackRef.current = null;
+        if (rb) {
+          readBackDone(rb);
+          if (!isListening()) setTimeout(() => holdStartRef.current(true, READ_BACK_REPLY_MS), 150);
         }
       }),
       SidekickNative.addListener('onListenError', (e) =>
@@ -321,7 +381,7 @@ export function AskScreen({
     }
   };
 
-  const holdStart = async (free = false) => {
+  const holdStart = async (free = false, maxMs = HANDS_FREE_MAX_MS) => {
     if (busyRef.current || handsFree.current) return;
     if (!(await askMicPermission())) {
       setStatus('Microphone permission is needed.');
@@ -330,9 +390,10 @@ export function AskScreen({
     speaker.current?.stop();
     setSpeakingId(null);
     SidekickNative.pttStart();
+    haptic('listen');
     setHolding(true);
     if (free) {
-      handsFree.current = setTimeout(() => holdEndRef.current(), HANDS_FREE_MAX_MS);
+      handsFree.current = setTimeout(() => holdEndRef.current(), maxMs);
       setStatus('Listening… tap the mic when done');
     } else if (!handsFree.current) setStatus('Listening… let go when done');
   };
@@ -462,11 +523,13 @@ export function AskScreen({
     ]);
     setPhase('thinking');
     speaker.current?.stop();
-    const speak = shouldSpeak({
-      spoken: spoken !== undefined,
-      headphones: headphonesOn(),
-      enabled: getSettings().speakAnswers,
-    });
+    const hf = handsFreeOn();
+    const speak =
+      shouldSpeak({
+        spoken: spoken !== undefined || hf,
+        headphones: headphonesOn(),
+        enabled: getSettings().speakAnswers || hf,
+      }) && canSpeakNow();
     const sp = new StreamingSpeaker(speak);
     speaker.current = sp;
     setSpeakingId(speak ? replyId : null);
@@ -485,9 +548,11 @@ export function AskScreen({
       }
       setStatus(imagePath ? 'Looking…' : 'Thinking…');
       // offTheRecord: uses all memories, saves nothing (assistant.ts).
-      const opts = { keepHistory, offTheRecord: offRecordNow } as Parameters<
-        typeof answerQuestion
-      >[3];
+      const opts = {
+        keepHistory,
+        offTheRecord: offRecordNow,
+        spoken: spoken !== undefined,
+      } as Parameters<typeof answerQuestion>[3];
       holdLiveCamera(true);
       const r = await answerQuestion(
         grab ? screenQuestion(q, grab) : q,
@@ -500,9 +565,18 @@ export function AskScreen({
         opts,
       );
       // Android's voice says when it has finished (onVoiceIdle); background passes wait for that.
-      awaitingVoiceRef.current = speak && Platform.OS === 'android' && r.text.trim().length > 0;
+      // A read-back is always said (it asks "Send it?"), even when answers aren't spoken.
+      const readBack = !!r.readBackId;
+      awaitingVoiceRef.current =
+        (speak || readBack) && Platform.OS === 'android' && r.text.trim().length > 0;
+      readBackRef.current = readBack && Platform.OS === 'android' ? r.readBackId! : null;
       if (!awaitingVoiceRef.current) setSpeakingId(null);
-      sp.finish(r.text);
+      if (readBack && !speak) {
+        const rb = new StreamingSpeaker(true);
+        speaker.current = rb;
+        if (awaitingVoiceRef.current) setSpeakingId(replyId);
+        rb.finish(r.text);
+      } else sp.finish(r.text);
       setWebUsed((r.web ?? []).length > 0);
       setMessages((m) =>
         patchMessage(m, replyId, {
@@ -537,7 +611,7 @@ export function AskScreen({
   useEffect(() => {
     askRef.current = (q: string, followUp?: boolean) => void ask(q, followUp);
     holdEndRef.current = () => void holdEnd();
-    holdStartRef.current = (free) => void holdStart(free);
+    holdStartRef.current = (free, maxMs) => void holdStart(free, maxMs);
   });
 
   // Capture from the widget: one photo, no voice note; the camera closes again after.
@@ -741,6 +815,7 @@ export function AskScreen({
           onMicOut={micOut}
           cameraOn={cameraOn}
           onCamera={() => void toggleCamera()}
+          large={handsFreeMode}
         />
       </KeyboardAvoidingView>
     </SafeAreaView>

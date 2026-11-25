@@ -30,24 +30,20 @@ export type MediaCommand = 'play' | 'pause' | 'toggle' | 'next' | 'previous' | '
 export type OpenMessageApp = 'whatsapp' | 'sms' | 'telegram' | 'signal';
 
 type IntegrationsNative = {
-  flavour(): 'play' | 'full';
   isInstalled(pkg: string): boolean;
   setAlarm(hour: number, minute: number, label: string): boolean;
   setTimer(seconds: number, label: string): boolean;
   call(number: string, direct: boolean): boolean;
   navigate(destination: string, mode: 'driving' | 'walking' | 'transit' | 'cycling'): boolean;
   openMessage(app: OpenMessageApp, number: string | null, text: string): boolean;
-  sendSms(number: string, text: string): boolean;
   notificationAccess(): boolean;
   openNotificationAccess(): void;
   messageThreads(onlyMessages: boolean): string;
   replyToMessage(key: string, text: string): boolean;
   nowPlaying(): string | null;
   mediaCommand(cmd: MediaCommand): boolean;
-  accessibilityEnabled(): boolean;
-  openAccessibilitySettings(): void;
-  /** Full flavour: press Send in [pkg] once its chat screen appears (within timeoutMs). */
-  armAutoSend(pkg: string, timeoutMs: number): boolean;
+  /** NotificationManager.getCurrentInterruptionFilter: 1 = all, 2/3/4 = Do Not Disturb. */
+  interruptionFilter?(): number;
   /** Google Authorization API for exactly [scopes]. Resolves with an access token or rejects. */
   googleAuthorize(scopes: string[]): Promise<string>;
   googleClearToken(token: string): Promise<void>;
@@ -67,10 +63,6 @@ export function setIntegrationsNative(m: IntegrationsNative | null) {
   mod = m;
 }
 
-export function flavour(): 'play' | 'full' {
-  return integrationsNative()?.flavour() ?? 'play';
-}
-
 export function messageThreads(onlyMessages = true): MessageThread[] {
   const n = integrationsNative();
   if (!n || !n.notificationAccess()) return [];
@@ -78,6 +70,15 @@ export function messageThreads(onlyMessages = true): MessageThread[] {
     return JSON.parse(n.messageThreads(onlyMessages)) as MessageThread[];
   } catch {
     return [];
+  }
+}
+
+/** Do Not Disturb is on (Android). False when unknown or not on this phone. */
+export function doNotDisturb(): boolean {
+  try {
+    return (integrationsNative()?.interruptionFilter?.() ?? 1) > 1;
+  } catch {
+    return false;
   }
 }
 

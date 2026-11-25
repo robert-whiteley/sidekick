@@ -808,6 +808,17 @@ export async function recentMoments(limit = 100, offset = 0): Promise<Moment[]> 
   return r.rows.map(toMoment);
 }
 
+/** What was said and asked between [from] and [to], oldest first ("what did we talk about today"). */
+export async function momentsBetween(from: number, to: number, limit = 400): Promise<Moment[]> {
+  const db = await getDb();
+  const r = await db.execute(
+    `${MOMENT_SELECT} WHERE m.at >= ? AND m.at < ? AND m.kind IN ('speech', 'answer', 'question')
+     AND length(m.text) > 0 ORDER BY m.at DESC LIMIT ?`,
+    [from, to, limit],
+  );
+  return r.rows.map(toMoment).reverse();
+}
+
 export async function savedFacts(): Promise<{ id: number; text: string; status: string }[]> {
   const db = await getDb();
   // The owner's facts only; facts about other people are on their pages (people.ts).

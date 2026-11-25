@@ -1,4 +1,3 @@
-import Constants from 'expo-constants';
 import { Paths } from 'expo-file-system';
 import { Platform } from 'react-native';
 
@@ -20,8 +19,6 @@ export type DeviceProfile = {
   usbHost: boolean;
   /** Phone reports its temperature status (Android 10+, iOS). */
   thermalApi: boolean;
-  /** 'play' = Google Play build; 'full' = direct APK with Accessibility actions and direct SMS. */
-  flavour: 'play' | 'full';
   /** Measured silently in the background; null until measured. */
   measuredTokPerSec: number | null;
   measuredVoiceFirstSoundMs: number | null;
@@ -160,7 +157,7 @@ export function phoneFeatures(p: DeviceProfile): PhoneFeature[] {
   const ios = p.platform === 'ios';
   const notIphone = (what: string) => (ios ? `Not possible on iPhone: ${what}` : 'Android only');
   const tier = speedTier(p);
-  const fullOnly = 'Only in the direct-download version (Google Play doesn’t allow it)';
+  const notOnPlay = 'Not possible: Google Play doesn’t allow apps to do this';
   return [
     { id: 'chat', name: 'Ask by typing or voice', available: true },
     { id: 'camera', name: 'Live camera memory', available: true },
@@ -203,14 +200,14 @@ export function phoneFeatures(p: DeviceProfile): PhoneFeature[] {
     {
       id: 'directSms',
       name: 'Send texts directly',
-      available: android && p.flavour === 'full',
-      why: android ? fullOnly : notIphone('Apple doesn’t let apps send texts'),
+      available: false,
+      why: android ? notOnPlay : notIphone('Apple doesn’t let apps send texts'),
     },
     {
       id: 'accessibility',
       name: 'Tap buttons in other apps for you',
-      available: android && p.flavour === 'full',
-      why: android ? fullOnly : notIphone('Apple doesn’t allow it'),
+      available: false,
+      why: android ? notOnPlay : notIphone('Apple doesn’t allow it'),
     },
     {
       id: 'assistant',
@@ -265,7 +262,6 @@ export function readDeviceProfile(s: Settings = getSettings()): DeviceProfile {
       // Not available (tests, web): defaults below.
     }
     const platform = Platform.OS === 'android' || Platform.OS === 'ios' ? Platform.OS : 'other';
-    const flavour = Constants.expoConfig?.extra?.flavour === 'full' ? 'full' : 'play';
     const v = osVersion();
     profile = {
       platform,
@@ -278,7 +274,6 @@ export function readDeviceProfile(s: Settings = getSettings()): DeviceProfile {
       freeStorageBytes: 0,
       usbHost: platform === 'android',
       thermalApi: platform === 'ios' || (platform === 'android' && v >= 29),
-      flavour,
       measuredTokPerSec: null,
       measuredVoiceFirstSoundMs: null,
     };

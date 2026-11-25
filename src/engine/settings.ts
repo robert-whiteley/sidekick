@@ -1,5 +1,7 @@
 import SidekickNative from '../../modules/sidekick-native';
 import type { PausePlace } from './place-logic';
+import type { HandsFreeMode, ReadIncomingMode } from './hands-free-logic';
+import type { ReadBackMode } from './readback-logic';
 import { DEFAULT_WAKE_PHRASE } from './wake-word';
 import type { ConsentChoice } from '@/memory/consent-region';
 
@@ -42,7 +44,8 @@ export type Settings = {
   sourceNotifications: boolean;
   /** Propose to-dos, events and reminders from what was said (each waits for approval). */
   suggestFollowups: boolean;
-  /** A morning notification summarising yesterday's open and today's follow-ups. */
+  /** The daily briefing: a notification at digestHour (today's calendar, due to-dos and
+   *  follow-ups), spoken when Sidekick is next opened. */
   followupDigest: boolean;
   /** Hour (0-23) the digest arrives. */
   digestHour: number;
@@ -75,6 +78,19 @@ export type Settings = {
   modelUpdates: SmartDefault;
   /** Messages, emails, events and calls: send after a 5 s countdown, at once, or ask first. */
   actionSend: 'countdown' | 'instant' | 'ask';
+  /** Read a draft aloud before it sends and listen for yes / no / changes (null = 'voice'). */
+  readBack: ReadBackMode | null;
+  /** Driving / walking: spoken answers, read-back, bigger buttons (null = 'auto': car or walk mode). */
+  handsFree: HandsFreeMode | null;
+  /** Read new messages aloud (null = 'off'). */
+  readIncoming: ReadIncomingMode | null;
+  /** No speaking out loud between quietStart and quietEnd or in Do Not Disturb, except into
+   *  headphones (null = on). */
+  quietSpeech: boolean | null;
+  /** A light tick on send, cancel and when listening starts (null = on). */
+  haptics: boolean | null;
+  /** When the daily briefing was last spoken (ms), so it is said once a day. */
+  lastBriefingAt: number | null;
   /** Large downloads on mobile data. */
   mobileDataDownloads: 'ask' | 'auto' | 'off';
   /** Measured silently in the background; refine the Recommended values (null = not yet). */
@@ -125,6 +141,12 @@ export const DEFAULTS: Settings = {
   offTheRecord: false,
   modelUpdates: 'auto',
   actionSend: 'countdown',
+  readBack: null,
+  handsFree: null,
+  readIncoming: null,
+  quietSpeech: null,
+  haptics: null,
+  lastBriefingAt: null,
   mobileDataDownloads: 'ask',
   measuredTokPerSec: null,
   measuredVoiceFirstSoundMs: null,

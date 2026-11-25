@@ -384,9 +384,34 @@ class AudioRing(private val capacity: Int) {
     return out
   }
 
+  /** Samples written so far (absolute index of the next one). */
+  val total: Long
+    get() = written
+
+  /** Samples [from, to) by absolute index; parts no longer held are left out. */
+  fun range(from: Long, to: Long): FloatArray {
+    val lo = maxOf(from, written - capacity, 0L)
+    val hi = minOf(to, written)
+    if (hi <= lo) return FloatArray(0)
+    val out = FloatArray((hi - lo).toInt())
+    for (i in out.indices) out[i] = buf[((lo + i) % capacity).toInt()]
+    return out
+  }
+
   fun clear() {
     written = 0
   }
+}
+
+/**
+ * Silero marks a line's start a little late, so its first soft word ("The", "ten o'") was cut and
+ * Whisper dropped it. A line gets up to [max] samples from before its start, never reaching back
+ * into the previous line ([prevEnd]); all indices absolute.
+ */
+object PreRoll {
+  const val MS = 400
+
+  fun start(segStart: Long, prevEnd: Long, max: Int): Long = maxOf(segStart - max, prevEnd, 0L)
 }
 
 /**

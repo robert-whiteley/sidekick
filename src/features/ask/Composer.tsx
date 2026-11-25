@@ -6,7 +6,7 @@ import type { ChatTheme } from './theme';
 /**
  * "Ask Sidekick": the camera button on the left; a mic when the field is empty (hold to talk, or
  * tap to talk until tapped again), a send arrow when there is text, Stop while answering.
- * Long-press send to ask Off the record.
+ * Long-press send to ask Off the record. `large`: hands-free (driving / walking) sizes.
  */
 export function Composer({
   theme,
@@ -23,6 +23,7 @@ export function Composer({
   onMicOut,
   cameraOn,
   onCamera,
+  large = false,
 }: {
   theme: ChatTheme;
   value: string;
@@ -38,24 +39,28 @@ export function Composer({
   onMicOut: () => void;
   cameraOn: boolean;
   onCamera: () => void;
+  large?: boolean;
 }) {
   const hasText = value.trim().length > 0;
+  const round = [styles.round, large && styles.roundLarge];
+  const action = [styles.action, large && styles.actionLarge];
+  const icon = large ? 32 : 22;
   return (
     <View style={styles.row}>
       <Pressable
         onPress={onCamera}
-        style={[styles.round, { backgroundColor: cameraOn ? theme.accent : theme.field }]}
+        style={[round, { backgroundColor: cameraOn ? theme.accent : theme.field }]}
         accessibilityRole="switch"
         accessibilityState={{ checked: cameraOn }}
         accessibilityLabel="Camera"
       >
         <Icon
           name={cameraOn ? 'cameraOff' : 'camera'}
-          size={22}
+          size={icon}
           color={cameraOn ? theme.bg : theme.icon}
         />
       </Pressable>
-      <View style={[styles.field, { backgroundColor: theme.field }]}>
+      <View style={[styles.field, large && styles.fieldLarge, { backgroundColor: theme.field }]}>
         <TextInput
           style={[styles.input, { color: theme.text }]}
           value={value}
@@ -70,34 +75,34 @@ export function Composer({
         {answering ? (
           <Pressable
             onPress={onStop}
-            style={[styles.action, { backgroundColor: theme.accent }]}
+            style={[action, { backgroundColor: theme.accent }]}
             accessibilityRole="button"
             accessibilityLabel="Stop"
           >
-            <Icon name="stop" size={20} color={theme.bg} />
+            <Icon name="stop" size={icon - 2} color={theme.bg} />
           </Pressable>
         ) : hasText ? (
           <Pressable
             onPress={onSend}
             onLongPress={onSendLong}
             disabled={busy}
-            style={[styles.action, { backgroundColor: theme.accent }, busy && styles.disabled]}
+            style={[action, { backgroundColor: theme.accent }, busy && styles.disabled]}
             accessibilityRole="button"
             accessibilityLabel="Send"
             accessibilityHint="Long-press to send Off the record"
           >
-            <Icon name="send" size={20} color={theme.bg} />
+            <Icon name="send" size={icon - 2} color={theme.bg} />
           </Pressable>
         ) : (
           <Pressable
             onPressIn={onMicIn}
             onPressOut={onMicOut}
-            style={[styles.action, { backgroundColor: micOn ? theme.danger : 'transparent' }]}
+            style={[action, { backgroundColor: micOn ? theme.danger : 'transparent' }]}
             accessibilityRole="button"
             accessibilityLabel={micOn ? 'Listening, tap when done' : 'Talk'}
             accessibilityHint="Hold to talk, or tap to talk and tap again when done"
           >
-            <Icon name="mic" size={22} color={micOn ? '#fff' : theme.icon} />
+            <Icon name="mic" size={icon} color={micOn ? '#fff' : theme.icon} />
           </Pressable>
         )}
       </View>
@@ -138,5 +143,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  roundLarge: { width: 64, height: 64, borderRadius: 32 },
+  fieldLarge: { minHeight: 64, borderRadius: 32 },
+  actionLarge: { width: 56, height: 56, borderRadius: 28 },
   disabled: { opacity: 0.5 },
 });

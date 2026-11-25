@@ -7,6 +7,7 @@ import {
   newProposals,
   type ProposedFollowup,
 } from './followup-logic';
+import { isRepeat, nextOccurrence } from './repeat-logic';
 
 /** Only recent lines are read: "tomorrow" said a week ago is no use as a proposal. */
 export const SCAN_WINDOW_MS = 2 * 86_400_000;
@@ -24,6 +25,7 @@ const toFollowup = (r: Row): Followup => ({
   sourceMomentId: (r.source_moment_id as number | null) ?? null,
   personId: (r.person_id as number | null) ?? null,
   personName: (r.person_name as string | null) ?? null,
+  repeat: isRepeat(r.repeat) ? r.repeat : null,
 });
 
 const listeners = new Set<() => void>();
@@ -115,20 +117,39 @@ export async function suggestFollowups(proposed: ProposedFollowup[], now = Date.
 
 /** Adds one the user typed (already approved). */
 export async function addFollowup(
-  f: Pick<Followup, 'kind' | 'title' | 'dueAt' | 'allDay' | 'whenText'>,
+  f: Pick<Followup, 'kind' | 'title' | 'dueAt' | 'allDay' | 'whenText'> & {
+    repeat?: Followup['repeat'];
+  },
 ) {
   const db = await getDb();
   await db.execute(
-    "INSERT INTO followups (kind, title, due_at, all_day, when_text, status, created_at) VALUES (?, ?, ?, ?, ?, 'approved', ?)",
-    [f.kind, f.title, f.dueAt, f.allDay ? 1 : 0, f.whenText, Date.now()],
+    "INSERT INTO followups (kind, title, due_at, all_day, when_text, status, created_at, repeat) VALUES (?, ?, ?, ?, ?, 'approved', ?, ?)",
+    [f.kind, f.title, f.dueAt, f.allDay ? 1 : 0, f.whenText, Date.now(), f.repeat ?? null],
   );
   changed();
 }
 
 export async function updateFollowup(
   id: number,
-  patch: Partial<Pick<Followup, 'kind' | 'title' | 'dueAt' | 'allDay' | 'whenText' | 'status'>>,
+  patch: Partial<
+    Pick<Followup, 'kind' | 'title' | 'dueAt' | 'allDay' | 'whenText' | 'status' | 'repeat'>
+  >,
+  now = Date.now(),
 ) {
+  const db = await getDb();
+  // Done on a repeating reminder: it moves on to the next time instead of closing.
+  if (patch.status === 'done' && patch.repeat === undefined) {
+    const row = (await db.execute('SELECT repeat, due_at FROM followups WHERE id = ?', [id]))
+      .rows[0];
+    if (row && isRepeat(row.repeat)) {
+      const due = (row.due_at as number | null) ?? now;
+      patch = {
+        ...patch,
+        status: undefined,
+        dueAt: nextOccurrence(row.repeat, due, Math.max(now, due)),
+      };
+    }
+  }
   const cols: Record<string, unknown> = {
     kind: patch.kind,
     title: patch.title,
@@ -136,15 +157,32 @@ export async function updateFollowup(
     all_day: patch.allDay == null ? undefined : patch.allDay ? 1 : 0,
     when_text: patch.whenText,
     status: patch.status,
+    repeat: patch.repeat,
   };
   const set = Object.entries(cols).filter(([, v]) => v !== undefined);
   if (!set.length) return;
-  const db = await getDb();
   await db.execute(`UPDATE followups SET ${set.map(([k]) => `${k} = ?`).join(', ')} WHERE id = ?`, [
     ...set.map(([, v]) => v as string | number | null),
     id,
   ]);
   changed();
+}
+
+/** Repeating reminders whose time has passed move on to their next time (at start-up). */
+export async function rollRepeats(now = Date.now()) {
+  const db = await getDb();
+  const r = await db.execute(
+    "SELECT id, repeat, due_at FROM followups WHERE repeat IS NOT NULL AND status = 'approved' AND due_at <= ?",
+    [now],
+  );
+  for (const row of r.rows) {
+    if (!isRepeat(row.repeat)) continue;
+    await db.execute('UPDATE followups SET due_at = ? WHERE id = ?', [
+      nextOccurrence(row.repeat, row.due_at as number, now),
+      row.id as number,
+    ]);
+  }
+  if (r.rows.length) changed();
 }
 
 /** Dismissed rows are kept (title only matters) so the same proposal isn't made again. */

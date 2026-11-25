@@ -89,6 +89,8 @@ export function parseConfirmReply(heard: string): ConfirmReply | null {
   return null;
 }
 
+const cap = (s: string) => `${s.charAt(0).toUpperCase()}${s.slice(1)}`;
+
 const join = (a: string, b: string) => {
   const base = a.trim().replace(/[.!?]?$/, (p) => p || '.');
   return `${base} ${b.charAt(0).toUpperCase()}${b.slice(1)}`;
@@ -97,7 +99,7 @@ const join = (a: string, b: string) => {
 /** The draft's fields after "change it to …" / "add …". Calls can't be edited by voice. */
 export function editedFields(d: Draft, edit: ConfirmReply): Partial<Draft['fields']> | null {
   if (edit.kind !== 'replace' && edit.kind !== 'append') return null;
-  const t = edit.text;
+  const t = edit.kind === 'replace' ? cap(edit.text) : edit.text;
   switch (d.kind) {
     case 'message':
       return { text: edit.kind === 'replace' ? t : join(d.fields.text, t) };
@@ -108,4 +110,37 @@ export function editedFields(d: Draft, edit: ConfirmReply): Partial<Draft['field
     case 'call':
       return null;
   }
+}
+
+// --- When the rules can't tell: a short scratch pass of the model ---
+
+/** Worth asking the model? Only short replies; long ones are a new question. */
+export function mightBeConfirmReply(heard: string): boolean {
+  const words = heard.trim().split(/\s+/).filter(Boolean).length;
+  return words > 0 && words <= 14;
+}
+
+export function confirmPrompt(readBack: string, heard: string): string {
+  return `The assistant asked: ${JSON.stringify(readBack)}
+The user answered: ${JSON.stringify(heard)}
+
+Reply with exactly one JSON object:
+{"answer":"yes"} to send as it is,
+{"answer":"no"} to cancel,
+{"answer":"replace","text":"<the new message text, written as the user>"} to change it,
+{"answer":"append","text":"<words to add>"} to add to it,
+{"answer":"other"} if the user is asking something else.`;
+}
+
+export function confirmFromModel(reply: string): ConfirmReply | null {
+  const json = /\{[\s\S]*\}/.exec(reply)?.[0];
+  if (!json) return null;
+  try {
+    const o = JSON.parse(json) as { answer?: unknown; text?: unknown };
+    const text = typeof o.text === 'string' ? o.text.trim() : '';
+    if (o.answer === 'yes') return { kind: 'yes' };
+    if (o.answer === 'no') return { kind: 'no' };
+    if ((o.answer === 'replace' || o.answer === 'append') && text) return { kind: o.answer, text };
+  } catch {}
+  return null;
 }

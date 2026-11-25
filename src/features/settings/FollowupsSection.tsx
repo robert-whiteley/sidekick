@@ -22,7 +22,7 @@ import {
   onFollowupsChange,
   updateFollowup,
 } from '@/memory/followups';
-import { Row, Section, styles } from './ui';
+import { ChoiceRow, Row, Section, styles } from './ui';
 
 const KINDS: FollowupKind[] = ['todo', 'event', 'reminder'];
 
@@ -33,6 +33,7 @@ export function FollowupsSection({ part = 'both' }: { part?: 'settings' | 'list'
   const [items, setItems] = useState<Followup[]>([]);
   const [suggest, setSuggest] = useState(getSettings().suggestFollowups);
   const [digest, setDigest] = useState(getSettings().followupDigest);
+  const [hour, setHour] = useState(getSettings().digestHour);
   const [exact, setExact] = useState(true);
   const [editing, setEditing] = useState<number | null>(null);
   const [msg, setMsg] = useState('');
@@ -108,10 +109,22 @@ export function FollowupsSection({ part = 'both' }: { part?: 'settings' | 'list'
       )}
       {showSettings && (
         <Row
-          label="Daily summary"
-          hint={`A notification at ${getSettings().digestHour}:00 with today's follow-ups and anything still open from yesterday.`}
+          label="Daily briefing"
+          hint={`At ${hour}:00: a notification with today's calendar, due to-dos and follow-ups, read out when you next open Sidekick. All on this phone.`}
           value={digest}
           onChange={(v) => void setDigestOn(v)}
+        />
+      )}
+      {showSettings && digest && (
+        <ChoiceRow<number>
+          label="Briefing time"
+          options={[6, 7, 8, 9, 10].map((h) => ({ value: h, label: `${h}:00` }))}
+          value={hour === 8 ? null : hour}
+          recommended={8}
+          onChange={(v) => {
+            setHour(v ?? 8);
+            updateSettings({ digestHour: v ?? 8 });
+          }}
         />
       )}
       {showSettings && !exact && (

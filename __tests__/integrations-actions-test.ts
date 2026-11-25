@@ -33,14 +33,12 @@ jest.mock('expo-constants', () => ({
 
 const now = new Date(2025, 10, 24, 14, 0);
 const native = {
-  flavour: () => 'play' as const,
   isInstalled: () => true,
   setAlarm: jest.fn(() => true),
   setTimer: jest.fn(() => true),
   call: jest.fn(() => true),
   navigate: jest.fn(() => true),
   openMessage: jest.fn(() => true),
-  sendSms: jest.fn(() => true),
   notificationAccess: jest.fn(() => true),
   openNotificationAccess: jest.fn(),
   messageThreads: jest.fn(() =>
@@ -62,9 +60,6 @@ const native = {
     JSON.stringify({ app: 'Spotify', title: 'Song', artist: 'Band', playing: true }),
   ),
   mediaCommand: jest.fn(() => true),
-  accessibilityEnabled: () => false,
-  openAccessibilitySettings: jest.fn(),
-  armAutoSend: jest.fn(() => true),
   googleAuthorize: jest.fn(async () => 'tok'),
   googleClearToken: jest.fn(async () => {}),
 };

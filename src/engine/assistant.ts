@@ -1,4 +1,6 @@
-import { autoSend, draftSummary, planAction } from '@/engine/actions';
+import { autoSend, beginReadBack, draftSummary, planAction } from '@/engine/actions';
+import { readBackOn } from './hands-free';
+import { summaryPrompt, summaryWindow } from './hands-free-logic';
 import { recallContext } from '@/memory/recall';
 import SidekickNative from '../../modules/sidekick-native';
 import {
@@ -28,6 +30,7 @@ import type { Moment } from '@/memory/store';
 import { MEMORY_LIMIT, memoryContext, pickFacts } from './prompt-budget';
 import {
   rememberExchange,
+  momentsBetween,
   rememberPhotoQuestion,
   saveFact,
   savedFacts,
@@ -44,6 +47,7 @@ import {
   parseReminderRequest,
 } from '@/memory/followup-logic';
 import { addFollowup, listFollowups } from '@/memory/followups';
+import { repeatLabel } from '@/memory/repeat-logic';
 import { personPromptContext } from '@/memory/people';
 import { askWithLookup, type WebSource } from '@/web/lookup';
 
@@ -67,6 +71,11 @@ export type AnswerResult = {
   local?: boolean;
   /** A phone action drafted for the user's OK (message, email, event, call): shown as a card. */
   draftId?: string;
+  /**
+   * The text reads a draft back and waits for "yes / no / change it": speak it even when answers
+   * aren't normally spoken, then call `readBackDone(readBackId)` once the voice has finished.
+   */
+  readBackId?: string;
   /** Stored moments the answer is about (video clip or still), shown in the chat player. */
   media?: { momentAt: number; kind: 'video' | 'photo' | 'audio'; path?: string }[];
 };
@@ -161,7 +170,7 @@ export async function answer(
    * The chat is always continuous (keepHistory is ignored, kept for older callers). offTheRecord:
    * uses memories but saves nothing, in its own chat (default: the Off the record setting).
    */
-  opts?: { keepHistory?: boolean; offTheRecord?: boolean },
+  opts?: { keepHistory?: boolean; offTheRecord?: boolean; spoken?: boolean },
 ): Promise<AnswerResult> {
   const offRecord = opts?.offTheRecord ?? getSettings().offTheRecord ?? false;
   if (!offRecord) offRecordStarted = false;
@@ -184,7 +193,9 @@ export async function answer(
   if (reminder) {
     await addFollowup(reminder);
     // "tomorrow 09:00" → "tomorrow at 09:00"
-    const due = formatDue(reminder, new Date()).replace(/ (\d{1,2}[:.]\d{2}\D*)$/, ' at $1');
+    const due = reminder.repeat
+      ? `${repeatLabel(reminder.repeat)} at ${new Date(reminder.dueAt!).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}`
+      : formatDue(reminder, new Date()).replace(/ (\d{1,2}[:.]\d{2}\D*)$/, ' at $1');
     const what = reminder.title.charAt(0).toLowerCase() + reminder.title.slice(1);
     const text = due
       ? `OK, I'll remind you to ${what} ${due}.`
@@ -196,11 +207,52 @@ export async function answer(
   // "Text Sam I'm running late", "add lunch with Jo tomorrow at 1": a draft card, sent only on OK.
   const plan = photoNow ? null : await planAction(question).catch(() => null);
   if (plan) {
-    const text = plan.kind === 'reply' ? plan.text : draftSummary(plan.draft);
-    onText(text);
     const draftId = plan.kind === 'draft' ? plan.draft.id : undefined;
-    if (draftId) autoSend(draftId);
-    return { text, usedPhoto: null, sources: [], ms: 0, ttftMs: 0, local: true, draftId };
+    // Driving-style read-back: "Text to Sam: I'm running late. Send it?" then the countdown.
+    let readBackId = plan.kind === 'reply' ? plan.readBackId : undefined;
+    let text = plan.kind === 'reply' ? plan.text : draftSummary(plan.draft);
+    if (draftId && readBackOn(!!opts?.spoken)) {
+      const said = beginReadBack(draftId);
+      if (said) [text, readBackId] = [said, draftId];
+    }
+    if (draftId && !readBackId) autoSend(draftId);
+    onText(text);
+    return {
+      text,
+      usedPhoto: null,
+      sources: [],
+      ms: 0,
+      ttftMs: 0,
+      local: true,
+      draftId,
+      readBackId,
+    };
+  }
+
+  // "What did we talk about today / this week": that time's lines, summarised by the model.
+  const span = photoNow ? null : summaryWindow(question, new Date());
+  if (span) {
+    const lines = await momentsBetween(span.from, span.to).catch(() => []);
+    const prompt = summaryPrompt(
+      span,
+      lines.map((m) => ({
+        at: m.at,
+        who: m.kind === 'speech' ? (m.isOwner ? 'Me' : (m.speakerName ?? 'Someone')) : 'Q/A',
+        text: m.text,
+      })),
+    );
+    if (!prompt) {
+      const text = `I don't have any conversations from ${span.label}.`;
+      onText(text);
+      return { text, usedPhoto: null, sources: [], ms: 0, ttftMs: 0, local: true };
+    }
+    const t0 = Date.now();
+    const { text } = await askLlm(prompt, null, onText, {
+      system: SYSTEM_PROMPT,
+      maxTokens: 400,
+      scratch: true,
+    });
+    return { text, usedPhoto: null, sources: [], ms: Date.now() - t0, ttftMs: 0 };
   }
 
   // "What's Sam's number": straight from contacts (when on), no model needed.

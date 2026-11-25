@@ -1,8 +1,7 @@
 /**
  * Every phone integration and its switches, for Settings → Connections (one row each, with its
  * own switches). Values live in prefs.ts. `needs` is shown under the row when the integration
- * can't run yet ("Needs Notification access"). `flavour: 'full'` items exist only in the
- * direct-download APK; Settings lists them on Play builds as "Not in the Play version: why".
+ * can't run yet ("Needs Notification access").
  */
 
 export type IntegrationSwitch = { id: string; label: string; default: boolean };
@@ -14,7 +13,6 @@ export type Integration = {
   description: string;
   switches: IntegrationSwitch[];
   androidOnly?: boolean;
-  flavour?: 'full';
   needs?: string;
   /**
    * Uses the optional Google sign-in: hidden as "Not set up yet" until the OAuth client id is
@@ -95,19 +93,6 @@ export const INTEGRATIONS: Integration[] = [
     ],
     androidOnly: true,
     needs: 'Notification access for reading and replying',
-  },
-  {
-    id: 'autoSend',
-    name: 'Send for me',
-    description:
-      'After you tap Send, Sidekick presses Send in WhatsApp, Telegram or Signal for you, and sends texts directly.',
-    switches: [
-      { id: 'tapSend', label: 'Press Send in other apps', default: true },
-      { id: 'sms', label: 'Send texts directly', default: true },
-    ],
-    androidOnly: true,
-    flavour: 'full',
-    needs: 'Accessibility access for Sidekick (Android asks you to allow restricted settings)',
   },
   {
     id: 'email',

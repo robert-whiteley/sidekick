@@ -15,13 +15,9 @@ test('timeline groups by day, newest first', () => {
 });
 
 test('integrations say why they are unavailable', () => {
-  const android = { platform: 'android' as const, flavour: 'play' as const };
+  const android = { platform: 'android' as const };
   expect(integrationAvailability({}, android).available).toBe(true);
   expect(
     integrationAvailability({ androidOnly: true }, { ...android, platform: 'ios' }).why,
   ).toMatch(/iPhone/);
-  expect(integrationAvailability({ flavour: 'full' }, android).why).toMatch(/Google Play/);
-  expect(
-    integrationAvailability({ flavour: 'full' }, { ...android, flavour: 'full' }).available,
-  ).toBe(true);
 });

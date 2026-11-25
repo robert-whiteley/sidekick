@@ -76,7 +76,6 @@
         }
       ],
       "./plugins/without-firebase-messaging",
-      "./plugins/with-flavours",
       "./plugins/with-usb-camera",
       "expo-video",
       "expo-audio"

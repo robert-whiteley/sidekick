@@ -3,9 +3,13 @@ import * as Notifications from 'expo-notifications';
 import { AndroidImportance } from 'expo-notifications';
 import { Platform } from 'react-native';
 
+import { type Draft, setScheduledSendNotifier } from './actions';
+import { briefingText } from './hands-free-logic';
 import { getSettings, onSettingsChange } from './settings';
+import { eventsBetween } from '@/integrations/calendar';
 import { digestText, type Followup } from '@/memory/followup-logic';
-import { listFollowups, onFollowupsChange } from '@/memory/followups';
+import { listFollowups, onFollowupsChange, rollRepeats } from '@/memory/followups';
+import { repeatTriggers } from '@/memory/repeat-logic';
 
 /**
  * Local notifications for approved reminders and the optional morning digest. Everything is
@@ -64,14 +68,41 @@ async function sync() {
     if (n.content.data?.tag === TAG)
       await Notifications.cancelScheduledNotificationAsync(n.identifier);
   }
+  await rollRepeats();
   const items = await listFollowups();
   const now = Date.now();
-  const due = items
-    .filter(
-      (f) => f.status === 'approved' && f.kind === 'reminder' && f.dueAt != null && f.dueAt > now,
-    )
+  const approved = items.filter(
+    (f) => f.status === 'approved' && f.kind === 'reminder' && f.dueAt != null,
+  );
+  // Recurring reminders repeat by themselves (DAILY / WEEKLY triggers).
+  let left = MAX_SCHEDULED - DIGEST_DAYS;
+  for (const f of approved.filter((x) => x.repeat)) {
+    for (const t of repeatTriggers(f.repeat!, f.dueAt!)) {
+      if (left-- <= 0) break;
+      await Notifications.scheduleNotificationAsync({
+        content: { title: 'Reminder', body: f.title, data: { tag: TAG, followupId: f.id } },
+        trigger:
+          t.type === 'daily'
+            ? {
+                type: Notifications.SchedulableTriggerInputTypes.DAILY,
+                hour: t.hour,
+                minute: t.minute,
+                channelId: CHANNEL,
+              }
+            : {
+                type: Notifications.SchedulableTriggerInputTypes.WEEKLY,
+                weekday: t.weekday,
+                hour: t.hour,
+                minute: t.minute,
+                channelId: CHANNEL,
+              },
+      });
+    }
+  }
+  const due = approved
+    .filter((f) => !f.repeat && f.dueAt! > now)
     .sort((a, b) => a.dueAt! - b.dueAt!)
-    .slice(0, MAX_SCHEDULED - DIGEST_DAYS);
+    .slice(0, Math.max(0, left));
   for (const f of due) await schedule('Reminder', f.title, f.dueAt!, f.id);
 
   const s = getSettings();
@@ -81,7 +112,9 @@ async function sync() {
     d.setDate(d.getDate() + i);
     d.setHours(s.digestHour, 0, 0, 0);
     if (d.getTime() <= now) continue;
-    const body = digestText(items, d);
+    const dayStart = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+    const events = await eventsBetween(dayStart, dayStart + 86_400_000).catch(() => []);
+    const body = briefingText(events, digestText(items, d), d);
     if (body) await schedule('Your day', body, d.getTime(), null);
   }
 }
@@ -97,11 +130,48 @@ async function schedule(title: string, body: string, at: number, id: number | nu
   });
 }
 
+// --- Scheduled sends: a notification at the time opens Sidekick, which sends it ---
+
+const SEND_TAG = 'sidekick-scheduled-send';
+
+async function scheduleSend(d: Draft) {
+  if (!d.scheduledAt || !(await askNotificationPermission())) return;
+  const who = 'name' in d.fields ? d.fields.name : '';
+  await Notifications.scheduleNotificationAsync({
+    identifier: `send-${d.id}`,
+    content: {
+      title: d.kind === 'email' ? `Email to ${who}` : `Message to ${who}`,
+      body: "It's due now: open Sidekick if it hasn't gone yet.",
+      data: { tag: SEND_TAG, draftId: d.id },
+    },
+    trigger: {
+      type: Notifications.SchedulableTriggerInputTypes.DATE,
+      date: d.scheduledAt,
+      channelId: CHANNEL,
+    },
+  });
+}
+
+async function cancelSend(id: string) {
+  await Notifications.cancelScheduledNotificationAsync(`send-${id}`);
+}
+
+/** The briefing text for today (calendar, due to-dos, follow-ups), or null. */
+export async function todaysBriefing(now = new Date()): Promise<string | null> {
+  const dayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  const [items, events] = await Promise.all([
+    listFollowups(),
+    eventsBetween(dayStart, dayStart + 86_400_000).catch(() => []),
+  ]);
+  return briefingText(events, digestText(items, now), now);
+}
+
 let started = false;
 /** Keeps notifications in step with follow-ups and settings. Call once at startup. */
 export function startFollowupNotifications() {
   if (started) return;
   started = true;
+  setScheduledSendNotifier({ schedule: scheduleSend, cancel: cancelSend });
   Notifications.setNotificationHandler({
     handleNotification: async () => ({
       shouldShowBanner: true,

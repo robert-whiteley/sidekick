@@ -24,8 +24,8 @@ describe('registry and prefs', () => {
     expect(isOn('messages', 'reply')).toBe(false);
     expect(isOn('nope', 'x')).toBe(false);
   });
-  it('auto-send exists only in the full flavour', () => {
-    expect(INTEGRATIONS.find((i) => i.id === 'autoSend')?.flavour).toBe('full');
+  it('there is no auto-send (Accessibility) integration: one Google Play app', () => {
+    expect(INTEGRATIONS.find((i) => i.id === 'autoSend')).toBeUndefined();
   });
 });
 
