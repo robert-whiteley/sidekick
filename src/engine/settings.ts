@@ -73,6 +73,8 @@ export type Settings = {
   offTheRecord: boolean;
   /** Better models: download and switch automatically, ask first, or never. */
   modelUpdates: SmartDefault;
+  /** Messages, emails, events and calls: send after a 5 s countdown, at once, or ask first. */
+  actionSend: 'countdown' | 'instant' | 'ask';
   /** Large downloads on mobile data. */
   mobileDataDownloads: 'ask' | 'auto' | 'off';
   /** Measured silently in the background; refine the Recommended values (null = not yet). */
@@ -122,6 +124,7 @@ export const DEFAULTS: Settings = {
   storageReserveGB: null,
   offTheRecord: false,
   modelUpdates: 'auto',
+  actionSend: 'countdown',
   mobileDataDownloads: 'ask',
   measuredTokPerSec: null,
   measuredVoiceFirstSoundMs: null,

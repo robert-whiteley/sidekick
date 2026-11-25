@@ -19,6 +19,7 @@ import {
   confidenceThreshold,
   confidentMatches,
   defaultSort,
+  imageQuestion,
   lookFor,
   needsVerify,
   rank,
@@ -55,6 +56,12 @@ export type RecallResult = {
   sort: SortMode;
   /** Separate sightings, for "how many" questions. */
   count?: number;
+  /**
+   * The question as the model should see it. "What did I see 5 minutes ago?" makes the small
+   * model say it can't know the past even with the frame attached, so a time-only question
+   * becomes a plain question about the image.
+   */
+  modelQuestion?: string;
 };
 
 /** What recall needs from the phone; swapped for fakes in tests. */
@@ -107,7 +114,7 @@ export async function recallContext(
 
   await ingestFrames().catch(() => 0);
   const what = lookFor(question);
-  const qv = await deps.embed(what);
+  const qv = what ? await deps.embed(what) : null;
   let hits: FrameHit[] = qv ? await deps.nearest(qv, win) : [];
   const threshold = confidenceThreshold(hits.map((h) => h.sim));
   let matches = confidentMatches(
@@ -116,9 +123,12 @@ export async function recallContext(
   );
 
   // Browse by time: "what did I see this morning" with nothing specific matched.
+  // These are picked by time, not by a match, so there is nothing for Gemma to check.
+  let browsed = false;
   if (plan.includes('browse') && win && !matches.length) {
     hits = spread(await deps.between(win.from, win.to), n);
     matches = hits;
+    browsed = hits.length > 0;
   }
 
   let ranked = rank(matches, sort, TOP_K);
@@ -130,7 +140,7 @@ export async function recallContext(
   }
 
   // Gemma checks the top matches by looking at them, only when the search was unsure.
-  if (plan.includes('verify') && needsVerify(ranked, threshold)) {
+  if (plan.includes('verify') && !browsed && what && needsVerify(ranked, threshold)) {
     const checked: FrameHit[] = [];
     for (const [i, m] of ranked.entries()) {
       if (i >= VERIFY_MAX || !m.path) {
@@ -181,6 +191,7 @@ export async function recallContext(
     intent,
     sort,
     count,
+    modelQuestion: browsed && images.length ? imageQuestion(top.at) : undefined,
   };
 }
 

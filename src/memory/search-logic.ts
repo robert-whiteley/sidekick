@@ -26,6 +26,9 @@ export function ftsQuery(q: string): string | null {
 }
 
 /** Time window implied by the question ("this morning", "yesterday"…), or null. */
+/** "5 minutes ago", "a few hours ago", "a couple of days ago". */
+export const AGO = /\b(an?|\d+|(?:a )?(?:couple(?: of)?|few)|several) (minute|hour|day)s? ago\b/;
+
 export function timeWindow(q: string, now: Date): { from: number; to: number } | null {
   const day = (offset: number) => {
     const d = new Date(now);
@@ -47,12 +50,21 @@ export function timeWindow(q: string, now: Date): { from: number; to: number } |
     const monday = -((now.getDay() + 6) % 7);
     return { from: day(monday - 7), to: day(monday) };
   }
-  const ago = /\b(an?|\d+) (minute|hour|day)s? ago\b/.exec(s);
+  const ago = AGO.exec(s);
   if (ago) {
-    const n = ago[1] === 'a' || ago[1] === 'an' ? 1 : Number(ago[1]);
+    const word = ago[1].replace(/\s+of$/, '');
+    const n =
+      (
+        { a: 1, an: 1, couple: 2, 'a couple': 2, few: 3, 'a few': 3, several: 5 } as Record<
+          string,
+          number
+        >
+      )[word] ?? Number(word);
     const unit = { minute: 60_000, hour: 3600_000, day: 86_400_000 }[ago[2] as 'minute'];
     const center = now.getTime() - n * unit;
-    return { from: center - unit, to: center + unit };
+    // People round ("5 minutes ago" may mean 3 or 7), so the window grows with n.
+    const half = Math.max(unit, (n * unit) / 2);
+    return { from: center - half, to: Math.min(now.getTime(), center + half) };
   }
   return null;
 }

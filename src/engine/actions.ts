@@ -35,6 +35,7 @@ import { mightBeAction, parseIntent, type Intent } from '@/integrations/parse';
 import { isOn } from '@/integrations/prefs';
 import type { Draft, DraftKind, DraftFieldsByKind, PlannedAction } from '@/integrations/types';
 import { notices } from './notices';
+import { getSettings } from './settings';
 
 export type { Draft, PlannedAction } from '@/integrations/types';
 
@@ -71,6 +72,7 @@ class Drafts {
     return this.get(id);
   }
   cancel(id: string) {
+    stopAutoSend(id);
     const d = this.get(id);
     if (d && (d.status === 'draft' || d.status === 'queued')) {
       if (d.status === 'queued') void outbox.remove(id).catch(() => {});
@@ -439,7 +441,50 @@ function finish(d: Draft, status: Draft['status'], note: string): Draft {
 }
 
 /** Runs the draft the user approved (Send / Add / Call). Never throws; see status + note. */
+/** The countdown before a draft sends by itself (Settings > Connections > Sending). */
+export const AUTO_SEND_MS = 5000;
+const timers = new Map<string, ReturnType<typeof setTimeout>>();
+
+function stopAutoSend(id: string) {
+  const t = timers.get(id);
+  if (t) clearTimeout(t);
+  timers.delete(id);
+}
+
+/**
+ * Applies the sending setting to a new draft: 'instant' runs it now, 'countdown' (default) runs
+ * it after AUTO_SEND_MS unless cancelled or edited, 'ask' waits for Send.
+ */
+export function autoSend(
+  id: string,
+  mode: 'countdown' | 'instant' | 'ask' = getSettings().actionSend ?? 'countdown',
+  now = Date.now(),
+): void {
+  const d = drafts.get(id);
+  if (!d || d.status !== 'draft' || mode === 'ask') return;
+  // Without a resolved recipient it can't go anywhere: leave it for the user to fix.
+  if ((d.kind === 'message' || d.kind === 'email' || d.kind === 'call') && !d.fields.to) return;
+  if (mode === 'instant') return void runAction(id);
+  drafts.put({ ...d, sendAt: now + AUTO_SEND_MS } as Draft);
+  timers.set(
+    id,
+    setTimeout(() => {
+      timers.delete(id);
+      const cur = drafts.get(id);
+      if (cur?.status === 'draft' && cur.sendAt) void runAction(id);
+    }, AUTO_SEND_MS),
+  );
+}
+
+/** Editing a draft stops its countdown: the user is taking over. */
+export function holdDraft(id: string) {
+  stopAutoSend(id);
+  const d = drafts.get(id);
+  if (d?.sendAt) drafts.put({ ...d, sendAt: undefined } as Draft);
+}
+
 export async function runAction(id: string): Promise<Draft> {
+  stopAutoSend(id);
   const d = drafts.get(id);
   if (!d) throw new Error('No such draft');
   if (d.status !== 'draft' && d.status !== 'failed') return d;

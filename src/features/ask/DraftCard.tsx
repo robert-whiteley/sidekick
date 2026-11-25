@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 
-import { type Draft, drafts, runAction } from '@/engine/actions';
+import { type Draft, drafts, holdDraft, runAction } from '@/engine/actions';
 import type { ChatTheme as Theme } from './theme';
 
 /** The editable text of a draft: the message, email body or event title. */
@@ -54,7 +54,15 @@ export function DraftCard({ id, theme }: { id: string; theme: Theme }) {
   const [editing, setEditing] = useState(false);
   const [text, setText] = useState(() => (d ? mainText(d) : ''));
   useEffect(() => drafts.subscribe(() => setD(drafts.get(id))), [id]);
+  // The countdown ("Sending in 4 s") ticks while a draft is about to send by itself.
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (!d?.sendAt || d.status !== 'draft') return;
+    const t = setInterval(() => setNow(Date.now()), 500);
+    return () => clearInterval(t);
+  }, [d?.sendAt, d?.status]);
   if (!d) return null;
+  const left = d.sendAt && d.status === 'draft' ? Math.ceil((d.sendAt - now) / 1000) : 0;
 
   const save = () => {
     setEditing(false);
@@ -63,7 +71,10 @@ export function DraftCard({ id, theme }: { id: string; theme: Theme }) {
     else if (d.kind === 'event') drafts.update(id, { ...d.fields, title: text });
   };
   const open = d.status === 'draft' || d.status === 'failed';
-  const status = [STATUS[d.status], d.note].filter(Boolean).join(': ');
+  const status =
+    left > 0
+      ? `${ACTION[d.kind] === 'Add' ? 'Adding' : ACTION[d.kind] === 'Call' ? 'Calling' : 'Sending'} in ${left} s`
+      : [STATUS[d.status], d.note].filter(Boolean).join(': ');
 
   return (
     <View style={[styles.card, { borderColor: theme.faint }]}>
@@ -95,7 +106,14 @@ export function DraftCard({ id, theme }: { id: string; theme: Theme }) {
                 theme={theme}
               />
               {d.kind !== 'call' && (
-                <Btn label="Edit" onPress={() => setEditing(true)} theme={theme} />
+                <Btn
+                  label="Edit"
+                  onPress={() => {
+                    holdDraft(id);
+                    setEditing(true);
+                  }}
+                  theme={theme}
+                />
               )}
               <Btn label="Cancel" onPress={() => drafts.cancel(id)} theme={theme} />
             </>

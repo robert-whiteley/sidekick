@@ -1,3 +1,5 @@
+import { AGO } from './search-logic';
+
 /**
  * Pure pieces of camera recall (what was seen): ranking, confidence, counting and the tool plan.
  * Tested in __tests__/recall-logic-test.ts. The DB / model side is in recall.ts and frames.ts.
@@ -214,25 +216,29 @@ export function verifyKeeps(reply: string): boolean {
   return !/^\W*no\b/i.test(reply.trim());
 }
 
-/** The words of the question naming what to look for ("red car" from "where did I see a red car"). */
+/** The words of the question naming what to look for ("red car" from "where did I see a red car"); empty for a pure time question ("what did I see 5 minutes ago"). */
 export function lookFor(question: string): string {
-  return (
-    question
-      .toLowerCase()
-      .replace(/[?!.]/g, '')
-      .replace(
-        /\b(how many|did i|do i|have i|i|you|me|my|see|saw|seen|look(ed)?|at|when|where|what|was|were|the|a|an|is|it|that|last|time|today|yesterday|this|morning|afternoon|evening|earlier|show|say|said|on|of|there|any|number)\b/g,
-        ' ',
-      )
-      .replace(/\s+/g, ' ')
-      .trim() || question.trim()
-  );
+  return question
+    .toLowerCase()
+    .replace(/[?!.]/g, '')
+    .replace(new RegExp(AGO.source, 'g'), ' ')
+    .replace(
+      /\b(how many|did i|do i|have i|i|you|me|my|see|saw|seen|look(ed)?|at|when|where|what|was|were|the|a|an|is|it|that|last|time|today|yesterday|this|morning|afternoon|evening|earlier|show|say|said|on|of|there|any|number)\b/g,
+      ' ',
+    )
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
 const hhmm = (at: number) => {
   const d = new Date(at);
   return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
 };
+
+/** A time-only question ("what did I see 5 minutes ago?") asked about the frame itself. */
+export function imageQuestion(at: number): string {
+  return `What does the attached image show? It is what my camera saw at ${hhmm(at)}. Answer as "You saw …".`;
+}
 
 /** The camera part of the prompt: short, factual, with times (each prompt token delays the answer). */
 export function recallPrompt(

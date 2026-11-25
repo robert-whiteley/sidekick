@@ -155,7 +155,8 @@ class ListenService : Service() {
         PendingIntent.FLAG_IMMUTABLE,
       )
     return NotificationCompat.Builder(this, CHANNEL)
-      .setSmallIcon(android.R.drawable.ic_btn_speak_now)
+      // Camera only: no mic icon, so the status bar doesn't suggest the mic is on.
+      .setSmallIcon(if (cameraOn && !active) android.R.drawable.ic_menu_camera else android.R.drawable.ic_btn_speak_now)
       .setContentTitle(
         when {
           pauseReason != null -> "Sidekick is paused ($pauseReason)"
@@ -165,7 +166,8 @@ class ListenService : Service() {
         }
       )
       .setContentText(
-        if (pauseReason == null) "Say \"${MicLoop.wakePhrase}\". Everything stays on this phone."
+        if (pauseReason == null && cameraOn && !active) "Not listening. Everything stays on this phone."
+        else if (pauseReason == null) "Say \"${MicLoop.wakePhrase}\". Everything stays on this phone."
         else "Not listening or keeping anything until this ends. Hold the mic button to ask."
       )
       .setOngoing(true)

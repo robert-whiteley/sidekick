@@ -7,6 +7,7 @@ const mockQueued = new Map<
   { id: string; draft: string; tries: number; createdAt: number; lastError: null }
 >();
 jest.mock('@op-engineering/op-sqlite', () => ({ open: jest.fn() }));
+jest.mock('../src/engine/settings', () => ({ getSettings: () => ({ actionSend: 'ask' }) }));
 jest.mock('../src/integrations/google-tasks', () => ({ syncGoogleTasks: async () => 0 }));
 jest.mock('../src/memory/followups', () => ({ onFollowupsChange: () => () => {} }));
 jest.mock('../src/memory/outbox', () => ({

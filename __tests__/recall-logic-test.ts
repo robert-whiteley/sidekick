@@ -217,3 +217,9 @@ test('recall: Gemma rejecting an unsure match removes it; no video → photo', a
   expect(r.refs.map((x) => x.id)).toEqual([2]);
   expect(r.media?.kind).toBe('photo');
 });
+
+test('lookFor drops time phrases, leaving nothing for a pure time question', () => {
+  expect(lookFor('What did I see 5 minutes ago?')).toBe('');
+  expect(lookFor('what did I see a few minutes ago')).toBe('');
+  expect(lookFor('Where was the red car an hour ago?')).toBe('red car');
+});

@@ -61,6 +61,10 @@ export type Draft<K extends DraftKind = DraftKind> = {
     /** Short reason when failed or queued ("Waiting for internet"). */
     note?: string;
     at: number;
+    /** Sends by itself at this time unless cancelled (the countdown setting). */
+    sendAt?: number;
+    /** Scheduled send ("text Sam at 6pm …"): kept in the outbox and sent at this time. */
+    scheduledAt?: number;
   };
 }[K];
 

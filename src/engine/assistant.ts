@@ -1,4 +1,4 @@
-import { draftSummary, planAction } from '@/engine/actions';
+import { autoSend, draftSummary, planAction } from '@/engine/actions';
 import { recallContext } from '@/memory/recall';
 import SidekickNative from '../../modules/sidekick-native';
 import {
@@ -199,6 +199,7 @@ export async function answer(
     const text = plan.kind === 'reply' ? plan.text : draftSummary(plan.draft);
     onText(text);
     const draftId = plan.kind === 'draft' ? plan.draft.id : undefined;
+    if (draftId) autoSend(draftId);
     return { text, usedPhoto: null, sources: [], ms: 0, ttftMs: 0, local: true, draftId };
   }
 
@@ -251,6 +252,11 @@ export async function answer(
   // The photo's exact text (OCR, ~1 s) helps the model read numbers and names right.
   const seenText = ocrPromptLine(await photoTextOrNull(image));
   const recallPart = recall?.promptPart ?? '';
+  // A camera frame answers the question: unrelated notes would only pull the model away from it
+  // ("I have no information about what you saw"), so they stay out of the prompt.
+  const notes = recall?.images.length
+    ? ''
+    : memoryContext(sources, facts, sources.length, question);
   const conv = conversation();
   if (conv.keepHistory() && chatLoad !== llmLoadCount()) conv.restart(); // the model was reloaded
   const idleBefore = conv.compactReason(Date.now()) === 'idle';
@@ -265,7 +271,7 @@ export async function answer(
     question,
     !!image,
     (webPart) =>
-      `${agenda}${person}${webPart}${memoryContext(sources, facts, sources.length, question)}${seenText}${recallPart}Question: ${question}`,
+      `${agenda}${person}${webPart}${notes}${seenText}${recallPart}Question: ${recall?.modelQuestion ?? question}`,
     async (prompt, t, o) => {
       const r = await askLlm(prompt, image, t, {
         system,

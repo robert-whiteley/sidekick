@@ -173,7 +173,6 @@ export async function videoSegments(fromMs: number, toMs: number): Promise<Segme
   if (!android) return [];
   try {
     const slices = await SidekickNative.cameraVideoBetween(fromMs, toMs);
-    console.log(`[video] ${slices.length} segments ${fromMs}-${toMs}`);
     return slices.map((v) => ({ path: v.path, startMs: v.startMs, endMs: v.endMs }));
   } catch (e) {
     console.log(`[video] lookup failed: ${String(e)}`);
