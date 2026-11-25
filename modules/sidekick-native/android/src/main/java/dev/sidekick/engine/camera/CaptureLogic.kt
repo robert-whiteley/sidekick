@@ -343,3 +343,15 @@ object ServiceNotice {
     return Text(title, body, actions)
   }
 }
+
+/**
+ * A USB camera that opened but sends no picture (a loose plug, or a link that came back at slow
+ * USB 1.1 speed after a replug): stalled once [limitMs] pass with no frame since it started or
+ * since the last frame.
+ */
+object UsbStall {
+  const val LIMIT_MS = 8_000L
+
+  fun stalled(startedAt: Long, lastFrameAt: Long?, now: Long, limitMs: Long = LIMIT_MS): Boolean =
+    now - (lastFrameAt ?: startedAt) >= limitMs
+}

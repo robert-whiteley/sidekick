@@ -31,6 +31,7 @@ object UsbCameras {
   @Volatile var wanted = true
   @Volatile var source: UvcFrameSource? = null
     private set
+  @Volatile private var sourceDevice: String? = null
 
   private val main = Handler(Looper.getMainLooper())
 
@@ -51,26 +52,36 @@ object UsbCameras {
     object : USBMonitor.OnDeviceConnectListener {
       override fun onAttach(device: UsbDevice) {
         if (!isCamera(device)) return
-        emit(device, true, monitor?.hasPermission(device))
+        val allowed = monitor?.hasPermission(device)
+        Log.i(TAG, "USB camera plugged in (permission $allowed, wanted $wanted)")
+        emit(device, true, allowed)
         if (wanted) monitor?.requestPermission(device)
       }
 
       override fun onDetach(device: UsbDevice) {
-        if (!isCamera(device)) return
-        close()
+        // The held camera always closes (a detached device may no longer list its interfaces).
+        if (device.deviceName == sourceDevice) close() else if (!isCamera(device)) return
+        Log.i(TAG, "USB camera unplugged")
         emit(device, false, null)
       }
 
       override fun onDeviceOpen(device: UsbDevice, block: USBMonitor.UsbControlBlock, createNew: Boolean) {
-        if (!isCamera(device) || source != null) return
+        if (!isCamera(device)) return
+        if (source != null && !UvcLogic.replaceOnOpen(sourceDevice, device.deviceName)) return
+        Log.i(TAG, "USB camera opened")
+        source?.let { old ->
+          source = null
+          old.stop()
+        }
         val src = UvcFrameSource(block, width, height, fps)
         source = src
+        sourceDevice = device.deviceName
         emit(device, true, true)
         onSource?.invoke(src)
       }
 
       override fun onDeviceClose(device: UsbDevice, block: USBMonitor.UsbControlBlock) {
-        if (isCamera(device)) close()
+        if (device.deviceName == sourceDevice) close()
       }
 
       override fun onCancel(device: UsbDevice) {
@@ -128,6 +139,7 @@ object UsbCameras {
   fun close() {
     val src = source ?: return
     source = null
+    sourceDevice = null
     src.stop()
     onSource?.invoke(null)
   }

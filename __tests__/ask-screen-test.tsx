@@ -11,7 +11,7 @@ jest.mock('expo-camera', () => ({
   useCameraPermissions: () => [{ granted: false }, jest.fn(async () => ({ granted: false }))],
 }));
 jest.mock('expo-symbols', () => ({ SymbolView: () => null }));
-jest.mock('expo-router', () => ({ router: { push: jest.fn() } }));
+jest.mock('expo-router', () => ({ router: { push: jest.fn() }, useFocusEffect: jest.fn() }));
 jest.mock('@/features/ask/chat-history', () => ({
   loadChatHistory: async () => [
     { id: 'h1q', role: 'user', text: 'where did I park?', at: 1 },

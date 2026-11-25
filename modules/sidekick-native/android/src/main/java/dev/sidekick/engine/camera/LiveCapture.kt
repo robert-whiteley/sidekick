@@ -78,6 +78,8 @@ object LiveCapture {
   @Volatile private var framesSeen = 0
   @Volatile private var startedAt = 0L
   private val dedupe = FrameDedupe()
+  /** The USB camera opened but sent no picture: use the phone camera until it is re-plugged. */
+  @Volatile private var usbNoPicture = false
   private val live = ArrayDeque<Pair<Long, String>>()
 
   private val work = Executors.newSingleThreadScheduledExecutor { Thread(it, "sidekick-capture") }
@@ -124,7 +126,9 @@ object LiveCapture {
     governor.reset()
     rates = null
     // USB camera plugged in or out while filming: switch camera (USB first, else the phone's).
+    usbNoPicture = false
     UsbCameras.onSource = { src ->
+      if (src != null) usbNoPicture = false
       if (running && config.source != "phone") work.execute {
         if (src == null && activeSource == "usb") emit(mapOf("kind" to "lost", "reason" to "usb unplugged", "fallback" to "phone"))
         restartSource()
@@ -222,7 +226,7 @@ object LiveCapture {
     val r = rates ?: ThrottlePolicy.rates(config.sampleFps, config.videoFps, config.recordVideo, DeviceState()).also { rates = it }
     if (r.paused || !CaptureLogicLock.shouldFilm(userPaused, lockPaused)) return
     val cfg = config
-    val usb = if (cfg.source != "phone") runCatching { usbSourceFactory(ctx, cfg, r) }.getOrNull() else null
+    val usb = if (cfg.source != "phone" && !usbNoPicture) runCatching { usbSourceFactory(ctx, cfg, r) }.getOrNull() else null
     val src = usb ?: PhoneCameraSource(ctx, cfg, r)
     val now = if (usb != null) "usb" else "phone"
     if (cfg.source == "usb" && usb == null && activeSource != "phone") emit(mapOf("kind" to "lost", "reason" to "no usb camera", "fallback" to "phone"))
@@ -232,7 +236,19 @@ object LiveCapture {
       recorder = rec
       src.videoSink = rec
     }
-    src.onLost = { reason -> work.execute { lost(reason) } }
+    src.onLost = { reason ->
+      work.execute {
+        if (reason == UsbCameraAdapter.NO_PICTURE) {
+          // Open but silent: film with the phone camera until the USB camera is plugged in again.
+          usbNoPicture = true
+          emit(mapOf("kind" to "lost", "reason" to "usb no picture", "fallback" to "phone"))
+          activeSource = "phone" // so the restart doesn't report it again as unplugged
+          restartSource()
+        } else {
+          lost(reason)
+        }
+      }
+    }
     source = src
     Log.i(TAG, "camera source $now: sample ${r.sampleFps} fps, video ${if (r.recordVideo) "${r.videoFps} fps" else "off"}")
     src.start { frame -> safely { onFrame(ctx, frame) } }

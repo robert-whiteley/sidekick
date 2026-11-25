@@ -29,6 +29,9 @@ test('throttle and lost events in plain words', () => {
   expect(cameraNotice({ kind: 'lost', reason: 'usb', fallback: 'phone' })?.text).toMatch(
     /unplugged/,
   );
+  expect(cameraNotice({ kind: 'lost', reason: 'usb no picture', fallback: 'phone' })?.text).toMatch(
+    /sends no picture.*phone camera/,
+  );
   expect(cameraNotice({ kind: 'status', running: true })).toBeNull();
 });
 

@@ -213,6 +213,11 @@ Read this before proposing any of these again. Each line says why.
 - "Search the web in your browser" shows under every offline answer. Taste; left for the owner.
 - Reading incoming notifications and unplugging the USB camera mid-use were not tested on the
   owner's phone (privacy / needs a person there).
+- After the app gives up on a silent USB camera it isn't retried until replugged (retrying a dead
+  camera every few seconds would just flicker between cameras). Left.
+- Statements are answered as questions ("My locker code is 4417" → "I don't have access…").
+  Small-model limit; left.
+- Voice "resume the camera" is sometimes not recognised while locked; saying it again works. Left.
 
 ## One look on Android and iOS (25 Nov)
 

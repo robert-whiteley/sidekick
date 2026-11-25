@@ -69,9 +69,11 @@ export function cameraNotice(e: CameraEvent): NoticeDraft | null {
       key: 'camera-lost',
       kind: 'info',
       text:
-        e.fallback === 'phone'
-          ? 'Camera unplugged: switched to the phone camera.'
-          : 'Live camera stopped: the camera is in use by something else or was closed.',
+        e.fallback !== 'phone'
+          ? 'Live camera stopped: the camera is in use by something else or was closed.'
+          : e.reason === 'usb no picture'
+            ? 'The USB camera sends no picture (check its plug): switched to the phone camera.'
+            : 'Camera unplugged: switched to the phone camera.',
     };
   }
   return null;

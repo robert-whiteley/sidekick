@@ -1,7 +1,8 @@
 import { onListeningByVoice } from '@/engine/voice-commands';
 import { CameraView, useCameraPermissions } from 'expo-camera';
+import { useFocusEffect } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   AppState,
   KeyboardAvoidingView,
@@ -137,6 +138,14 @@ export function AskScreen({
 } = {}) {
   const [permission, requestPermission] = useCameraPermissions();
   // Live camera memory: runs natively (also with the view closed) until stopped.
+  // Only the chat sets the status bar while it is on screen; other pages use the app-wide one.
+  const [focused, setFocused] = useState(true);
+  useFocusEffect(
+    useCallback(() => {
+      setFocused(true);
+      return () => setFocused(false);
+    }, []),
+  );
   const [live, setLive] = useState(liveCameraOn);
   const [useCamera, setUseCamera] = useState(false);
   const [question, setQuestion] = useState('');
@@ -798,7 +807,7 @@ export function AskScreen({
   return (
     <ForceScheme scheme={dark ? 'dark' : 'light'}>
       <SafeAreaView style={[styles.flex, { backgroundColor: theme.bg }]}>
-        <StatusBar style={dark ? 'light' : 'dark'} />
+        {focused ? <StatusBar style={dark ? 'light' : 'dark'} /> : null}
         <KeyboardAvoidingView style={styles.flex} behavior="padding">
           <ChatHeader
             theme={theme}

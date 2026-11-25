@@ -4,6 +4,9 @@ import android.graphics.Bitmap
 import android.graphics.Rect
 import android.util.Log
 import android.view.Surface
+import java.util.concurrent.Executors
+import java.util.concurrent.ScheduledExecutorService
+import java.util.concurrent.TimeUnit
 import dev.sidekick.engine.usb.FrameSource as UsbFrameSource
 
 /**
@@ -21,18 +24,48 @@ class UsbCameraAdapter(private val usb: UsbFrameSource, private val rates: Rates
   private var lastVideoAt = 0L
   private var pixels = IntArray(0)
   private var samples = 0
+  @Volatile private var startedAt = 0L
+  @Volatile private var lastFrameAt: Long? = null
+  @Volatile private var frames = 0L
+  private var watchdog: ScheduledExecutorService? = null
+  @Volatile private var onUsbFrame: ((dev.sidekick.engine.usb.Frame) -> Unit)? = null
 
   override fun start(onFrame: (Frame) -> Unit) {
     stopped = false
     val sampleMs = (1000f / rates.sampleFps.coerceAtLeast(0.05f)).toLong()
     val videoMs = if (rates.recordVideo && rates.videoFps > 0) 1000L / rates.videoFps else Long.MAX_VALUE
-    try {
-      usb.start { f ->
-        if (stopped) return@start
+    startedAt = System.currentTimeMillis()
+    lastFrameAt = null
+    frames = 0
+    // No picture for a few seconds: hand over to the phone camera instead of a frozen view.
+    watchdog = Executors.newSingleThreadScheduledExecutor().also { w ->
+      w.scheduleWithFixedDelay({
+        if (!stopped && UsbStall.stalled(startedAt, lastFrameAt, System.currentTimeMillis())) {
+          // Another stream format first (smaller, or uncompressed), then give up on the camera.
+          if (lastFrameAt == null && usb.nextMode()) {
+            Log.w(TAG, "no picture yet: trying the next mode")
+            runCatching {
+              usb.stop()
+              startedAt = System.currentTimeMillis()
+              usb.start(onUsbFrame ?: return@runCatching)
+            }.onFailure { Log.w(TAG, "next mode failed", it) }
+            return@scheduleWithFixedDelay
+          }
+          Log.w(TAG, "USB camera sends no picture ($frames frames in ${(System.currentTimeMillis() - startedAt) / 1000} s)")
+          stopped = true
+          w.shutdown()
+          onLost?.invoke(NO_PICTURE)
+        }
+      }, 2, 2, TimeUnit.SECONDS)
+    }
+    val cb: (dev.sidekick.engine.usb.Frame) -> Unit = cb@{ f ->
+        if (stopped) return@cb
         val now = System.currentTimeMillis()
+        lastFrameAt = now
+        frames++
         val wantSample = now - lastSampleAt >= sampleMs
         val wantVideo = videoSink != null && now - lastVideoAt >= videoMs
-        if (!wantSample && !wantVideo) return@start
+        if (!wantSample && !wantVideo) return@cb
         val bmp = toBitmap(f.data, f.width, f.height)
         if (wantVideo) {
           lastVideoAt = now
@@ -44,6 +77,9 @@ class UsbCameraAdapter(private val usb: UsbFrameSource, private val rates: Rates
           onFrame(Frame(now, bmp))
         }
       }
+    onUsbFrame = cb
+    try {
+      usb.start(cb)
     } catch (e: Exception) {
       Log.w(TAG, "USB camera failed", e)
       onLost?.invoke("USB camera failed: ${e.message}")
@@ -52,6 +88,8 @@ class UsbCameraAdapter(private val usb: UsbFrameSource, private val rates: Rates
 
   override fun stop() {
     stopped = true
+    watchdog?.shutdownNow()
+    watchdog = null
     usb.stop()
     synchronized(this) {
       if (surface != null) videoSink?.close()
@@ -81,8 +119,11 @@ class UsbCameraAdapter(private val usb: UsbFrameSource, private val rates: Rates
     return Bitmap.createBitmap(pixels, w, h, Bitmap.Config.ARGB_8888)
   }
 
-  private companion object {
-    const val TAG = "SidekickUsbCapture"
+  companion object {
+    private const val TAG = "SidekickUsbCapture"
+
+    /** [onLost] reason: the camera is open but no frames arrive. */
+    const val NO_PICTURE = "USB camera sends no picture"
   }
 }
 

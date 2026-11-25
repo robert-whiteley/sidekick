@@ -65,6 +65,9 @@ Bugs:
 
 - First question after installing an update: ~60 s (model cold, plus notes for old chats being
   written in the background). After that a typical answer shows first words in ~2 s, done ~14 s.
+- AI action router (decides timer / memory search / navigate before answering): 5.4–5.8 s for the
+  routing step alone, then the action. Maps directions open ~2 s after that.
+- "Your day" recap: 18.7 s. A routine answers ~15 s after it fires.
 - Faster guessing ("speculative decoding") fails with photos on this model; left out (ADR 0006).
 
 ## Battery and heat
@@ -73,6 +76,8 @@ Bugs:
 - Speed tests back to back: ~7% per 5 min (about 85–95% an hour).
 - Live camera + Listen, idle chat: ~36% an hour.
 - 94% → 25% in ~80 min of mixed heavy testing.
+- Live camera running on the wireless charging pad still drained the battery (23 → 21%): the
+  pad can't keep up with camera + model work on this phone.
 - Phone stayed 27–33 °C; Android never reported heat throttling.
 - Other phones: newer chips with GPU/NPU support use far less per answer.
 
@@ -98,7 +103,7 @@ Bugs:
 - Long input (~900 characters) works.
 - Rotation: not applicable (portrait only).
 - **Fixed: refused to write stories** ("I do not have a story about a dragon"). The instructions
-  now let it write longer things when asked. Not yet re-checked on the phone.
+  now let it write longer things when asked. Checked on the phone: it writes the story.
 - "Search the web in your browser" shows under every offline answer, even trivial ones. Taste;
   left (ADR 0006).
 - Statements are treated as questions: "My secret locker code is 4417." got "I do not have access
@@ -124,6 +129,56 @@ Bugs:
 - "Digital assistant app settings" button opens Android's assistant settings (checked; the
   owner's default assistant was not changed).
 - Quick Settings tile and home-screen widget: the "add" prompts appear. Not added on the test phone.
+
+## Phone actions
+
+- **Fixed: "set a timer" said there was no timer app.** Android's Clock refuses alarm and timer
+  requests from apps that don't declare the "set alarms" permission (install-time, no prompt).
+  Declared; a test checks the manifest. Only checked that the request is built; no real alarm set.
+
+## Routines and the locked phone
+
+- Routines fired on time even with Android's exact-alarm permission off.
+- With the phone locked a routine now gives its real answer in a notification whose text is hidden
+  on the lock screen (was "Unlock your phone first").
+- "Keep filming when locked" off: locking pauses the camera (USB too) and the notification says
+  "Sidekick camera is off while the phone is locked". Notification Pause camera / Resume camera
+  work.
+- Force stop (Settings → Force stop) leaves no "tap to turn it back on" notice: Android blocks all
+  restarts after a force stop. The notice is for when Android itself stops the app; that can't be
+  triggered without a rooted phone, so not tested.
+- Voice "pause" while locked: camera pauses ~3.7 s after the wake word; "resume" ~11 s. "Resume
+  the camera" is sometimes missed (ADR 0006).
+
+## USB camera (Arducam 12MP, UVC)
+
+- Listen switches to the USB camera's own mic when it is plugged in ("Mic disconnected: using the
+  phone mic" when it goes).
+- **Fixed: black picture with no warning.** One of the two Arducams (the wide-angle one) stopped
+  sending frames: it opens and accepts settings but no picture ever arrives, and it shows nothing
+  on a Windows PC either; the second Arducam works on the same cable and port. Builds before this
+  investigation wrote no camera settings at all, so it is a fault in that camera (hardware or
+  firmware), not Sidekick. The app used to keep showing the last frame, so it looked like a black
+  or frozen view. Now: no frame within 8 s → it tries smaller or uncompressed modes, then switches
+  to the phone camera and says "The USB camera sends no picture (check its plug)". Checked on the
+  phone.
+- **Fixed: a camera swapped in after a dead one was ignored** until the app restarted.
+- Privacy shutter: only ever switched off, written straight to the camera, never "reset" (a camera's
+  default can be on); a test guards this. This Arducam advertises a privacy control but refuses all
+  privacy requests.
+- Each time it opens, the camera is now set to automatic exposure, focus and white balance, and its
+  picture settings are reset to the camera's defaults (takes ~3 s on this camera).
+- After the app gives up on a silent USB camera it isn't retried until it is unplugged and plugged
+  back in (ADR 0006).
+- After an app update Live camera is off until turned on again (the update stops it).
+- Both Arducams (0c45:636d, "Arducam_12MP") offer MJPEG only: 1280x720 to 2304x1296 at 30 fps,
+  4608x2592 at 10 fps. Sidekick uses 1280x720; there is no smaller or uncompressed mode to fall back
+  to on this model. Each open now logs the camera's ids, firmware and stream mode for support.
+
+## Look (shared UI)
+
+- Dark mode checked on the phone: speech-speed slider, choice sheet, Memory tabs. **Fixed:** the
+  status bar showed dark icons on the dark background outside the chat.
 
 ## Not tested on the phone (and why)
 

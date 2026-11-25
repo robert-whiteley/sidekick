@@ -204,4 +204,11 @@ class CaptureLogicTest {
     assertEquals(200, Nv21.meanLuma(data, w, h))
     assertEquals(0, Nv21.meanLuma(ByteArray(0), w, h))
   }
+
+  @Test fun usbStallsWithoutFramesOrAfterAGap() {
+    assertFalse(UsbStall.stalled(startedAt = 0, lastFrameAt = null, now = 7_999))
+    assertTrue(UsbStall.stalled(startedAt = 0, lastFrameAt = null, now = 8_000))
+    assertFalse(UsbStall.stalled(startedAt = 0, lastFrameAt = 5_000, now = 12_000))
+    assertTrue(UsbStall.stalled(startedAt = 0, lastFrameAt = 5_000, now = 13_000))
+  }
 }

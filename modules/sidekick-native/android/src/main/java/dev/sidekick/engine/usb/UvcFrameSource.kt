@@ -27,6 +27,10 @@ class UvcFrameSource(
   private var sink: ImageReader? = null
   private var sinkThread: HandlerThread? = null
 
+  // Modes to try when one gives no picture (worked out on the first open).
+  private var plan: List<UvcChoice>? = null
+  private var attempt = 0
+
   /** The mode actually used, once started. */
   @Volatile var mode: UvcChoice? = null
     private set
@@ -44,7 +48,11 @@ class UvcFrameSource(
       cam.supportedSizeList.orEmpty().map {
         UvcMode(it.type == UVCCamera.UVC_VS_FRAME_MJPEG, it.width, it.height, it.fpsList.orEmpty().ifEmpty { listOf(it.fps) })
       }
-    val choice = UvcLogic.pick(modes, width, height, fps) ?: UvcChoice(true, width, height, fps)
+    if (plan == null) {
+      plan = UvcLogic.fallbacks(modes, width, height, fps)
+      Log.i(TAG, "modes: " + modes.joinToString { "${if (it.mjpeg) "mjpeg" else "raw"} ${it.width}x${it.height}@${it.fps.joinToString("/")}" })
+    }
+    val choice = plan?.getOrNull(attempt) ?: UvcChoice(true, width, height, fps)
     val type = if (choice.mjpeg) UVCCamera.UVC_VS_FRAME_MJPEG else UVCCamera.UVC_VS_FRAME_UNCOMPRESSED
     try {
       cam.setPreviewSize(choice.width, choice.height, type, choice.fps)
@@ -72,9 +80,11 @@ class UvcFrameSource(
     sink = reader
     sinkThread = thread
     cam.setPreviewDisplay(reader.surface)
+    runCatching { Log.i(TAG, "camera: " + UvcLogic.describe(block.rawDescriptors)) }
+    autoControls(cam) // before streaming: a privacy shutter left on blocks the stream from the start
     cam.startPreview()
-    autoControls(cam)
     Log.i(TAG, "USB camera started: $mode")
+    logCommit()
     camera = cam
   }
 
@@ -109,14 +119,65 @@ class UvcFrameSource(
     for ((name, reset) in listOf<Pair<String, () -> Unit>>(
       "brightness" to c::resetBrightness, "contrast" to c::resetContrast, "gamma" to c::resetGamma,
       "gain" to c::resetGain, "saturation" to c::resetSaturation, "sharpness" to c::resetSharpness,
-      "backlight" to c::resetBacklightComp,
+      "backlight" to c::resetBacklightComp, "hue" to c::resetHue, "power line" to c::resetPowerlineFrequency,
+      "zoom" to c::resetZoomAbsolute, "pan" to c::resetPanAbsolute, "tilt" to c::resetTiltAbsolute,
+      "roll" to c::resetRollAbsolute, "digital zoom" to c::resetDigitalMultiplier,
     )) runCatching { reset() }.onFailure { Log.w(TAG, "reset $name", it) }
     // Privacy shutter off explicitly ("reset" would apply the camera's default, which can be on).
-    runCatching { if (c.isPrivacyEnable && c.privacy) c.privacy = false }.onFailure { Log.w(TAG, "privacy", it) }
+    privacyOff()
     runCatching { Log.i(TAG, "picture after reset: brightness ${c.brightness}, gain ${c.gain}, privacy ${c.privacy}") }
     runCatching { if (c.isFocusAutoEnable && !c.focusAuto) c.focusAuto = true }.onFailure { Log.w(TAG, "auto focus", it) }
     runCatching { if (c.isWhiteBalanceAutoEnable && !c.whiteBalanceAuto) c.whiteBalanceAuto = true }
       .onFailure { Log.w(TAG, "auto white balance", it) }
+  }
+
+  /**
+   * Privacy shutter off, written straight to the camera (SET_CUR 0 on its camera terminal).
+   * Never on, and never "reset": the camera's default can be on, which blacks the camera out.
+   */
+  private fun privacyOff() {
+    runCatching {
+      val conn = block.connection ?: return
+      val t = UvcLogic.cameraTerminal(block.rawDescriptors) ?: return
+      if (t.controls and (1L shl UvcLogic.CT_PRIVACY_BIT) == 0L) return
+      val value = UvcLogic.CT_PRIVACY shl 8
+      val index = (t.id shl 8) or t.iface
+      fun get(req: Int): Int {
+        val b = ByteArray(1)
+        val n = conn.controlTransfer(0xA1, req, value, index, b, 1, 500)
+        return if (n == 1) b[0].toInt() and 0xff else -1
+      }
+      val before = get(0x81)
+      val wrote = conn.controlTransfer(0x21, 0x01, value, index, byteArrayOf(0), 1, 500)
+      val status = conn.controlTransfer(0x80, 0x00, 0, 0, ByteArray(2), 2, 500) // any answer = link ok
+      Log.i(TAG, "privacy (camera terminal ${t.id}, iface ${t.iface}, status read $status): was $before, default ${get(0x87)}, info ${get(0x86)}, write 0 -> $wrote, now ${get(0x81)}")
+    }.onFailure { Log.w(TAG, "privacy", it) }
+  }
+
+  /** The stream settings the camera agreed to (UVC commit control), for support logs. */
+  private fun logCommit() {
+    runCatching {
+      val conn = block.connection ?: return
+      val vs = UvcLogic.streamingInterface(block.rawDescriptors).takeIf { it >= 0 } ?: return
+      for (len in intArrayOf(26, 34, 48)) {
+        val b = ByteArray(len)
+        val n = conn.controlTransfer(0xA1, 0x81, 0x02 shl 8, vs, b, len, 500)
+        if (n < 26) continue
+        fun u32(at: Int) = (0..3).fold(0L) { acc, k -> acc or ((b[at + k].toLong() and 0xff) shl (8 * k)) }
+        Log.i(TAG, "stream agreed: format ${b[2]}, frame ${b[3]}, interval ${u32(4) / 10} us, " +
+          "max frame ${u32(18)} bytes, max payload ${u32(22)} bytes")
+        return
+      }
+      Log.i(TAG, "stream agreed: camera didn't report it")
+    }.onFailure { Log.w(TAG, "stream agreed", it) }
+  }
+
+  @Synchronized
+  override fun nextMode(): Boolean {
+    val n = plan?.size ?: return false
+    if (attempt + 1 >= n) return false
+    attempt++
+    return true
   }
 
   @Synchronized

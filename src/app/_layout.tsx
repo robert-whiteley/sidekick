@@ -1,4 +1,5 @@
 import { DarkTheme, DefaultTheme, Stack, ThemeProvider } from 'expo-router';
+import { StatusBar } from 'expo-status-bar';
 
 import { AppLockGate } from '@/features/lock/AppLockGate';
 import { type Colors, DialogHost, useColors, useScheme } from '@/ui';
@@ -25,6 +26,8 @@ export default function RootLayout() {
   const c = useColors();
   return (
     <ThemeProvider value={navTheme(dark, c)}>
+      {/* Every screen: icons readable on the app's own light or dark background. */}
+      <StatusBar style={dark ? 'light' : 'dark'} />
       <AppLockGate>
         <Stack
           screenOptions={{

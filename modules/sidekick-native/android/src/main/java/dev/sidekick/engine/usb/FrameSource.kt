@@ -21,4 +21,7 @@ interface FrameSource {
   fun start(onFrame: (Frame) -> Unit)
 
   fun stop()
+
+  /** No picture in the current mode: switch to the next one for the next [start]; false = none left. */
+  fun nextMode(): Boolean = false
 }
