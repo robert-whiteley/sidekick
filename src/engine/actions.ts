@@ -463,12 +463,15 @@ async function moveEvent(question: string, now: Date): Promise<PlannedAction | n
 export async function planAction(
   question: string,
   /** guess: let the model read a request the rules miss (off when the tool router does it). */
-  opts: { now?: Date; useModel?: boolean; guess?: boolean } = {},
+  opts: { now?: Date; useModel?: boolean; guess?: boolean; routine?: boolean } = {},
 ): Promise<PlannedAction | null> {
   const now = opts.now ?? new Date();
-  // An answer to a read-back ("yes", "cancel", "change it to …") comes first.
-  const confirm = await answerReadBack(question, now.getTime(), opts.useModel !== false);
-  if (confirm) return confirm;
+  // An answer to a read-back ("yes", "cancel", "change it to …") comes first; never from a
+  // routine or queued run (its text isn't the user's reply, e.g. an incoming message "yes ok").
+  if (!opts.routine) {
+    const confirm = await answerReadBack(question, now.getTime(), opts.useModel !== false);
+    if (confirm) return confirm;
+  }
   const contacts = /\b(text|message|tell|email|e-mail|whatsapp|reply|let)\b/i.test(question)
     ? await contactNameList()
     : [];

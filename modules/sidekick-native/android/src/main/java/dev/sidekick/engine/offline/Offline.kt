@@ -116,8 +116,18 @@ object Offline {
   /** Should JS be woken for [s]? Only when it changed since JS last saw it, or work is waiting. */
   fun shouldWake(ctx: Context, s: State): Boolean {
     val c = config(ctx)
-    if (c.optInt("pending", 0) > 0 && s.online) return true
     val last = lastSent(ctx)
+    if (c.optInt("pending", 0) > 0 && s.online) {
+      // Queued work: wake when the phone just came online, else at most every 15 min (network
+      // callbacks fire often on mobile data; a job that keeps failing must not loop the model).
+      val now = System.currentTimeMillis()
+      val lastWake = prefs(ctx).getLong("pendingWakeAt", 0L)
+      if (last != key(s) || now - lastWake >= 15 * 60_000L) {
+        prefs(ctx).edit().putLong("pendingWakeAt", now).apply()
+        return true
+      }
+      return false
+    }
     if (last == key(s)) return false
     // Nothing listens for this change: remember it without waking JS.
     val wants =

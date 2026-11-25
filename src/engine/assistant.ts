@@ -206,7 +206,9 @@ export async function answer(
   };
   if (!opts?.routed) forgetRanges();
   // Phone locked (screen off, hands-free): nothing personal until it is unlocked.
-  const locked = lockedReply(question);
+  // Routine and back-online runs are the user's own standing requests: they answer into a
+  // notification (shown privately on the lock screen) instead of asking to unlock.
+  const locked = opts?.routine ? null : lockedReply(question);
   if (locked) return done(locked);
   // Speech speed, repeat, "what can you do?", listening/camera on/off, watches, scan (no model).
   const command = await runVoiceCommand(question, photoNow).catch(() => null);
@@ -335,7 +337,9 @@ export async function answer(
 
   // "Text Sam I'm running late", "add lunch with Jo tomorrow at 1": a draft card, sent only on OK.
   // The model's reading of requests the rules miss is the tool router's job below.
-  const plan = photoNow ? null : await planAction(question, { guess: false }).catch(() => null);
+  const plan = photoNow
+    ? null
+    : await planAction(question, { guess: false, routine: !!opts?.routine }).catch(() => null);
   if (plan) return finishPlan(plan);
 
   // Recaps over any range or topic ("what did we talk about last Tuesday", "recap the last 2

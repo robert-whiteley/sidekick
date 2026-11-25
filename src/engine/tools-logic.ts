@@ -333,8 +333,29 @@ export const TOOLS: ToolSpec[] = [
 
 export const toolByName = (name: string) => TOOLS.find((t) => t.name === name);
 
-/** Tools that are never offered to a routine run or off the record (they would save things). */
-export const NOT_IN_ROUTINES = new Set(['routine']);
+/**
+ * Tools never offered to a routine run: a routine's question can carry outside text (an incoming
+ * message), so nothing that acts at once on the phone is allowed — only answers and draft cards.
+ */
+export const NOT_IN_ROUTINES = new Set([
+  'routine',
+  'alarm',
+  'timer',
+  'navigate',
+  'ride',
+  'app_search',
+  'play',
+  'media',
+  'open_app',
+  'phone_setting',
+  'name_place',
+  'watch',
+  'stop_watching',
+  'find_phone',
+  'speech_speed',
+  'listening',
+  'camera',
+]);
 export const NOT_OFF_RECORD = new Set(['routine', 'name_place']);
 
 const norm = (q: string) =>

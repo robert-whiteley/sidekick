@@ -100,6 +100,8 @@ function defaultDeps(): Deps {
       await Notifications.setNotificationChannelAsync('online', {
         name: 'Answers when back online',
         importance: Notifications.AndroidImportance.DEFAULT,
+        // Contents hidden on a secure lock screen (answers can be personal).
+        lockscreenVisibility: Notifications.AndroidNotificationVisibility.PRIVATE,
       });
       await Notifications.scheduleNotificationAsync({
         content: { title, body, data: { tag: 'sidekick-online' } },

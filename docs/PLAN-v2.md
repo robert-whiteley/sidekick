@@ -98,6 +98,35 @@ Owner steps needed later (not blocking the build):
       first (replaces "never together on the Pixel 5", which would reload the chat model after
       every memory question).
 
+## Round 4 (25 Nov, owner feedback; built, phone test in progress)
+
+- [x] Live conversation notes: start at once (no minimum length), update every few lines; actions
+      changed / done in place. No fixed note templates (owner: no hardcoded templates).
+- [x] "Your day" and the daily briefing removed as fixed features; recaps of any time or topic on
+      request (rules parser + model fallback for unusual phrases); routines replace scheduled ones.
+- [x] Routines (background agents): scheduled and triggered (message from X, before meetings, car,
+      headphones, charging, unlock, place enter/leave while running, online / Wi-Fi).
+- [x] AI router: rules first (instant), else Gemma picks from a tool catalog (≤3 steps), same draft
+      cards. Navigation goes straight to Google Maps turn-by-turn (no chooser). Feedback by voice.
+- [x] Location (opt-in, on the phone): positions while running, named places, parking, "where was
+      I", weather (MET Norway, online lookup on), offline village names (≥500 people), naming
+      frequent places by a chat card. No background location (see ADR 0006).
+- [x] Offline queue: lookups / weather asked offline answered when back online; WorkManager wakes
+      the app when the internet returns.
+- [x] Camera (phone + USB), mic and spoken answers keep running with the screen locked.
+- [x] Phone extras: battery, storage, steps, screen time, clipboard, find my phone, birthdays,
+      share into Sidekick, rides / app search links, QR codes, "tell me when you see X", voice
+      commands (speed, repeat, what can you do, stop listening, pause camera), app shortcuts.
+- [x] Texts and call history when Sidekick is the default assistant (Play declaration needed).
+- [x] English only for now; optional "Understand other languages around me" (Parakeet v3, 25
+      languages, translated to English on the phone). Full localisation: ADR 0006 "Later".
+- [x] Updates: Play builds plus Expo quick fixes (Settings → Advanced, on; Wi-Fi only) while under
+      1,000 monthly users; then builds only or a self-hosted server (docs/RELEASE.md).
+- [x] Open source: Apache-2.0; website on GitHub Pages (sidekick.sashy.ai); support info@sashy.ai.
+- [ ] Phone verification of all of the above (tester, sk46) → docs/LIMITS.md.
+- Owner steps: the complete list is docs/RELEASE-OWNER-STEPS.md (single source).
+- Research and future: docs/research/*.md, docs/FUTURE-wearables.md, ADR 0006.
+
 ## Chat
 
 - [ ] One continuous conversation, no "New chat" button (owner: confirmed). Recent turns verbatim; older turns
