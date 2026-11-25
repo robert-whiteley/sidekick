@@ -97,6 +97,14 @@ export type Settings = {
   appLock: boolean;
   /** Minutes away before it asks again (0 = every time; null = Recommended, 1). */
   appLockAfterMin: number | null;
+  /** Notes of each conversation heard with Listen on, after it ends (null = 'auto'). */
+  conversationNotes: 'auto' | 'off' | null;
+  /** Evening "Your day" recap: 'off' or a time 'HH:MM' (null = 'off'). */
+  dayRecap: string | null;
+  /** When the last day recap was posted (ms), so it is posted once a day. */
+  lastDayRecapAt: number | null;
+  /** When Google Drive last took a backup (ms). */
+  lastDriveBackupAt: number | null;
   /** Measured silently in the background; refine the Recommended values (null = not yet). */
   measuredTokPerSec: number | null;
   measuredVoiceFirstSoundMs: number | null;
@@ -154,6 +162,10 @@ export const DEFAULTS: Settings = {
   mobileDataDownloads: 'ask',
   appLock: false,
   appLockAfterMin: null,
+  conversationNotes: null,
+  dayRecap: null,
+  lastDayRecapAt: null,
+  lastDriveBackupAt: null,
   measuredTokPerSec: null,
   measuredVoiceFirstSoundMs: null,
 };

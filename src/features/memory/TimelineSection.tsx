@@ -1,3 +1,4 @@
+import { router } from 'expo-router';
 import { Pressable, Text, View } from 'react-native';
 
 import { AudioClip } from '@/features/media/AudioClip';
@@ -41,9 +42,18 @@ export function TimelineSection(props: {
                   <Text style={[styles.link, styles.danger]}>Delete</Text>
                 </Pressable>
               </View>
-              <Text style={styles.body} numberOfLines={4}>
-                {m.text}
-              </Text>
+              {m.kind === 'conversation_note' ? (
+                <Pressable onPress={() => router.push(`/note/${m.id}`)} accessibilityRole="link">
+                  <Text style={styles.body} numberOfLines={4}>
+                    {m.text}
+                  </Text>
+                  <Text style={styles.link}>Open notes</Text>
+                </Pressable>
+              ) : (
+                <Text style={styles.body} numberOfLines={4}>
+                  {m.text}
+                </Text>
+              )}
               {m.audioPath ? <AudioClip path={m.audioPath} /> : null}
             </View>
           ))}

@@ -1,12 +1,14 @@
 /**
  * "Back up to Google Drive": uploads the export file (made by the Storage/Privacy export) to the
- * user's Drive with the drive.file scope, so Sidekick sees only files it created. Replaces the
- * previous backup (same file id) instead of piling up copies.
+ * user's Drive with the drive.file scope, so Sidekick sees only files it created. Keeps the last
+ * two backups: each new one replaces the older of the two (same file id) instead of piling up.
  */
 import { googleConfigured, googleFetch } from './google';
 import { isOn } from './prefs';
 
-const META_KEY = 'driveBackup.fileId';
+// gitleaks:allow (storage key names, not secrets)
+const SLOT_KEYS = ['driveBackup.fileId', 'driveBackup.fileId.1'] as const;
+const NEXT_KEY = 'driveBackup.nextSlot';
 const UPLOAD = 'https://www.googleapis.com/upload/drive/v3/files';
 
 export type Kv = { get(k: string): string | null; set(k: string, v: string): void };
@@ -35,16 +37,28 @@ export function sessionRequest(
       };
 }
 
-/** Uploads [filePath] (a local zip). Returns the Drive file id. */
+/** Which of the two backup files the next one replaces (the older; slot 0 first). */
+export function nextSlot(store: Kv): 0 | 1 {
+  return store.get(NEXT_KEY) === '1' ? 1 : 0;
+}
+
+/** "Sidekick backup 2026-11-25.zip" */
+export function backupName(now = new Date()): string {
+  const p = (n: number) => String(n).padStart(2, '0');
+  return `Sidekick backup ${now.getFullYear()}-${p(now.getMonth() + 1)}-${p(now.getDate())}.zip`;
+}
+
+/** Uploads [filePath] (a local zip) over the older of the two backups. Returns the Drive file id. */
 export async function backupToDrive(
   filePath: string,
-  name = 'Sidekick backup.zip',
+  name = backupName(),
   f: typeof fetch = fetch,
   store: Kv = kv(),
 ): Promise<string> {
   if (!googleConfigured() || !isOn('driveBackup', 'backup'))
     throw new Error('Google Drive backup is off');
-  let fileId = store.get(META_KEY);
+  const slot = nextSlot(store);
+  let fileId = store.get(SLOT_KEYS[slot]);
   let req = sessionRequest(name, fileId);
   let res = await googleFetch(
     'drive',
@@ -82,6 +96,24 @@ export async function backupToDrive(
   if (up.status < 200 || up.status >= 300)
     throw new Error(`Google Drive upload failed (${up.status})`);
   const id = (JSON.parse(up.body) as { id: string }).id;
-  store.set(META_KEY, id);
+  store.set(SLOT_KEYS[slot], id);
+  store.set(NEXT_KEY, slot === 0 ? '1' : '0');
   return id;
+}
+
+export const BACKUP_EVERY_MS = 7 * 86_400_000;
+/** After a failed automatic backup, wait this long before trying again. */
+export const RETRY_AFTER_MS = 6 * 3_600_000;
+
+/** The weekly automatic backup: a week since the last one, on Wi-Fi and charging. */
+export function backupDue(o: {
+  lastAt: number | null;
+  lastTryAt: number | null;
+  now: number;
+  wifi: boolean;
+  charging: boolean;
+}): boolean {
+  if (!o.wifi || !o.charging) return false;
+  if (o.lastTryAt != null && o.now - o.lastTryAt < RETRY_AFTER_MS) return false;
+  return o.lastAt == null || o.now - o.lastAt >= BACKUP_EVERY_MS;
 }

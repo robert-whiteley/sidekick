@@ -143,3 +143,11 @@ Read this before proposing any of these again. Each line says why.
   name or deep links inside apps, and an offline translation model (Gemma translates; quality is
   lower for rare languages).
 - Rejected: QUERY_ALL_PACKAGES (Play restricts it): the app list uses a launcher-intent query.
+- Google Drive backup has no restore inside Sidekick: the backup is the same zip as Export
+  everything (JSON + photos), kept for the user; importing it back (merging speakers, vectors and
+  encrypted media) is not simple and is left out for now. Restore = download from Drive, manual.
+- Conversation notes wait for the model to be loaded for another reason (like facts and
+  follow-ups) instead of loading it just for a note: loading Gemma in the background competes
+  with the embedder for memory on 4 GB phones. Conversations older than 2 days are not written up.
+- "Your day" is an in-chat line only, not a system notification at the chosen time (would need a
+  scheduled background task to build the recap while the app is closed).

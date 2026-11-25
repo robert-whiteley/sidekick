@@ -60,6 +60,9 @@ import {
 import { inferFactsIfIdle, stopFactInference } from '@/engine/fact-inference';
 import { inferFollowupsIfIdle, stopFollowupInference } from '@/engine/followup-inference';
 import { inferNamesIfIdle, stopNameInference } from '@/engine/name-inference';
+import { stopConversationNotes, writeConversationNotesIfDue } from '@/engine/conversation-notes';
+import { postDayRecapIfDue } from '@/engine/day-recap';
+import { driveBackupIfDue } from '@/engine/drive-backup-schedule';
 import { cancelLlm, ensureLlm, holdBackground, releaseBackground } from '@/engine/llm';
 import { readBackDone } from '@/engine/actions';
 import { startFollowupNotifications, todaysBriefing } from '@/engine/followup-notify';
@@ -335,6 +338,9 @@ export function AskScreen({
         if (!busyRef.current) await inferFactsIfIdle();
         if (!busyRef.current) await inferFollowupsIfIdle();
         if (!busyRef.current) await inferNamesIfIdle();
+        if (!busyRef.current) await writeConversationNotesIfDue();
+        await postDayRecapIfDue();
+        void driveBackupIfDue();
       } catch (e) {
         console.log(`[memory] ingest failed: ${String(e)}`);
       }
@@ -547,7 +553,12 @@ export function AskScreen({
     speaker.current = sp;
     setSpeakingId(speak ? replyId : null);
     try {
-      await Promise.all([stopFactInference(), stopFollowupInference(), stopNameInference()]);
+      await Promise.all([
+        stopFactInference(),
+        stopFollowupInference(),
+        stopNameInference(),
+        stopConversationNotes(),
+      ]);
       let imagePath: string | null = null;
       const visible = AppState.currentState === 'active';
       if (grab) imagePath = grab.shot;

@@ -8,6 +8,7 @@ export function who(m: Moment): string {
   if (m.kind === 'photo') return 'Photo';
   if (m.kind === 'answer') return 'Asked Sidekick';
   if (m.kind === 'note') return 'Your note';
+  if (m.kind === 'conversation_note') return 'Conversation notes';
   if (m.kind === 'file') return 'File';
   if (m.kind === 'event') return 'Calendar';
   if (m.kind === 'notification') return 'Notification';

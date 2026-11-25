@@ -193,6 +193,8 @@ export const MIGRATIONS: { table: string; column: string; ddl: string; after?: s
   { table: 'moments', column: 'audio_path', ddl: 'ALTER TABLE moments ADD COLUMN audio_path TEXT' },
   // Recurring reminders ("every Monday at 9"): repeat-logic.ts rule, null = once.
   { table: 'followups', column: 'repeat', ddl: 'ALTER TABLE followups ADD COLUMN repeat TEXT' },
+  // A conversation note (kind 'conversation_note', at = its end): when the conversation began.
+  { table: 'moments', column: 'from_at', ddl: 'ALTER TABLE moments ADD COLUMN from_at INTEGER' },
 ];
 
 /** Drops unapproved fact suggestions that are model templates, not things said. */

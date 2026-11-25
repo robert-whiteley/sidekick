@@ -1,5 +1,6 @@
 import { EntryPointsSection } from '@/features/settings/EntryPointsSection';
 import { FollowupsSection } from '@/features/settings/FollowupsSection';
+import { NotesRecapSection } from '@/features/settings/NotesRecapSection';
 import { ListeningSection } from '@/features/settings/ListeningSection';
 import { Page } from '@/features/settings/Page';
 import { ChoiceRow, NavRow, Section } from '@/features/settings/ui';
@@ -99,6 +100,7 @@ export default function AssistantSettings() {
       </Section>
       <ListeningSection part="assistant" />
       <FollowupsSection part="settings" />
+      <NotesRecapSection />
       <EntryPointsSection />
     </Page>
   );

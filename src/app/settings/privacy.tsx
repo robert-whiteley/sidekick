@@ -1,6 +1,7 @@
 import { AppLockSection } from '@/features/settings/AppLockSection';
 import { AutoPauseSection } from '@/features/settings/AutoPauseSection';
 import { DataSection } from '@/features/settings/DataSection';
+import { DriveBackupSection } from '@/features/settings/DriveBackupSection';
 import { ListeningSection } from '@/features/settings/ListeningSection';
 import { OnlineSection } from '@/features/settings/OnlineSection';
 import { Page } from '@/features/settings/Page';
@@ -15,6 +16,7 @@ export default function PrivacySettings() {
       <OnlineSection />
       <RetentionSection onChanged={() => {}} />
       <DataSection onChanged={() => {}} />
+      <DriveBackupSection />
     </Page>
   );
 }

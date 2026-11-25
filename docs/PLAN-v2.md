@@ -239,6 +239,18 @@ Owner steps needed later (not blocking the build):
       torch and volume; anything else says "Unlock your phone first". Built, not phone-tested.
 - [x] App lock in Settings → Privacy (expo-local-authentication, MIT): fingerprint, face or PIN on
       open and after 1 min away (Every time / 1 / 5 / 15). Built, not phone-tested.
+- [x] Conversation notes (Settings → Assistant, Automatic Recommended / Off): after a Listen
+      conversation ends (5 min silence or Listen off, ≥ 2 min and 6 lines, someone else in it),
+      a background pass (only when the model is already loaded) writes who/topics/decisions/
+      action items as a 'conversation_note' moment; action items go to follow-up approval; a faint
+      "Notes from your chat with Sam" line opens the note page; Timeline links to it. Nothing off
+      the record; only kept (consented) lines are read. Built + unit-tested, not phone-tested.
+- [x] "Your day" recap (Off Recommended / 18:00–22:00): one evening line in the chat with the
+      day's notes, places, things seen, to-dos done and due; tap opens the recap page. Shown
+      while Sidekick runs (no system notification). Built + unit-tested, not phone-tested.
+- [x] Google Drive backup runs: weekly on Wi-Fi + charging while the switch is on, plus "Back up
+      now" in Settings → Privacy; keeps the last two (alternating files); notice on success or
+      failure. Restore is manual (ADR 0006). Built + unit-tested, not phone-tested.
 
 ## From livestream-ai (the old cloud prototype; reviewed 25 Nov 2026)
 
