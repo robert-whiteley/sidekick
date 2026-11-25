@@ -213,3 +213,8 @@ Read this before proposing any of these again. Each line says why.
 - "Search the web in your browser" shows under every offline answer. Taste; left for the owner.
 - Reading incoming notifications and unplugging the USB camera mid-use were not tested on the
   owner's phone (privacy / needs a person there).
+
+## One look on Android and iOS (25 Nov)
+
+- The UI is one shared component library (`src/ui`) with one token file, identical on both platforms (owner: same on iOS and Android); `__tests__/ui-conventions-test.ts` fails when a screen bypasses it without a `// ui-exception: <why>`.
+- Later (with the iOS work): icons still come from each phone's own set (Material Symbols on Android, SF Symbols on iOS via expo-symbols). Making them identical means bundling the Material Symbols font (Apache-2.0) on iOS too.

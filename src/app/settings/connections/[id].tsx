@@ -1,6 +1,5 @@
 import { useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { Text } from 'react-native';
 
 import { readDeviceProfile } from '@/engine/device-profile';
 import { connectGoogle } from '@/integrations/google';
@@ -8,7 +7,8 @@ import { isOn, onPrefsChange, setSwitch } from '@/integrations/prefs';
 import { integration } from '@/integrations/registry';
 import { integrationAvailability } from '@/features/settings/connections-logic';
 import { Page } from '@/features/settings/Page';
-import { Row, Section, styles } from '@/features/settings/ui';
+import { Row, Section } from '@/features/settings/ui';
+import { AppText } from '@/ui';
 
 export default function ConnectionSettings() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -18,7 +18,9 @@ export default function ConnectionSettings() {
   if (!item) {
     return (
       <Page title="Connection">
-        <Text style={styles.hint}>Not found.</Text>
+        <AppText variant="bodySmall" tone="muted">
+          Not found.
+        </AppText>
       </Page>
     );
   }
@@ -26,8 +28,12 @@ export default function ConnectionSettings() {
   return (
     <Page title={item.name}>
       <Section title={item.name}>
-        <Text style={styles.body}>{item.description}</Text>
-        {!a.available && <Text style={styles.hint}>{a.why}</Text>}
+        <AppText>{item.description}</AppText>
+        {!a.available && (
+          <AppText variant="bodySmall" tone="muted">
+            {a.why}
+          </AppText>
+        )}
         {a.available &&
           item.switches.map((sw) => (
             <Row
@@ -41,7 +47,11 @@ export default function ConnectionSettings() {
               }}
             />
           ))}
-        {a.available && item.needs ? <Text style={styles.hint}>Needs: {item.needs}</Text> : null}
+        {a.available && item.needs ? (
+          <AppText variant="bodySmall" tone="muted">
+            Needs: {item.needs}
+          </AppText>
+        ) : null}
       </Section>
     </Page>
   );

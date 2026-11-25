@@ -1,6 +1,6 @@
-import { router, Stack, useFocusEffect, useLocalSearchParams } from 'expo-router';
+import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useCallback, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
 import { Button, confirm, formatTime, Section, styles } from '@/features/settings/ui';
 import {
@@ -30,6 +30,7 @@ import {
   setPersonNotes,
   undoAutoName,
 } from '@/memory/people';
+import { AppText, Page, TextButton, TextField } from '@/ui';
 
 type Person = NonNullable<Awaited<ReturnType<typeof getSpeaker>>>;
 
@@ -84,9 +85,9 @@ export default function PersonScreen() {
   if (!loaded) return null;
   if (!person) {
     return (
-      <View style={local.container}>
-        <Text style={styles.body}>This person was deleted.</Text>
-      </View>
+      <Page title="Person">
+        <AppText>This person was deleted.</AppText>
+      </Page>
     );
   }
 
@@ -98,92 +99,83 @@ export default function PersonScreen() {
   };
 
   return (
-    <ScrollView contentContainerStyle={local.container}>
-      <Stack.Screen options={{ title: label }} />
+    <Page title={label}>
       {!person.isOwner && (
         <Section title="Name">
           <View style={styles.itemRow}>
-            <TextInput
-              style={[styles.input, styles.flex]}
+            <TextField
+              containerStyle={styles.flex}
               value={name}
               onChangeText={setName}
               onSubmitEditing={() => void saveName()}
               placeholder="Name"
               accessibilityLabel="Name"
             />
-            <Pressable onPress={() => void saveName()}>
-              <Text style={styles.link}>Save</Text>
-            </Pressable>
+            <TextButton title="Save" onPress={() => void saveName()} />
           </View>
           {name !== (person.name ?? '') && contactNameMatches(name, contacts).length > 0 && (
-            <View style={styles.chips}>
+            <View style={styles.actions}>
               {contactNameMatches(name, contacts).map((c) => (
-                <Pressable
+                <TextButton
                   key={c}
-                  style={styles.chip}
+                  title={`Use ${c}`}
                   onPress={() => setName(c)}
                   accessibilityLabel={`Use contact ${c}`}
-                >
-                  <Text style={styles.chipText}>{c}</Text>
-                </Pressable>
+                />
               ))}
             </View>
           )}
           {person.nameAuto && (
             <View style={styles.itemRow}>
-              <Text style={[styles.hint, styles.flex]}>
+              <AppText variant="bodySmall" tone="muted" style={styles.flex}>
                 Named automatically (they said their name).
-              </Text>
-              <Pressable
+              </AppText>
+              <TextButton
+                title="Keep"
                 onPress={async () => {
                   await confirmAutoName(person.id);
                   await reload();
                 }}
-              >
-                <Text style={styles.link}>Keep</Text>
-              </Pressable>
-              <Pressable
+              />
+              <TextButton
+                title="Undo"
                 onPress={async () => {
                   await undoAutoName(person.id);
                   await reload();
                 }}
-              >
-                <Text style={styles.link}>Undo</Text>
-              </Pressable>
+              />
             </View>
           )}
           {person.suggestedName && (
             <View style={styles.itemRow}>
-              <Text style={[styles.body, styles.flex]}>Is this {person.suggestedName}?</Text>
-              <Pressable
+              <AppText style={styles.flex}>Is this {person.suggestedName}?</AppText>
+              <TextButton
+                title="Yes"
                 onPress={async () => {
                   await acceptSuggestedName(person.id);
                   await reload();
                 }}
-              >
-                <Text style={styles.link}>Yes</Text>
-              </Pressable>
-              <Pressable
+              />
+              <TextButton
+                title="No"
                 onPress={async () => {
                   await dismissSuggestedName(person.id);
                   await reload();
                 }}
-              >
-                <Text style={styles.link}>No</Text>
-              </Pressable>
+              />
             </View>
           )}
-          <Text style={styles.hint}>
+          <AppText variant="bodySmall" tone="muted">
             {person.consented
               ? 'Agreed to notes: what they say is remembered.'
               : 'Has not agreed to notes. With consent mode on, what they say is not kept.'}
-          </Text>
+          </AppText>
         </Section>
       )}
       {!person.isOwner && (
         <Section title="Notes">
-          <TextInput
-            style={[styles.input, local.notes]}
+          <TextField
+            style={local.notes}
             value={notes}
             onChangeText={setNotes}
             onEndEditing={() => void setPersonNotes(person.id, notes)}
@@ -192,63 +184,60 @@ export default function PersonScreen() {
             multiline
           />
           {notes !== person.notes && (
-            <Pressable
+            <TextButton
+              title="Save notes"
               onPress={async () => {
                 await setPersonNotes(person.id, notes);
                 await reload();
               }}
-            >
-              <Text style={styles.link}>Save notes</Text>
-            </Pressable>
+            />
           )}
         </Section>
       )}
       {!person.isOwner && (
         <Section title="Asked of them">
           {requests.length === 0 && (
-            <Text style={styles.hint}>
+            <AppText variant="bodySmall" tone="muted">
               Nothing yet. When you say e.g. &quot;{label}, can you send the report by Friday?&quot;
               it shows here.
-            </Text>
+            </AppText>
           )}
           {requests.map((f) => (
             <View key={f.id} style={styles.item}>
-              <Text style={[styles.body, f.status === 'done' && local.done]}>
+              <AppText tone={f.status === 'done' ? 'muted' : 'default'}>
                 {f.title}
                 {formatDue(f, now) ? ` · ${formatDue(f, now)}` : ''}
-              </Text>
+              </AppText>
               <View style={styles.itemRow}>
-                <Text style={[styles.small, styles.flex]}>
+                <AppText variant="bodySmall" tone="muted" style={styles.flex}>
                   {f.status === 'suggested' ? 'Not tracked yet' : f.status}
-                </Text>
+                </AppText>
                 {f.status === 'suggested' && (
-                  <Pressable
+                  <TextButton
+                    title="Track"
                     onPress={async () => {
                       await updateFollowup(f.id, { status: 'approved' });
                       await reload();
                     }}
-                  >
-                    <Text style={styles.link}>Track</Text>
-                  </Pressable>
+                  />
                 )}
                 {f.status !== 'done' && (
-                  <Pressable
+                  <TextButton
+                    title="Done"
                     onPress={async () => {
                       await updateFollowup(f.id, { status: 'done' });
                       await reload();
                     }}
-                  >
-                    <Text style={styles.link}>Done</Text>
-                  </Pressable>
+                  />
                 )}
-                <Pressable
+                <TextButton
+                  title="Remove"
                   onPress={async () => {
                     await dismissFollowup(f.id);
                     await reload();
                   }}
-                >
-                  <Text style={[styles.link, styles.danger]}>Remove</Text>
-                </Pressable>
+                  danger
+                />
               </View>
             </View>
           ))}
@@ -257,39 +246,38 @@ export default function PersonScreen() {
       {!person.isOwner && (
         <Section title="About them">
           {facts.length === 0 && (
-            <Text style={styles.hint}>
+            <AppText variant="bodySmall" tone="muted">
               Things they say about themselves (&quot;I live in Leeds&quot;) are suggested here.
-            </Text>
+            </AppText>
           )}
           {facts.map((f) => (
             <View key={f.id} style={styles.itemRow}>
-              <Text style={[styles.body, styles.flex, f.status === 'suggested' && local.done]}>
+              <AppText style={styles.flex} tone={f.status === 'suggested' ? 'muted' : 'default'}>
                 &quot;{f.text}&quot;
-              </Text>
+              </AppText>
               {f.status === 'suggested' && (
-                <Pressable
+                <TextButton
+                  title="Keep"
                   onPress={async () => {
                     await approvePersonFact(f.id);
                     await reload();
                   }}
-                >
-                  <Text style={styles.link}>Keep</Text>
-                </Pressable>
+                />
               )}
-              <Pressable
+              <TextButton
+                title={f.status === 'suggested' ? 'No' : 'Delete'}
                 onPress={async () => {
                   await deleteFact(f.id);
                   await reload();
                 }}
-              >
-                <Text style={[styles.link, styles.danger]}>
-                  {f.status === 'suggested' ? 'No' : 'Delete'}
-                </Text>
-              </Pressable>
+                danger
+              />
             </View>
           ))}
           {facts.some((f) => f.status === 'suggested') && (
-            <Text style={styles.hint}>Only kept facts are used in answers.</Text>
+            <AppText variant="bodySmall" tone="muted">
+              Only kept facts are used in answers.
+            </AppText>
           )}
         </Section>
       )}
@@ -297,37 +285,43 @@ export default function PersonScreen() {
         <Section title="Recent conversations">
           {talks.map((t) => (
             <View key={t.from} style={styles.item}>
-              <Text style={styles.small}>
+              <AppText variant="bodySmall" tone="muted">
                 {formatTime(t.from)} · {t.lines.length} lines
-              </Text>
+              </AppText>
               {t.lines.slice(-4).map((l) => (
-                <Text key={l.id} style={styles.body} numberOfLines={2}>
-                  <Text style={local.who}>
+                <AppText key={l.id} numberOfLines={2}>
+                  <AppText variant="bodyStrong">
                     {l.speakerId != null ? (labels.get(l.speakerId) ?? 'Someone') : 'Someone'}:{' '}
-                  </Text>
+                  </AppText>
                   {l.text}
-                </Text>
+                </AppText>
               ))}
             </View>
           ))}
         </Section>
       )}
       <Section title={`Memories (${person.moments})`}>
-        {moments.length === 0 && <Text style={styles.hint}>Nothing kept.</Text>}
+        {moments.length === 0 && (
+          <AppText variant="bodySmall" tone="muted">
+            Nothing kept.
+          </AppText>
+        )}
         {moments.map((m) => (
           <View key={m.id} style={styles.item}>
             <View style={styles.itemRow}>
-              <Text style={[styles.small, styles.flex]}>{formatTime(m.at)}</Text>
-              <Pressable
+              <AppText variant="bodySmall" tone="muted" style={styles.flex}>
+                {formatTime(m.at)}
+              </AppText>
+              <TextButton
+                title="Delete"
                 onPress={async () => {
                   await deleteMoment(m.id);
                   await reload();
                 }}
-              >
-                <Text style={[styles.link, styles.danger]}>Delete</Text>
-              </Pressable>
+                danger
+              />
             </View>
-            <Text style={styles.body}>{m.text}</Text>
+            <AppText>{m.text}</AppText>
           </View>
         ))}
       </Section>
@@ -345,13 +339,10 @@ export default function PersonScreen() {
           )
         }
       />
-    </ScrollView>
+    </Page>
   );
 }
 
 const local = StyleSheet.create({
-  container: { padding: 16, gap: 8, paddingBottom: 48 },
   notes: { minHeight: 72, textAlignVertical: 'top' },
-  done: { color: '#888' },
-  who: { fontWeight: '600' },
 });

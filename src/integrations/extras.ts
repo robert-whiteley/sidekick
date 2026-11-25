@@ -4,7 +4,9 @@
  * apps. Each has its own switch (registry.ts: Phone info, Other apps, Contacts → Birthdays).
  * Permissions are asked the first time a feature is used.
  */
-import { Alert, PermissionsAndroid, Platform } from 'react-native';
+import { PermissionsAndroid, Platform } from 'react-native';
+
+import { showDialog } from '@/ui/Dialog';
 
 import { batteryState } from '@/engine/battery';
 import {
@@ -222,14 +224,14 @@ export function startStepSampler(): () => void {
 /** Play's prominent disclosure for activity data, then Android's own prompt. */
 async function askActivity(): Promise<boolean> {
   const ok = await new Promise<boolean>((resolve) =>
-    Alert.alert(
+    showDialog(
       'Count your steps?',
       'Sidekick reads the step count from your phone’s step counter to answer "how many steps today". The count stays on this phone and is never sent anywhere.',
       [
         { text: 'Not now', style: 'cancel', onPress: () => resolve(false) },
         { text: 'Continue', onPress: () => resolve(true) },
       ],
-      { cancelable: true, onDismiss: () => resolve(false) },
+      { onDismiss: () => resolve(false) },
     ),
   );
   if (!ok) return false;

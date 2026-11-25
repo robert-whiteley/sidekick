@@ -1,9 +1,10 @@
 import { useAudioPlayer, useAudioPlayerStatus } from 'expo-audio';
 import { useMemo } from 'react';
-import { Pressable, StyleSheet, Text } from 'react-native';
+import { StyleSheet } from 'react-native';
 
 import SidekickNative from '../../../modules/sidekick-native';
 import { clipLabel } from './media-logic';
+import { AppText, Button, space } from '@/ui';
 
 /** A saved speech clip: a small play / stop button, or a note once the audio is no longer kept. */
 export function AudioClip({ path }: { path: string }) {
@@ -14,7 +15,12 @@ export function AudioClip({ path }: { path: string }) {
       return false;
     }
   }, [path]);
-  if (!kept) return <Text style={styles.gone}>Audio no longer kept</Text>;
+  if (!kept)
+    return (
+      <AppText variant="caption" tone="muted" style={styles.gone}>
+        Audio no longer kept
+      </AppText>
+    );
   return <Player path={path} />;
 }
 
@@ -27,26 +33,17 @@ function Player({ path }: { path: string }) {
     player.play();
   };
   return (
-    <Pressable
+    <Button
+      variant="tonal"
+      title={clipLabel(status.playing, status.duration)}
       onPress={toggle}
       style={styles.button}
-      accessibilityRole="button"
       accessibilityLabel={status.playing ? 'Stop the recording' : 'Play the recording'}
-    >
-      <Text style={styles.text}>{clipLabel(status.playing, status.duration)}</Text>
-    </Pressable>
+    />
   );
 }
 
 const styles = StyleSheet.create({
-  button: {
-    alignSelf: 'flex-start',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
-    backgroundColor: '#e8eefc',
-    marginTop: 4,
-  },
-  text: { color: '#2f6fed', fontSize: 13 },
-  gone: { color: '#888', fontSize: 12, marginTop: 4 },
+  button: { alignSelf: 'flex-start', marginTop: space.xs },
+  gone: { marginTop: space.xs },
 });

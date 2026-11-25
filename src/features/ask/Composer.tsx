@@ -1,5 +1,8 @@
 import { useEffect, useRef } from 'react';
-import { Pressable, StyleSheet, TextInput, View } from 'react-native';
+// ui-exception: the chat composer is a one-off rounded message field with inline buttons, not a form field
+import { StyleSheet, TextInput, View } from 'react-native';
+
+import { radius, space, Tappable, type as typeScale } from '@/ui';
 
 import { Icon } from './Icon';
 import type { ChatTheme } from './theme';
@@ -63,7 +66,8 @@ export function Composer({
   const icon = large ? 32 : 22;
   return (
     <View style={styles.row}>
-      <Pressable
+      <Tappable
+        feedback="dim"
         onPress={onCamera}
         style={[round, { backgroundColor: cameraOn ? theme.accent : theme.field }]}
         accessibilityRole="switch"
@@ -75,7 +79,7 @@ export function Composer({
           size={icon}
           color={cameraOn ? theme.bg : theme.icon}
         />
-      </Pressable>
+      </Tappable>
       <View style={[styles.field, large && styles.fieldLarge, { backgroundColor: theme.field }]}>
         <TextInput
           style={[styles.input, { color: theme.text }]}
@@ -89,16 +93,18 @@ export function Composer({
           submitBehavior="submit"
         />
         {answering ? (
-          <Pressable
+          <Tappable
+            feedback="dim"
             onPress={onStop}
             style={[action, { backgroundColor: theme.accent }]}
             accessibilityRole="button"
             accessibilityLabel="Stop"
           >
             <Icon name="stop" size={icon - 2} color={theme.bg} />
-          </Pressable>
+          </Tappable>
         ) : hasText ? (
-          <Pressable
+          <Tappable
+            feedback="dim"
             onPress={onSend}
             onLongPress={onSendLong}
             disabled={busy}
@@ -108,9 +114,10 @@ export function Composer({
             accessibilityHint="Long-press to send Off the record"
           >
             <Icon name="send" size={icon - 2} color={theme.bg} />
-          </Pressable>
+          </Tappable>
         ) : (
-          <Pressable
+          <Tappable
+            feedback="dim"
             onPressIn={micIn}
             onPressOut={micOut}
             style={[action, { backgroundColor: micOn ? theme.danger : 'transparent' }]}
@@ -118,8 +125,8 @@ export function Composer({
             accessibilityLabel={micOn ? 'Listening, tap when done' : 'Talk'}
             accessibilityHint="Hold to talk, or tap to talk and tap again when done"
           >
-            <Icon name="mic" size={icon} color={micOn ? '#fff' : theme.icon} />
-          </Pressable>
+            <Icon name="mic" size={icon} color={micOn ? theme.bg : theme.icon} />
+          </Tappable>
         )}
       </View>
     </View>
@@ -133,9 +140,9 @@ const styles = StyleSheet.create({
   row: {
     flexDirection: 'row',
     alignItems: 'flex-end',
-    gap: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
+    gap: space.sm,
+    paddingHorizontal: space.md,
+    paddingVertical: space.sm,
   },
   round: {
     width: 44,
@@ -148,13 +155,13 @@ const styles = StyleSheet.create({
     flex: 1,
     flexDirection: 'row',
     alignItems: 'flex-end',
-    borderRadius: 24,
-    paddingLeft: 16,
-    paddingRight: 4,
-    paddingVertical: 4,
+    borderRadius: radius.xl,
+    paddingLeft: space.lg,
+    paddingRight: space.xs,
+    paddingVertical: space.xs,
     minHeight: 44,
   },
-  input: { flex: 1, fontSize: 17, maxHeight: 120, paddingVertical: 8 },
+  input: { flex: 1, ...typeScale.chat, maxHeight: 120, paddingVertical: space.sm },
   action: {
     width: 36,
     height: 36,

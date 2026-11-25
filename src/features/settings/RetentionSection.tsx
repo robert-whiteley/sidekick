@@ -1,9 +1,9 @@
 import { useState } from 'react';
-import { Pressable, Text, View } from 'react-native';
 
 import { getSettings, updateSettings } from '@/engine/settings';
 import { applyRetention } from '@/memory/store';
-import { Section, styles } from './ui';
+import { PickerRow } from '@/ui';
+import { Section } from './ui';
 
 const OPTIONS = [
   { days: 0, label: 'Forever' },
@@ -21,21 +21,14 @@ export function RetentionSection({ onChanged }: { onChanged: () => void }) {
     onChanged();
   };
   return (
-    <Section title="Keep memories for">
-      <View style={styles.chips}>
-        {OPTIONS.map((o) => (
-          <Pressable
-            key={o.days}
-            onPress={() => void pick(o.days)}
-            style={[styles.chip, days === o.days && styles.chipOn]}
-            accessibilityRole="radio"
-            accessibilityState={{ checked: days === o.days }}
-          >
-            <Text style={[styles.chipText, days === o.days && styles.chipTextOn]}>{o.label}</Text>
-          </Pressable>
-        ))}
-      </View>
-      <Text style={styles.hint}>Older memories are deleted automatically.</Text>
+    <Section title="Memory">
+      <PickerRow
+        label="Keep memories for"
+        hint="Older memories are deleted automatically."
+        options={OPTIONS.map((o) => ({ value: o.days, label: o.label }))}
+        value={days}
+        onChange={(d) => void pick(d)}
+      />
     </Section>
   );
 }

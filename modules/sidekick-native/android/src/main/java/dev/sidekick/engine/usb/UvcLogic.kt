@@ -35,6 +35,30 @@ object UvcLogic {
     return UvcChoice(mode.mjpeg, mode.width, mode.height, rate)
   }
 
+  /** UVC auto-exposure modes (one bit each; GET_RES returns the supported ones as a bitmap). */
+  const val AE_MANUAL = 1
+  const val AE_AUTO = 2
+  const val AE_SHUTTER = 4
+  const val AE_APERTURE = 8
+
+  /**
+   * The exposure mode to switch to so the camera adjusts to the light itself, or null to leave it.
+   * A camera can come back from a replug (or another app) in manual or shutter-priority mode with
+   * a tiny fixed exposure: dark frames whatever it points at. Aperture priority is what fixed-iris
+   * webcams call "auto"; full auto when only that is offered. [supported] 0 = unknown.
+   */
+  fun autoExposureMode(current: Int, supported: Int): Int? {
+    if (current == AE_AUTO || current == AE_APERTURE) return null
+    // A "supported" value that doesn't even include the current mode isn't a bitmap: ignore it.
+    val known = if (supported and current == 0) 0 else supported
+    fun has(m: Int) = known == 0 || known and m != 0
+    return when {
+      has(AE_APERTURE) -> AE_APERTURE
+      has(AE_AUTO) -> AE_AUTO
+      else -> null
+    }
+  }
+
   /** Whether a device's interface classes include video (a UVC camera, alone or composite). */
   fun isCamera(interfaceClasses: List<Int>): Boolean = USB_CLASS_VIDEO in interfaceClasses
 

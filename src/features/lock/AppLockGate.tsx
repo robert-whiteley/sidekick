@@ -1,9 +1,10 @@
 import * as LocalAuthentication from 'expo-local-authentication';
 import { type ReactNode, useCallback, useEffect, useRef, useState } from 'react';
-import { AppState, Pressable, StyleSheet, Text, useColorScheme, View } from 'react-native';
+import { AppState, StyleSheet, View } from 'react-native';
 
 import { needsUnlock } from '@/engine/app-lock-logic';
 import { getSettings, onSettingsChange } from '@/engine/settings';
+import { AppText, Button, space, useColors } from '@/ui';
 
 /**
  * Covers the app until the owner unlocks it (Settings → Privacy → App lock). The cover is drawn
@@ -19,7 +20,7 @@ export function AppLockGate({ children }: { children: ReactNode }) {
     lockedRef.current = locked;
   }, [locked]);
   const asking = useRef(false);
-  const dark = useColorScheme() === 'dark';
+  const c = useColors();
 
   const unlock = useCallback(async () => {
     if (asking.current) return;
@@ -77,11 +78,9 @@ export function AppLockGate({ children }: { children: ReactNode }) {
     <View style={styles.fill}>
       {children}
       {locked ? (
-        <View style={[StyleSheet.absoluteFill, styles.cover, dark && styles.coverDark]}>
-          <Text style={[styles.title, dark && styles.textDark]}>Sidekick is locked</Text>
-          <Pressable style={styles.button} onPress={() => void unlock()} accessibilityRole="button">
-            <Text style={styles.buttonText}>Unlock</Text>
-          </Pressable>
+        <View style={[StyleSheet.absoluteFill, styles.cover, { backgroundColor: c.bg }]}>
+          <AppText variant="title">Sidekick is locked</AppText>
+          <Button title="Unlock" variant="filled" onPress={() => void unlock()} />
         </View>
       ) : null}
     </View>
@@ -91,21 +90,10 @@ export function AppLockGate({ children }: { children: ReactNode }) {
 const styles = StyleSheet.create({
   fill: { flex: 1 },
   cover: {
-    backgroundColor: '#ffffff',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 24,
+    gap: space.xl,
     zIndex: 1000,
     elevation: 1000,
   },
-  coverDark: { backgroundColor: '#111111' },
-  title: { fontSize: 20, color: '#111111' },
-  textDark: { color: '#eeeeee' },
-  button: {
-    backgroundColor: '#2f6fed',
-    borderRadius: 24,
-    paddingHorizontal: 32,
-    paddingVertical: 12,
-  },
-  buttonText: { color: '#ffffff', fontSize: 17 },
 });

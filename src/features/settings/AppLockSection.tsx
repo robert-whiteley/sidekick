@@ -1,6 +1,5 @@
 import * as LocalAuthentication from 'expo-local-authentication';
 import { useEffect, useState } from 'react';
-import { Text } from 'react-native';
 
 import {
   APP_LOCK_AFTER_MIN,
@@ -8,8 +7,9 @@ import {
   lockAfterLabel,
   lockAvailable,
 } from '@/engine/app-lock-logic';
-import { ChoiceRow, Row, Section, styles } from './ui';
+import { ChoiceRow, Row, Section } from './ui';
 import { useSettings } from './useSettings';
+import { AppText } from '@/ui';
 
 /** Settings → Privacy → App lock: fingerprint, face or the phone's PIN to open Sidekick. */
 export function AppLockSection() {
@@ -49,7 +49,11 @@ export function AppLockSection() {
         value={s.appLock}
         onChange={(v) => void toggle(v)}
       />
-      {note ? <Text style={styles.small}>{note}</Text> : null}
+      {note ? (
+        <AppText variant="bodySmall" tone="muted">
+          {note}
+        </AppText>
+      ) : null}
       {s.appLock ? (
         <ChoiceRow
           label="Ask again"

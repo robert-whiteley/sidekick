@@ -1,13 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import {
-  Pressable,
-  ScrollView,
-  type ScrollViewInstance,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from 'react-native';
+import { ScrollView, type ScrollViewInstance, StyleSheet, View } from 'react-native';
 
 import SidekickNative from '../../../modules/sidekick-native';
 import { type LiveLine, liveTranscript, ORPHAN_WAIT_MS } from '@/engine/live-transcript';
@@ -16,6 +8,7 @@ import { getSettings, onSettingsChange, updateSettings } from '@/engine/settings
 import { labelFor, type PersonRef } from '@/memory/people-logic';
 import { inferNamesIfIdle } from '@/engine/name-inference';
 import { ingestJournal, listSpeakers, nameSpeaker } from '@/memory/store';
+import { AppText, makeStyles, radius, space, Tappable, TextButton, TextField, Toggle } from '@/ui';
 
 type People = Map<number, PersonRef & { nameAuto: boolean }>;
 
@@ -29,6 +22,7 @@ async function loadPeople(): Promise<People> {
  * because they are on screen only, never stored. Tap a name to rename that person everywhere.
  */
 export function LiveConversation({ listening }: { listening: boolean }) {
+  const st = useStyles();
   const [lines, setLines] = useState<LiveLine[]>(liveTranscript.all);
   const [people, setPeople] = useState<People>(new Map());
   const [show, setShow] = useState(getSettings().showConversation);
@@ -87,8 +81,8 @@ export function LiveConversation({ listening }: { listening: boolean }) {
   // Two separate switches: what is heard (instructions only) vs what is shown (conversation).
   const modes = (
     <View style={local.modes}>
-      <Chip label="Instructions only" value={commandsOnly} onChange={setInstructionsOnly} />
-      <Chip label="Show conversation" value={show} onChange={setShowing} />
+      <MiniSwitch label="Instructions only" value={commandsOnly} onChange={setInstructionsOnly} />
+      <MiniSwitch label="Show conversation" value={show} onChange={setShowing} />
     </View>
   );
 
@@ -104,17 +98,17 @@ export function LiveConversation({ listening }: { listening: boolean }) {
   return (
     <View style={local.shrink}>
       {modes}
-      <View style={[local.box, local.shrink]}>
+      <View style={[st.box, local.shrink]}>
         {commandsOnly && (
-          <Text style={local.small}>
+          <AppText variant="caption" tone="muted">
             Instructions only: nothing around you is transcribed; say &quot;Sidekick …&quot; or hold
             the mic.
-          </Text>
+          </AppText>
         )}
         {renaming && (
           <View style={local.renameRow}>
-            <TextInput
-              style={local.input}
+            <TextField
+              containerStyle={local.flex}
               value={renaming.name}
               onChangeText={(name) => setRenaming({ ...renaming, name })}
               onSubmitEditing={() => void saveName()}
@@ -122,12 +116,8 @@ export function LiveConversation({ listening }: { listening: boolean }) {
               accessibilityLabel="Name"
               autoFocus
             />
-            <Pressable onPress={() => void saveName()}>
-              <Text style={local.link}>Save</Text>
-            </Pressable>
-            <Pressable onPress={() => setRenaming(null)}>
-              <Text style={local.link}>Cancel</Text>
-            </Pressable>
+            <TextButton title="Save" onPress={() => void saveName()} />
+            <TextButton title="Cancel" onPress={() => setRenaming(null)} />
           </View>
         )}
         <ScrollView
@@ -136,7 +126,9 @@ export function LiveConversation({ listening }: { listening: boolean }) {
           onContentSizeChange={() => scroll.current?.scrollToEnd({ animated: true })}
         >
           {lines.length === 0 && !commandsOnly && (
-            <Text style={local.small}>Nothing heard yet.</Text>
+            <AppText variant="caption" tone="muted">
+              Nothing heard yet.
+            </AppText>
           )}
           {lines.map((l) => {
             const p = l.speakerId != null ? people.get(l.speakerId) : undefined;
@@ -144,21 +136,27 @@ export function LiveConversation({ listening }: { listening: boolean }) {
             const canRename = !l.isOwner && p && !p.isOwner;
             return (
               <View key={l.at} style={local.line}>
-                <Pressable
+                <Tappable
+                  feedback="dim"
+                  hitSlop={4}
                   disabled={!canRename}
                   onPress={() => p && setRenaming({ id: p.id, name: p.name ?? '' })}
                   accessibilityRole={canRename ? 'button' : undefined}
                   accessibilityLabel={canRename ? `Rename ${label}` : undefined}
                 >
-                  <Text style={[local.who, !l.saved && local.notSaved]}>
+                  <AppText variant="label" tone={l.saved ? 'primary' : 'faint'}>
                     {label}
                     {p?.nameAuto ? ' (auto)' : ''}
-                  </Text>
-                </Pressable>
-                <Text style={[local.text, !l.saved && local.notSaved]}>
+                  </AppText>
+                </Tappable>
+                <AppText
+                  variant="bodySmall"
+                  tone={l.saved ? 'default' : 'faint'}
+                  style={local.text}
+                >
                   {l.text}
                   {!l.saved ? '  · not saved' : ''}
-                </Text>
+                </AppText>
               </View>
             );
           })}
@@ -168,47 +166,42 @@ export function LiveConversation({ listening }: { listening: boolean }) {
   );
 }
 
-function Chip(props: { label: string; value: boolean; onChange: (v: boolean) => void }) {
+/** A compact labelled switch for the two live modes above the transcript. */
+function MiniSwitch(props: { label: string; value: boolean; onChange: (v: boolean) => void }) {
   return (
-    <Pressable
-      onPress={() => props.onChange(!props.value)}
-      style={[local.chip, props.value && local.chipOn]}
-      accessibilityRole="switch"
-      accessibilityState={{ checked: props.value }}
-    >
-      <Text style={[local.chipText, props.value && local.chipTextOn]}>{props.label}</Text>
-    </Pressable>
+    <View style={local.mini}>
+      <AppText variant="bodySmall" tone="muted">
+        {props.label}
+      </AppText>
+      <Toggle value={props.value} onChange={props.onChange} accessibilityLabel={props.label} />
+    </View>
   );
 }
 
-const local = StyleSheet.create({
+const useStyles = makeStyles((c) => ({
   box: {
-    marginHorizontal: 16,
-    marginTop: 10,
-    padding: 8,
-    borderRadius: 12,
-    backgroundColor: '#f6f6f8',
+    marginHorizontal: space.lg,
+    marginTop: space.sm,
+    padding: space.sm,
+    borderRadius: radius.md,
+    backgroundColor: c.surface,
   },
-  link: { fontSize: 14, color: '#2f6fed' },
-  scroll: { maxHeight: 150, flexShrink: 1, marginTop: 4 },
+}));
+
+const local = StyleSheet.create({
+  flex: { flex: 1 },
+  scroll: { maxHeight: 150, flexShrink: 1, marginTop: space.xs },
   shrink: { flexShrink: 1, minHeight: 0 },
-  line: { flexDirection: 'row', gap: 6, paddingVertical: 2 },
-  who: { fontSize: 14, fontWeight: '600', color: '#2f6fed' },
-  text: { fontSize: 14, color: '#222', flexShrink: 1 },
-  notSaved: { color: '#999' },
-  small: { fontSize: 13, color: '#777' },
-  modes: { flexDirection: 'row', gap: 8, marginHorizontal: 16, marginTop: 8 },
-  chip: { paddingVertical: 4, paddingHorizontal: 10, borderRadius: 14, backgroundColor: '#eee' },
-  chipOn: { backgroundColor: '#2f6fed' },
-  chipText: { fontSize: 13, color: '#333' },
-  chipTextOn: { color: 'white' },
-  renameRow: { flexDirection: 'row', gap: 8, alignItems: 'center', marginTop: 4 },
-  input: {
-    flex: 1,
-    fontSize: 15,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 8,
-    backgroundColor: 'white',
+  line: { flexDirection: 'row', gap: space.sm, paddingVertical: space.xxs },
+  text: { flexShrink: 1 },
+  modes: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    columnGap: space.lg,
+    rowGap: space.xs,
+    marginHorizontal: space.lg,
+    marginTop: space.sm,
   },
+  mini: { flexDirection: 'row', alignItems: 'center', gap: space.sm },
+  renameRow: { flexDirection: 'row', gap: space.sm, alignItems: 'center', marginTop: space.xs },
 });

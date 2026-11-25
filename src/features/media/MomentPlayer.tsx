@@ -5,16 +5,13 @@ import { useVideoPlayer, VideoView, type VideoPlayer } from 'expo-video';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   FlatList,
+  type GestureResponderEvent,
   Image,
+  type LayoutChangeEvent,
   Modal,
-  Pressable,
   StyleSheet,
-  Text,
-  TextInput,
   useWindowDimensions,
   View,
-  type GestureResponderEvent,
-  type LayoutChangeEvent,
 } from 'react-native';
 
 import { framesNear, videoSegments } from '@/memory/frames';
@@ -34,6 +31,20 @@ import {
 } from './media-logic';
 import { AudioClip } from './AudioClip';
 import { keptFile } from '@/memory/media-files';
+import {
+  AppText,
+  DARK_COLORS,
+  Icon,
+  IconButton,
+  radius,
+  space,
+  Tappable,
+  TextButton,
+  TextField,
+  useColors,
+} from '@/ui';
+
+const MEDIA = DARK_COLORS;
 
 export type MomentPlayerProps = {
   /** Wall-clock time (ms) of the found moment: the player opens here. */
@@ -74,14 +85,13 @@ function VisualMoment(props: MomentPlayerProps & { kind: 'video' | 'photo' }) {
       <Modal visible={full} animationType="fade" onRequestClose={() => setFull(false)}>
         <View style={styles.fullScreen}>
           {full && body(true)}
-          <Pressable
+          <IconButton
+            name="close"
+            color={MEDIA.onMedia}
             style={styles.close}
             onPress={() => setFull(false)}
-            accessibilityRole="button"
             accessibilityLabel="Close"
-          >
-            <Text style={styles.closeText}>✕</Text>
-          </Pressable>
+          />
         </View>
       </Modal>
     </>
@@ -167,7 +177,9 @@ function VideoTimeline({
     return (
       <View>
         {path ? <ZoomImage path={path} full={full} onTap={onExpand} /> : null}
-        <Text style={styles.note}>No clip: found the moment but its video isn&apos;t kept.</Text>
+        <AppText variant="bodySmall" tone="muted" style={styles.note}>
+          No clip: found the moment but its video isn&apos;t kept.
+        </AppText>
         {path ? <SaveShare file={path} kind="photo" topic={topic} /> : null}
       </View>
     );
@@ -184,22 +196,35 @@ function VideoTimeline({
           style={StyleSheet.absoluteFill}
         />
         <View style={styles.taps}>
-          <Pressable
+          <Tappable
+            feedback="none"
+            hitSlop={0}
             style={styles.tap}
             onPress={() => nudge(-5)}
+            accessibilityRole="button"
             accessibilityLabel="Back 5 seconds"
           />
-          <Pressable
+          <Tappable
+            feedback="none"
+            hitSlop={0}
             style={styles.tap}
             onPress={() => ctl.toggle(playing)}
             onLongPress={onExpand}
+            accessibilityRole="button"
             accessibilityLabel={playing ? 'Pause' : 'Play'}
           >
-            {!playing && <Text style={styles.play}>▶</Text>}
-          </Pressable>
-          <Pressable
+            {!playing && (
+              <View style={styles.play}>
+                <Icon name="play" size={36} color={MEDIA.onMedia} />
+              </View>
+            )}
+          </Tappable>
+          <Tappable
+            feedback="none"
+            hitSlop={0}
             style={styles.tap}
             onPress={() => nudge(5)}
+            accessibilityRole="button"
             accessibilityLabel="Forward 5 seconds"
           />
         </View>
@@ -213,21 +238,16 @@ function VideoTimeline({
         }}
       />
       <View style={styles.row}>
-        <Text style={styles.time}>{clock(timeOf(segs, spot))}</Text>
+        <AppText variant="caption" tone="muted" style={styles.time}>
+          {clock(timeOf(segs, spot))}
+        </AppText>
         {awayFromMoment(segs, spot, momentAt) && (
-          <Pressable
-            style={styles.chip}
+          <TextButton
+            title="Back to moment"
             onPress={() => moveTo(spotAt(segs, momentAt)!, playing)}
-            accessibilityRole="button"
-          >
-            <Text style={styles.chipText}>Back to moment</Text>
-          </Pressable>
+          />
         )}
-        {!full && (
-          <Pressable style={styles.chip} onPress={onExpand} accessibilityRole="button">
-            <Text style={styles.chipText}>Full screen</Text>
-          </Pressable>
-        )}
+        {!full && <TextButton title="Full screen" onPress={onExpand} />}
       </View>
       <SaveShare file={segs[spot.index].path} kind="video" topic={topic} />
     </View>
@@ -235,6 +255,7 @@ function VideoTimeline({
 }
 
 function ScrubBar(p: { fraction: number; moment: number; onSeek: (f: number) => void }) {
+  const c = useColors();
   const [width, setWidth] = useState(1);
   const at = (e: GestureResponderEvent) => p.onSeek(e.nativeEvent.locationX / width);
   return (
@@ -248,10 +269,19 @@ function ScrubBar(p: { fraction: number; moment: number; onSeek: (f: number) => 
       onResponderGrant={at}
       onResponderMove={at}
     >
-      <View pointerEvents="none" style={styles.track} />
-      <View pointerEvents="none" style={[styles.done, { width: `${p.fraction * 100}%` }]} />
-      <View pointerEvents="none" style={[styles.mark, { left: `${p.moment * 100}%` }]} />
-      <View pointerEvents="none" style={[styles.knob, { left: `${p.fraction * 100}%` }]} />
+      <View pointerEvents="none" style={[styles.track, { backgroundColor: c.surfaceHigh }]} />
+      <View
+        pointerEvents="none"
+        style={[styles.done, { width: `${p.fraction * 100}%`, backgroundColor: c.primary }]}
+      />
+      <View
+        pointerEvents="none"
+        style={[styles.mark, { left: `${p.moment * 100}%`, backgroundColor: c.warning }]}
+      />
+      <View
+        pointerEvents="none"
+        style={[styles.knob, { left: `${p.fraction * 100}%`, backgroundColor: c.primary }]}
+      />
     </View>
   );
 }
@@ -284,7 +314,11 @@ function PhotoMoment({ momentAt, path, topic, full, onExpand }: Inner) {
   }, [momentAt]);
   const w = full ? width : Math.min(width - 48, 320);
   if (!frames.length)
-    return path ? <Text style={styles.goneText}>Photo no longer kept</Text> : null;
+    return path ? (
+      <AppText variant="caption" tone="muted" style={styles.goneText}>
+        Photo no longer kept
+      </AppText>
+    ) : null;
   const current = frames[Math.min(index, frames.length - 1)];
   return (
     <View style={full ? styles.fullBody : styles.card}>
@@ -306,10 +340,12 @@ function PhotoMoment({ momentAt, path, topic, full, onExpand }: Inner) {
         )}
       />
       <View style={styles.row}>
-        <Text style={styles.time}>{clock(current.at)}</Text>
+        <AppText variant="caption" tone="muted" style={styles.time}>
+          {clock(current.at)}
+        </AppText>
         {current.at !== momentAt && Math.abs(current.at - momentAt) > 500 && (
-          <Pressable
-            style={styles.chip}
+          <TextButton
+            title="Back to moment"
             onPress={() => {
               const i = nearestIndex(
                 frames.map((x) => x.at),
@@ -318,10 +354,7 @@ function PhotoMoment({ momentAt, path, topic, full, onExpand }: Inner) {
               setIndex(i);
               list.current?.scrollToIndex({ index: i, animated: true });
             }}
-            accessibilityRole="button"
-          >
-            <Text style={styles.chipText}>Back to moment</Text>
-          </Pressable>
+          />
         )}
       </View>
       <SaveShare file={current.path} kind="photo" topic={topic} />
@@ -384,7 +417,15 @@ function ZoomImage({ path, full, onTap }: { path: string; full: boolean; onTap: 
   };
   return (
     <View style={full ? styles.fullMedia : styles.media} {...(full ? zoomHandlers : {})}>
-      <Pressable style={StyleSheet.absoluteFill} onPress={full ? undefined : onTap} disabled={full}>
+      <Tappable
+        feedback="none"
+        hitSlop={0}
+        style={StyleSheet.absoluteFill}
+        onPress={full ? undefined : onTap}
+        disabled={full}
+        accessibilityRole={full ? 'image' : 'button'}
+        accessibilityLabel={full ? 'Photo' : 'Open full screen'}
+      >
         <Image
           source={{ uri: uri(path) }}
           resizeMode="contain"
@@ -393,7 +434,7 @@ function ZoomImage({ path, full, onTap }: { path: string; full: boolean; onTap: 
             { transform: [{ translateX: t.x }, { translateY: t.y }, { scale: t.scale }] },
           ]}
         />
-      </Pressable>
+      </Tappable>
     </View>
   );
 }
@@ -432,99 +473,71 @@ function SaveShare({
   return (
     <View>
       <View style={styles.row}>
-        <Pressable
-          style={styles.chip}
+        <TextButton
+          title="Share"
           onPress={() => void Sharing.shareAsync(uri(file)).catch(() => {})}
-          accessibilityRole="button"
-        >
-          <Text style={styles.chipText}>Share</Text>
-        </Pressable>
-        <Pressable style={styles.chip} onPress={() => void save(album)} accessibilityRole="button">
-          <Text style={styles.chipText}>
-            Save to {album === suggestion.album ? suggestion.label : album}
-          </Text>
-        </Pressable>
-        <Pressable
-          style={styles.chip}
-          onPress={() => setEditing((x) => !x)}
-          accessibilityRole="button"
-        >
-          <Text style={styles.chipText}>Other folder</Text>
-        </Pressable>
+        />
+        <TextButton
+          title={`Save to ${album === suggestion.album ? suggestion.label : album}`}
+          onPress={() => void save(album)}
+        />
+        <TextButton title="Other folder" onPress={() => setEditing((x) => !x)} />
       </View>
       {editing && (
-        <TextInput
-          style={styles.input}
+        <TextField
           value={album}
           onChangeText={setAlbum}
           autoFocus
           placeholder="Sidekick/Trips"
-          placeholderTextColor="#888"
+          accessibilityLabel="Folder name"
           onSubmitEditing={() => void save(album)}
           returnKeyType="done"
         />
       )}
-      {status && <Text style={styles.note}>{status}</Text>}
+      {status && (
+        <AppText variant="bodySmall" tone="muted" style={styles.note}>
+          {status}
+        </AppText>
+      )}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  goneText: { color: '#888', fontSize: 12, marginTop: 4 },
-  card: { width: 320, maxWidth: '100%', gap: 6 },
-  fullBody: { flex: 1, justifyContent: 'center', gap: 8, paddingBottom: 24 },
-  fullScreen: { flex: 1, backgroundColor: '#000' },
+  goneText: { marginTop: space.xs },
+  card: { width: 320, maxWidth: '100%', gap: space.xs },
+  fullBody: { flex: 1, justifyContent: 'center', gap: space.sm, paddingBottom: space.xl },
+  fullScreen: { flex: 1, backgroundColor: MEDIA.media },
   media: {
     width: '100%',
     aspectRatio: 16 / 9,
-    borderRadius: 12,
+    borderRadius: radius.md,
     overflow: 'hidden',
-    backgroundColor: '#111',
+    backgroundColor: MEDIA.media,
   },
-  fullMedia: { flex: 1, overflow: 'hidden', backgroundColor: '#000' },
+  fullMedia: { flex: 1, overflow: 'hidden', backgroundColor: MEDIA.media },
   taps: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, flexDirection: 'row' },
   tap: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  play: { color: '#fff', fontSize: 34, opacity: 0.85 },
-  scrub: { height: 28, justifyContent: 'center', marginHorizontal: 8 },
-  track: { height: 4, borderRadius: 2, backgroundColor: '#8886' },
-  done: { position: 'absolute', height: 4, borderRadius: 2, backgroundColor: '#e33' },
-  mark: { position: 'absolute', width: 3, height: 12, marginLeft: -1, backgroundColor: '#fc3' },
-  knob: {
-    position: 'absolute',
-    width: 14,
-    height: 14,
-    borderRadius: 7,
-    marginLeft: -7,
-    backgroundColor: '#fff',
-    borderWidth: 1,
-    borderColor: '#0003',
-  },
+  play: { opacity: 0.85 },
+  scrub: { height: 32, justifyContent: 'center', marginHorizontal: space.sm },
+  track: { height: 4, borderRadius: 2 },
+  done: { position: 'absolute', height: 4, borderRadius: 2 },
+  mark: { position: 'absolute', width: 3, height: 12, marginLeft: -1 },
+  knob: { position: 'absolute', width: 16, height: 16, borderRadius: 8, marginLeft: -8 },
   row: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 4,
+    gap: space.xs,
+    paddingHorizontal: space.xs,
   },
-  time: { color: '#888', fontVariant: ['tabular-nums'], fontSize: 13 },
-  chip: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 14, backgroundColor: '#8882' },
-  chipText: { color: '#888', fontSize: 13 },
-  note: { color: '#888', fontSize: 13, padding: 4 },
-  input: {
-    margin: 4,
-    padding: 8,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#8886',
-    color: '#888',
-  },
+  time: { fontVariant: ['tabular-nums'] },
+  note: { padding: space.xs },
   close: {
     position: 'absolute',
     top: 40,
-    right: 16,
-    padding: 10,
-    borderRadius: 20,
-    backgroundColor: '#0008',
+    right: space.lg,
+    borderRadius: radius.full,
+    backgroundColor: MEDIA.mediaScrim,
   },
-  closeText: { color: '#fff', fontSize: 18 },
 });

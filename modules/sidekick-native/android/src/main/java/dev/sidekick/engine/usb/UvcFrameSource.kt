@@ -73,8 +73,50 @@ class UvcFrameSource(
     sinkThread = thread
     cam.setPreviewDisplay(reader.surface)
     cam.startPreview()
+    autoControls(cam)
     Log.i(TAG, "USB camera started: $mode")
     camera = cam
+  }
+
+  /**
+   * Hands exposure, focus and white balance back to the camera. UVC settings live in the camera
+   * and survive between apps and opens, so a camera left in manual exposure gives dark frames.
+   */
+  private fun autoControls(cam: UVCCamera) {
+    val c = cam.control ?: return
+    runCatching {
+      if (c.isAutoExposureModeEnable) {
+        val now = c.autoExposureMode
+        val res = runCatching { c.updateAutoExposureModeLimit()?.getOrNull(1) ?: 0 }.getOrDefault(0)
+        Log.i(TAG, "exposure mode $now (supported $res), time ${runCatching { c.exposureTimeAbsolute }.getOrNull()}, " +
+          "brightness ${runCatching { c.brightness }.getOrNull()}, gain ${runCatching { c.gain }.getOrNull()}")
+        UvcLogic.autoExposureMode(now, res)?.let {
+          c.autoExposureMode = it
+          Log.i(TAG, "exposure mode $now -> $it")
+        }
+      }
+    }.onFailure { Log.w(TAG, "auto exposure", it) }
+    // Picture controls back to the camera's own defaults (Sidekick never changes them, so any
+    // other value was left by something else, e.g. brightness at its minimum = black frames).
+    runCatching {
+      fun lim(f: () -> IntArray?) = runCatching { f()?.joinToString("/") }.getOrNull()
+      Log.i(TAG, "picture: brightness ${c.brightness} [${lim { c.updateBrightnessLimit() }}], " +
+        "contrast ${runCatching { c.contrast }.getOrNull()} [${lim { c.updateContrastLimit() }}], " +
+        "gamma ${runCatching { c.gamma }.getOrNull()} [${lim { c.updateGammaLimit() }}], " +
+        "gain ${runCatching { c.gain }.getOrNull()} [${lim { c.updateGainLimit() }}], " +
+        "backlight ${runCatching { c.backlightComp }.getOrNull()}, privacy ${runCatching { c.privacy }.getOrNull()}")
+    }
+    for ((name, reset) in listOf<Pair<String, () -> Unit>>(
+      "brightness" to c::resetBrightness, "contrast" to c::resetContrast, "gamma" to c::resetGamma,
+      "gain" to c::resetGain, "saturation" to c::resetSaturation, "sharpness" to c::resetSharpness,
+      "backlight" to c::resetBacklightComp,
+    )) runCatching { reset() }.onFailure { Log.w(TAG, "reset $name", it) }
+    // Privacy shutter off explicitly ("reset" would apply the camera's default, which can be on).
+    runCatching { if (c.isPrivacyEnable && c.privacy) c.privacy = false }.onFailure { Log.w(TAG, "privacy", it) }
+    runCatching { Log.i(TAG, "picture after reset: brightness ${c.brightness}, gain ${c.gain}, privacy ${c.privacy}") }
+    runCatching { if (c.isFocusAutoEnable && !c.focusAuto) c.focusAuto = true }.onFailure { Log.w(TAG, "auto focus", it) }
+    runCatching { if (c.isWhiteBalanceAutoEnable && !c.whiteBalanceAuto) c.whiteBalanceAuto = true }
+      .onFailure { Log.w(TAG, "auto white balance", it) }
   }
 
   @Synchronized

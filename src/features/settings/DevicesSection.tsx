@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react';
-import { Text } from 'react-native';
 
 import {
   type DeviceChoice,
@@ -9,7 +8,8 @@ import {
   setCamera,
   watchDevices,
 } from '@/engine/devices';
-import { ChoiceRow, Section, styles } from './ui';
+import { ChoiceRow, Section } from './ui';
+import { AppText } from '@/ui';
 
 /** One row of devices: Recommended is the automatic pick; a tap pins another one. */
 function DeviceRow(props: {
@@ -34,9 +34,9 @@ function DeviceRow(props: {
         onChange={props.onChange}
       />
       {unavailable.map((d) => (
-        <Text key={d.key} style={styles.hint}>
+        <AppText key={d.key} variant="bodySmall" tone="muted">
           {d.name}: {d.why ?? 'not available'}
-        </Text>
+        </AppText>
       ))}
     </>
   );

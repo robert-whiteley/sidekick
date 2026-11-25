@@ -2,6 +2,9 @@ import { useEffect, useState } from 'react';
 import { Image, StyleSheet } from 'react-native';
 
 import { latestFramePaths } from '@/memory/frames';
+import { DARK_COLORS } from '@/ui';
+
+const MEDIA_BG = DARK_COLORS.media;
 
 /** While live camera memory runs, the view shows its newest frame (the recorder holds the camera). */
 export function LiveFrame() {
@@ -15,5 +18,5 @@ export function LiveFrame() {
 }
 
 const styles = StyleSheet.create({
-  frame: { flex: 1, backgroundColor: '#000' },
+  frame: { flex: 1, backgroundColor: MEDIA_BG },
 });

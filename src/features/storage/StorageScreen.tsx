@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
 import { AUDIO_KEEP_OPTIONS, RESERVE_OPTIONS, VIDEO_KEEP_OPTIONS } from '@/engine/device-profile';
 import { updateSettings } from '@/engine/settings';
@@ -13,18 +13,13 @@ import {
 } from '@/engine/storage-monitor';
 import { daysLabel, hoursLabel } from '@/features/settings/choice-logic';
 import { useSettings } from '@/features/settings/useSettings';
+import { AppText, chart, ChoiceRow, makeStyles, Page, radius, Section, space } from '@/ui';
 
 const KINDS: StorageKind[] = ['video', 'stills', 'photos', 'audio', 'text', 'models'];
-const COLORS: Record<StorageKind, string> = {
-  video: '#2f6fed',
-  stills: '#5b8def',
-  photos: '#8a63d2',
-  audio: '#e07a2f',
-  text: '#2f9e6e',
-  models: '#9aa0a6',
-};
-
-type Option = { label: string; value: number | null };
+const COLORS = Object.fromEntries(KINDS.map((k, i) => [k, chart[i]])) as Record<
+  StorageKind,
+  string
+>;
 
 function days(d: number) {
   return d >= 36500 ? 'Forever' : daysLabel(d);
@@ -47,6 +42,7 @@ export function StorageScreen() {
   const { s, rec } = useSettings();
   const stillsRec = recommendedKeep(report.total).stillsKeepDays;
   const used = KINDS.reduce((n, k) => n + report.usage[k], 0);
+  const st = useStyles();
 
   const rows: {
     title: string;
@@ -91,11 +87,11 @@ export function StorageScreen() {
   ];
 
   return (
-    <ScrollView contentContainerStyle={styles.page}>
-      <Text style={styles.big}>
+    <Page title="Storage">
+      <AppText variant="titleSmall">
         Sidekick uses {formatBytes(used)} · {formatBytes(report.free)} free on the phone
-      </Text>
-      <View style={styles.bar} accessibilityLabel="Storage used by kind">
+      </AppText>
+      <View style={st.bar} accessibilityLabel="Storage used by kind">
         {KINDS.map((k) => (
           <View
             key={k}
@@ -109,81 +105,60 @@ export function StorageScreen() {
       {KINDS.map((k) => (
         <View key={k} style={styles.kind}>
           <View style={[styles.dot, { backgroundColor: COLORS[k] }]} />
-          <Text style={styles.kindLabel}>{KIND_LABELS[k]}</Text>
-          <Text style={styles.kindSize}>{formatBytes(report.usage[k])}</Text>
+          <AppText style={styles.flex}>{KIND_LABELS[k]}</AppText>
+          <AppText tone="muted">{formatBytes(report.usage[k])}</AppText>
         </View>
       ))}
-      <Text style={styles.note}>Text and the memory index are kept for good.</Text>
+      <AppText variant="bodySmall" tone="muted">
+        Text and the memory index are kept for good.
+      </AppText>
 
-      <Text style={styles.heading}>Forecast</Text>
-      <Text style={styles.body}>{report.forecast.text}</Text>
-      {report.cleaned > 0 ? (
-        <Text style={styles.muted}>Just freed {formatBytes(report.cleaned)} of old media.</Text>
-      ) : null}
+      <Section title="Forecast">
+        <AppText>{report.forecast.text}</AppText>
+        {report.cleaned > 0 ? (
+          <AppText variant="bodySmall" tone="muted">
+            Just freed {formatBytes(report.cleaned)} of old media.
+          </AppText>
+        ) : null}
+      </Section>
 
-      {rows.map((r) => {
-        const opts: Option[] = [
-          { label: `Recommended (${r.fmt(r.recommended)})`, value: null },
-          ...r.options
-            .filter((o) => o !== r.recommended)
-            .map((o) => ({ label: r.fmt(o), value: o })),
-        ];
-        return (
-          <View key={r.title} style={styles.setting}>
-            <Text style={styles.heading}>{r.title}</Text>
-            <View style={styles.chips}>
-              {opts.map((o) => {
-                const on = r.current === o.value;
-                return (
-                  <Pressable
-                    key={o.label}
-                    onPress={() => {
-                      r.set(o.value);
-                      refresh();
-                    }}
-                    style={[styles.chip, on && styles.chipOn]}
-                    accessibilityRole="radio"
-                    accessibilityState={{ selected: on }}
-                  >
-                    <Text style={[styles.chipText, on && styles.chipTextOn]}>{o.label}</Text>
-                  </Pressable>
-                );
-              })}
-            </View>
-          </View>
-        );
-      })}
-      <Text style={styles.note}>
+      <Section title="Keep periods">
+        {rows.map((r) => (
+          <ChoiceRow<number>
+            key={r.title}
+            label={r.title}
+            options={r.options.map((o) => ({ value: o, label: r.fmt(o) }))}
+            value={r.current}
+            recommended={r.recommended}
+            format={r.fmt}
+            onChange={(v) => {
+              r.set(v);
+              refresh();
+            }}
+          />
+        ))}
+      </Section>
+      <AppText variant="bodySmall" tone="muted">
         When space runs low, the oldest video goes first, then camera stills past their keep period.
         Text, memories and photos you asked about are never deleted without asking.
-      </Text>
-    </ScrollView>
+      </AppText>
+    </Page>
   );
 }
 
-const styles = StyleSheet.create({
-  page: { padding: 20, gap: 10 },
-  big: { fontSize: 18, fontWeight: '600' },
+const useStyles = makeStyles((c) => ({
   bar: {
     flexDirection: 'row',
-    height: 14,
-    borderRadius: 7,
+    height: 12,
+    borderRadius: radius.sm,
     overflow: 'hidden',
-    backgroundColor: '#e3e3e8',
-    marginVertical: 6,
+    backgroundColor: c.surfaceHigh,
+    marginVertical: space.sm,
   },
-  kind: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  dot: { width: 10, height: 10, borderRadius: 5 },
-  kindLabel: { flex: 1, fontSize: 16 },
-  kindSize: { fontSize: 16, color: '#555' },
-  heading: { fontSize: 17, fontWeight: '600', marginTop: 14 },
-  body: { fontSize: 16, lineHeight: 22 },
-  muted: { fontSize: 15, color: '#666', padding: 20 },
-  note: { fontSize: 14, color: '#666', lineHeight: 20 },
-  setting: { gap: 6 },
-  chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  chip: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 16, backgroundColor: '#eef0f4' },
-  chipOn: { backgroundColor: '#2f6fed' },
-  chipText: { fontSize: 15, color: '#222' },
-  chipTextOn: { color: 'white', fontWeight: '600' },
+}));
+
+const styles = StyleSheet.create({
+  kind: { flexDirection: 'row', alignItems: 'center', gap: space.md },
+  dot: { width: 12, height: 12, borderRadius: 6 },
+  flex: { flex: 1 },
 });

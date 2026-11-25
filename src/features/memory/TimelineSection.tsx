@@ -1,11 +1,12 @@
 import { router } from 'expo-router';
-import { Image, Pressable, Text, View } from 'react-native';
+import { Image, View } from 'react-native';
 
 import { AudioClip } from '@/features/media/AudioClip';
 import { who } from '@/features/settings/MemorySection';
 import { Button, Section, styles } from '@/features/settings/ui';
 import { deleteMoment, type Moment } from '@/memory/store';
 import { groupByDay } from './timeline-logic';
+import { AppText, radius, space, TextButton } from '@/ui';
 
 const time = (at: number) =>
   new Date(at).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
@@ -20,44 +21,44 @@ export function TimelineSection(props: {
   const days = groupByDay(props.moments);
   return (
     <Section title="Timeline">
-      {days.length === 0 && <Text style={styles.hint}>Nothing remembered yet.</Text>}
+      {days.length === 0 && (
+        <AppText variant="bodySmall" tone="muted">
+          Nothing remembered yet.
+        </AppText>
+      )}
       {days.map((d) => (
-        <View key={d.day} style={styles.section}>
-          <Text style={styles.label}>{d.day}</Text>
+        <View key={d.day} style={styles.group}>
+          <AppText>{d.day}</AppText>
           {d.items.map((m) => (
             <View key={m.id} style={styles.item}>
               <View style={styles.itemRow}>
-                <Text style={[styles.small, styles.flex]}>
+                <AppText variant="bodySmall" tone="muted" style={styles.flex}>
                   {time(m.at)} · {who(m)}
                   {m.place ? ` · ${m.place}` : ''}
-                  {m.photoPath ? ' · 📷' : ''}
-                </Text>
-                <Pressable
+                  {m.photoPath ? ' · photo' : ''}
+                </AppText>
+                <TextButton
+                  title="Delete"
                   onPress={async () => {
                     await deleteMoment(m.id);
                     props.onChanged();
                   }}
                   accessibilityLabel="Delete memory"
-                >
-                  <Text style={[styles.link, styles.danger]}>Delete</Text>
-                </Pressable>
+                  danger
+                />
               </View>
               {m.kind === 'conversation_note' ? (
-                <Pressable onPress={() => router.push(`/note/${m.id}`)} accessibilityRole="link">
-                  <Text style={styles.body} numberOfLines={4}>
-                    {m.text}
-                  </Text>
-                  <Text style={styles.link}>Open notes</Text>
-                </Pressable>
+                <>
+                  <AppText numberOfLines={4}>{m.text}</AppText>
+                  <TextButton title="Open notes" onPress={() => router.push(`/note/${m.id}`)} />
+                </>
               ) : m.text ? (
-                <Text style={styles.body} numberOfLines={4}>
-                  {m.text}
-                </Text>
+                <AppText numberOfLines={4}>{m.text}</AppText>
               ) : null}
               {m.photoPath && (m.kind === 'frame' || m.kind === 'photo') ? (
                 <Image
                   source={{ uri: `file://${m.photoPath}` }}
-                  style={{ width: 160, height: 120, borderRadius: 8, marginTop: 6 }}
+                  style={{ width: 160, height: 120, borderRadius: radius.sm, marginTop: space.sm }}
                   accessibilityLabel={m.kind === 'frame' ? 'What the camera saw' : 'Photo'}
                 />
               ) : null}

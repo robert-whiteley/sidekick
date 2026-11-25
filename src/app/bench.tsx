@@ -1,3 +1,4 @@
+// ui-exception-file: developer speed-test screen (Advanced › Speed test), not part of the product UI
 import { Asset } from 'expo-asset';
 import { useEffect, useRef, useState } from 'react';
 import { Button, ScrollView, StyleSheet, Text, View } from 'react-native';

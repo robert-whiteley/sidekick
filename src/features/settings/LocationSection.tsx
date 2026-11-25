@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Pressable, Text, TextInput, View } from 'react-native';
+import { View } from 'react-native';
 
 import type { NamedPlace } from '@/engine/location-logic';
 import { hasLocationPermission, refreshPlaces } from '@/engine/location-track';
@@ -13,6 +13,7 @@ import {
   trackSize,
 } from '@/memory/places-store';
 import { Button, confirm, Row, Section, styles } from './ui';
+import { AppText, TextButton, TextField } from '@/ui';
 
 /** Location memory: the switch, the permission, places you named, and deleting the history. */
 export function LocationSection() {
@@ -50,21 +51,23 @@ export function LocationSection() {
       />
       {!allowed ? (
         <>
-          <Text style={styles.hint}>Location isn&apos;t allowed for Sidekick yet.</Text>
+          <AppText variant="bodySmall" tone="muted">
+            Location isn&apos;t allowed for Sidekick yet.
+          </AppText>
           <Button title="Allow location" onPress={allow} />
         </>
       ) : null}
-      <Text style={styles.label}>Your places</Text>
-      <Text style={styles.hint}>
+      <AppText>Your places</AppText>
+      <AppText variant="bodySmall" tone="muted">
         {places.length
           ? 'Named by saying "call this place …" or "this is home".'
           : 'None yet. Say "call this place the gym" or "this is home" where you are.'}
-      </Text>
+      </AppText>
       {places.map((p) =>
         editing?.id === p.id ? (
           <View key={p.id} style={styles.itemRow}>
-            <TextInput
-              style={[styles.input, styles.flex]}
+            <TextField
+              containerStyle={styles.flex}
               value={editing.name}
               onChangeText={(name) => setEditing({ id: p.id, name })}
               onEndEditing={async () => {
@@ -80,29 +83,28 @@ export function LocationSection() {
           </View>
         ) : (
           <View key={p.id} style={styles.itemRow}>
-            <Text style={[styles.body, styles.flex]}>{p.name}</Text>
-            <Pressable
+            <AppText style={styles.flex}>{p.name}</AppText>
+            <TextButton
+              title="Rename"
               onPress={() => setEditing({ id: p.id, name: p.name })}
               accessibilityLabel={`Rename ${p.name}`}
-            >
-              <Text style={styles.link}>Rename</Text>
-            </Pressable>
-            <Pressable
+            />
+            <TextButton
+              title="Delete"
+              danger
+              accessibilityLabel={`Delete ${p.name}`}
               onPress={async () => {
                 await deletePlace(p.id);
                 refreshPlaces();
                 load();
               }}
-              accessibilityLabel={`Delete ${p.name}`}
-            >
-              <Text style={[styles.link, styles.danger]}> Delete</Text>
-            </Pressable>
+            />
           </View>
         ),
       )}
-      <Text style={styles.hint}>
+      <AppText variant="bodySmall" tone="muted">
         {count ? `${count} positions kept (same keep period as your memories).` : ''}
-      </Text>
+      </AppText>
       <Button
         title="Delete location history"
         danger

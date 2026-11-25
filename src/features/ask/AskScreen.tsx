@@ -6,14 +6,23 @@ import {
   AppState,
   KeyboardAvoidingView,
   Platform,
-  Pressable,
   ScrollView,
   type ScrollViewInstance,
   StyleSheet,
-  Text,
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+
+import {
+  AppText,
+  DARK_COLORS,
+  ForceScheme,
+  IconButton,
+  radius,
+  space,
+  Tappable,
+  useScheme,
+} from '@/ui';
 
 import SidekickNative from '../../../modules/sidekick-native';
 import {
@@ -100,7 +109,7 @@ import {
 import { ChatHeader } from './ChatHeader';
 import { LiveFrame } from './LiveFrame';
 import { Composer } from './Composer';
-import { Icon } from './Icon';
+
 import { LiveConversation } from './LiveConversation';
 import { DraftCard } from './DraftCard';
 import { MessageBubble } from './MessageBubble';
@@ -178,7 +187,8 @@ export function AskScreen({
   /** The current mic press: when it started, or that it ends hands-free listening. */
   const micPress = useRef<{ start: number } | 'end' | null>(null);
   const noticeList = useNotices();
-  const theme = offRecord ? DARK : LIGHT;
+  const dark = useScheme() === 'dark' || offRecord;
+  const theme = dark ? DARK : LIGHT;
 
   const setOffRecord = (on: boolean) => {
     offRecordRef.current = on;
@@ -786,167 +796,187 @@ export function AskScreen({
       : 'Ask Sidekick';
 
   return (
-    <SafeAreaView style={[styles.flex, { backgroundColor: theme.bg }]}>
-      <StatusBar style={offRecord ? 'light' : 'dark'} />
-      <KeyboardAvoidingView style={styles.flex} behavior="padding">
-        <ChatHeader
-          theme={theme}
-          offRecord={offRecord}
-          onOffRecord={setOffRecord}
-          listening={listening}
-          onListen={() => void toggleListening()}
-          webUsed={webUsed}
-          live={live}
-          onStopLive={stopLiveCamera}
-        />
+    <ForceScheme scheme={dark ? 'dark' : 'light'}>
+      <SafeAreaView style={[styles.flex, { backgroundColor: theme.bg }]}>
+        <StatusBar style={dark ? 'light' : 'dark'} />
+        <KeyboardAvoidingView style={styles.flex} behavior="padding">
+          <ChatHeader
+            theme={theme}
+            offRecord={offRecord}
+            onOffRecord={setOffRecord}
+            listening={listening}
+            onListen={() => void toggleListening()}
+            webUsed={webUsed}
+            live={live}
+            onStopLive={stopLiveCamera}
+          />
 
-        <ScrollView
-          ref={scroll}
-          style={styles.flex}
-          contentContainerStyle={styles.chat}
-          onContentSizeChange={() => scroll.current?.scrollToEnd({ animated: true })}
-          keyboardShouldPersistTaps="handled"
-        >
-          {items.length === 0 && phase !== 'loading' ? (
-            <Text style={[styles.empty, { color: theme.faint }]}>
-              {offRecord ? 'Nothing you say here is saved.' : 'Ask anything, or tap the camera.'}
-            </Text>
+          <ScrollView
+            ref={scroll}
+            style={styles.flex}
+            contentContainerStyle={styles.chat}
+            onContentSizeChange={() => scroll.current?.scrollToEnd({ animated: true })}
+            keyboardShouldPersistTaps="handled"
+          >
+            {items.length === 0 && phase !== 'loading' ? (
+              <AppText style={[styles.empty, { color: theme.faint }]}>
+                {offRecord ? 'Nothing you say here is saved.' : 'Ask anything, or tap the camera.'}
+              </AppText>
+            ) : null}
+            {items.map((it) =>
+              'm' in it && it.m ? (
+                <View key={it.key}>
+                  <MessageBubble
+                    m={it.m}
+                    theme={theme}
+                    speaking={speakingId === it.m.id}
+                    onMute={mute}
+                  />
+                  {it.m.draftId ? <DraftCard id={it.m.draftId} theme={theme} /> : null}
+                </View>
+              ) : 'n' in it && it.n ? (
+                <NoticeItem key={it.key} n={it.n} theme={theme} />
+              ) : null,
+            )}
+            {status ? (
+              <AppText variant="bodySmall" style={[styles.status, { color: theme.faint }]}>
+                {status}
+              </AppText>
+            ) : null}
+          </ScrollView>
+
+          {screen ? (
+            <ScreenGrabBar grab={screen} onSave={saveScreen} onClose={() => setScreen(null)} />
           ) : null}
-          {items.map((it) =>
-            'm' in it && it.m ? (
-              <View key={it.key}>
-                <MessageBubble
-                  m={it.m}
-                  theme={theme}
-                  speaking={speakingId === it.m.id}
-                  onMute={mute}
+
+          <LiveConversation listening={listening} />
+
+          {cameraOn ? (
+            <View style={styles.cameraBox}>
+              {live ? (
+                <LiveFrame />
+              ) : (
+                <CameraView
+                  ref={camera}
+                  style={styles.flex}
+                  facing="back"
+                  onCameraReady={() => setCameraReady(true)}
                 />
-                {it.m.draftId ? <DraftCard id={it.m.draftId} theme={theme} /> : null}
-              </View>
-            ) : 'n' in it && it.n ? (
-              <NoticeItem key={it.key} n={it.n} theme={theme} />
-            ) : null,
-          )}
-          {status ? <Text style={[styles.status, { color: theme.faint }]}>{status}</Text> : null}
-        </ScrollView>
-
-        {screen ? (
-          <ScreenGrabBar grab={screen} onSave={saveScreen} onClose={() => setScreen(null)} />
-        ) : null}
-
-        <LiveConversation listening={listening} />
-
-        {cameraOn ? (
-          <View style={styles.cameraBox}>
-            {live ? (
-              <LiveFrame />
-            ) : (
-              <CameraView
-                ref={camera}
-                style={styles.flex}
-                facing="back"
-                onCameraReady={() => setCameraReady(true)}
+              )}
+              <Tappable
+                feedback="dim"
+                style={[styles.liveToggle, live && styles.liveToggleOn]}
+                onPress={() => void toggleLive()}
+                accessibilityRole="switch"
+                accessibilityState={{ checked: live }}
+                accessibilityLabel="Live camera memory"
+                hitSlop={12}
+              >
+                {live ? <View style={styles.liveDot} /> : null}
+                <AppText variant="badge" tone="onMedia">
+                  Live
+                </AppText>
+              </Tappable>
+              <IconButton
+                name="close"
+                size={22}
+                color={MEDIA.onMedia}
+                style={styles.cameraClose}
+                onPress={() => void toggleCamera()}
+                accessibilityLabel="Close camera"
               />
-            )}
-            <Pressable
-              style={[styles.liveToggle, live && styles.liveToggleOn]}
-              onPress={() => void toggleLive()}
-              accessibilityRole="switch"
-              accessibilityState={{ checked: live }}
-              accessibilityLabel="Live camera memory"
-              hitSlop={8}
-            >
-              <Text style={styles.liveText}>{live ? '● Live' : 'Live'}</Text>
-            </Pressable>
-            <Pressable
-              style={styles.cameraClose}
-              onPress={() => void toggleCamera()}
-              accessibilityRole="button"
-              accessibilityLabel="Close camera"
-              hitSlop={8}
-            >
-              <Icon name="close" size={22} color="#fff" />
-            </Pressable>
-            {live ? null : (
-              <Pressable
-                style={[styles.shutter, capturing && styles.shutterOn]}
-                onPressIn={captureStart}
-                onPressOut={captureEnd}
-                accessibilityRole="button"
-                accessibilityLabel="Capture photo, hold to add a voice note"
-              />
-            )}
-          </View>
-        ) : null}
+              {live ? null : (
+                <Tappable
+                  feedback="dim"
+                  hitSlop={0}
+                  style={[styles.shutter, capturing && styles.shutterOn]}
+                  onPressIn={captureStart}
+                  onPressOut={captureEnd}
+                  accessibilityRole="button"
+                  accessibilityLabel="Capture photo, hold to add a voice note"
+                />
+              )}
+            </View>
+          ) : null}
 
-        <Composer
-          theme={theme}
-          value={question}
-          onChange={setQuestion}
-          placeholder={placeholder}
-          onSend={() => void ask()}
-          onSendLong={() => {
-            setOffRecord(true);
-            void ask(undefined, false, true);
-          }}
-          busy={busy}
-          answering={phase === 'thinking' || phase === 'answering'}
-          onStop={stop}
-          micOn={holding}
-          onMicIn={micIn}
-          onMicOut={micOut}
-          cameraOn={cameraOn}
-          onCamera={() => void toggleCamera()}
-          large={handsFreeMode}
-        />
-      </KeyboardAvoidingView>
-    </SafeAreaView>
+          <Composer
+            theme={theme}
+            value={question}
+            onChange={setQuestion}
+            placeholder={placeholder}
+            onSend={() => void ask()}
+            onSendLong={() => {
+              setOffRecord(true);
+              void ask(undefined, false, true);
+            }}
+            busy={busy}
+            answering={phase === 'thinking' || phase === 'answering'}
+            onStop={stop}
+            micOn={holding}
+            onMicIn={micIn}
+            onMicOut={micOut}
+            cameraOn={cameraOn}
+            onCamera={() => void toggleCamera()}
+            large={handsFreeMode}
+          />
+        </KeyboardAvoidingView>
+      </SafeAreaView>
+    </ForceScheme>
   );
 }
 
+const MEDIA = DARK_COLORS;
+
 const styles = StyleSheet.create({
   flex: { flex: 1 },
-  chat: { paddingHorizontal: 16, paddingTop: 8, paddingBottom: 12, gap: 14 },
-  empty: { textAlign: 'center', marginTop: 40, fontSize: 15 },
-  status: { fontSize: 13, textAlign: 'center' },
+  chat: {
+    paddingHorizontal: space.lg,
+    paddingTop: space.sm,
+    paddingBottom: space.md,
+    gap: space.lg,
+  },
+  empty: { textAlign: 'center', marginTop: space.xxxl },
+  status: { textAlign: 'center' },
   // Shrinks (not overflows) when the keyboard takes space, so the composer stays above it.
   cameraBox: {
     height: '34%',
     flexShrink: 1,
     minHeight: 72,
-    marginHorizontal: 12,
-    borderRadius: 16,
+    marginHorizontal: space.md,
+    borderRadius: radius.lg,
     overflow: 'hidden',
   },
   cameraClose: {
     position: 'absolute',
-    top: 8,
-    right: 8,
-    backgroundColor: 'rgba(0,0,0,0.45)',
-    borderRadius: 16,
-    padding: 4,
+    top: space.xs,
+    right: space.xs,
+    backgroundColor: MEDIA.mediaScrim,
+    borderRadius: radius.full,
   },
   shutter: {
     position: 'absolute',
-    bottom: 10,
+    bottom: space.md,
     alignSelf: 'center',
     width: 56,
     height: 56,
     borderRadius: 28,
     borderWidth: 4,
-    borderColor: '#fff',
-    backgroundColor: 'rgba(255,255,255,0.25)',
+    borderColor: MEDIA.onMedia,
+    backgroundColor: MEDIA.mediaScrim,
   },
-  shutterOn: { backgroundColor: '#b00020' },
+  shutterOn: { backgroundColor: MEDIA.recording },
   liveToggle: {
     position: 'absolute',
-    top: 8,
-    left: 8,
-    backgroundColor: 'rgba(0,0,0,0.45)',
-    borderRadius: 14,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
+    top: space.sm,
+    left: space.sm,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.xs,
+    backgroundColor: MEDIA.mediaScrim,
+    borderRadius: radius.md,
+    paddingHorizontal: space.md,
+    paddingVertical: space.xs,
   },
-  liveToggleOn: { backgroundColor: '#b00020' },
-  liveText: { color: '#fff', fontSize: 13, fontWeight: '600' },
+  liveToggleOn: { backgroundColor: MEDIA.recording },
+  liveDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: MEDIA.onMedia },
 });

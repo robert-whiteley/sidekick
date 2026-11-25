@@ -99,4 +99,18 @@ class UsbLogicTest {
     assertEquals("next", MediaButtons.actionFor(android.view.KeyEvent.KEYCODE_MEDIA_NEXT))
     assertNull(MediaButtons.actionFor(android.view.KeyEvent.KEYCODE_VOLUME_UP))
   }
+
+  @Test fun autoExposureLeavesAutoModesAlone() {
+    assertNull(UvcLogic.autoExposureMode(UvcLogic.AE_APERTURE, 0))
+    assertNull(UvcLogic.autoExposureMode(UvcLogic.AE_AUTO, 0))
+  }
+
+  @Test fun autoExposureLeavesManualForApertureOrAuto() {
+    assertEquals(UvcLogic.AE_APERTURE, UvcLogic.autoExposureMode(UvcLogic.AE_MANUAL, 0))
+    assertEquals(UvcLogic.AE_APERTURE, UvcLogic.autoExposureMode(UvcLogic.AE_SHUTTER, 1 or 8))
+    assertEquals(UvcLogic.AE_AUTO, UvcLogic.autoExposureMode(UvcLogic.AE_MANUAL, 1 or 2))
+    assertNull(UvcLogic.autoExposureMode(UvcLogic.AE_MANUAL, 1))
+    // Not a bitmap of modes (doesn't include the current one): treated as unknown.
+    assertEquals(UvcLogic.AE_APERTURE, UvcLogic.autoExposureMode(UvcLogic.AE_MANUAL, 2))
+  }
 }

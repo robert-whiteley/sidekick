@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Pressable, Switch, Text, TextInput, View } from 'react-native';
+import { View } from 'react-native';
 
 import { askNotificationPermission } from '@/engine/followup-notify';
 import { type Routine, MAX_ROUTINES, TEMPLATES, describeWhen } from '@/engine/routines-logic';
@@ -15,6 +15,7 @@ import {
 } from '@/engine/routines-store';
 import { Page } from '@/features/settings/Page';
 import { Button, Section, confirm, formatTime, styles } from '@/features/settings/ui';
+import { AppText, ListRow, SwitchRow, TextButton, TextField } from '@/ui';
 
 /** Settings › Assistant › Routines: what Sidekick does by itself, at a time or on a trigger. */
 export default function RoutinesSettings() {
@@ -58,48 +59,39 @@ export default function RoutinesSettings() {
 
   return (
     <Page title="Routines">
-      <Text style={styles.hint}>
+      <AppText variant="bodySmall" tone="muted">
         Routines run on this phone at a time you choose or when something happens. The answer shows
         in the chat and as a notification, and is spoken into headphones or the car (not during
         quiet hours). Messages a routine writes wait for you to tap Send. Set one up by saying or
         typing it in the chat, e.g. &quot;every evening at 6 give me a recap of my day&quot;.
-      </Text>
+      </AppText>
       {!exact ? (
-        <Pressable
+        <TextButton
+          title="Allow exact times (Alarms &amp; reminders); otherwise routines may run a few minutes
+            late"
           onPress={() => {
             openExactRoutineSettings();
             setTimeout(() => setExact(exactRoutinesAllowed()), 3000);
           }}
-        >
-          <Text style={styles.link}>
-            Allow exact times (Alarms &amp; reminders); otherwise routines may run a few minutes
-            late
-          </Text>
-        </Pressable>
+        />
       ) : null}
       <Section title={`Your routines (${items.length} of ${MAX_ROUTINES})`}>
-        {items.length === 0 ? <Text style={styles.hint}>None yet.</Text> : null}
+        {items.length === 0 ? (
+          <AppText variant="bodySmall" tone="muted">
+            None yet.
+          </AppText>
+        ) : null}
         {items.map((r) => (
           <View key={r.id} style={styles.item}>
-            <View style={styles.row}>
-              <View style={styles.flex}>
-                <Text style={[styles.body, r.paused && styles.small]}>{r.action}</Text>
-                <Text style={styles.small}>
-                  {describeWhen(r.when)}
-                  {r.paused ? ' · paused' : ''}
-                  {r.lastRunAt ? ` · last ran ${formatTime(r.lastRunAt)}` : ''}
-                </Text>
-              </View>
-              <Switch
-                value={!r.paused}
-                onValueChange={(on) => updateRoutine(r.id, { paused: !on })}
-                accessibilityLabel={r.paused ? 'Resume' : 'Pause'}
-              />
-            </View>
+            <SwitchRow
+              title={r.action}
+              supporting={`${describeWhen(r.when)}${r.paused ? ' · paused' : ''}${r.lastRunAt ? ` · last ran ${formatTime(r.lastRunAt)}` : ''}`}
+              value={!r.paused}
+              onChange={(on) => updateRoutine(r.id, { paused: !on })}
+            />
             {editing === r.id ? (
-              <View style={{ gap: 8 }}>
-                <TextInput
-                  style={styles.input}
+              <View style={styles.item}>
+                <TextField
                   value={text}
                   onChangeText={setText}
                   autoFocus
@@ -113,29 +105,27 @@ export default function RoutinesSettings() {
               </View>
             ) : (
               <View style={styles.row}>
-                <Pressable
+                <TextButton
+                  title="Edit"
                   onPress={() => {
                     setEditing(r.id);
                     setText(r.said);
                   }}
-                >
-                  <Text style={styles.link}>Edit</Text>
-                </Pressable>
-                <Pressable
+                />
+                <TextButton
+                  title="Delete"
                   onPress={() =>
                     confirm('Delete this routine?', r.action, () => deleteRoutine(r.id))
                   }
-                >
-                  <Text style={[styles.link, styles.danger]}>Delete</Text>
-                </Pressable>
+                  danger
+                />
               </View>
             )}
           </View>
         ))}
       </Section>
       <Section title="Add a routine">
-        <TextInput
-          style={styles.input}
+        <TextField
           value={editing ? '' : text}
           onChangeText={setText}
           placeholder="Every weekday at 8am brief me"
@@ -143,23 +133,32 @@ export default function RoutinesSettings() {
           accessibilityLabel="New routine"
         />
         <Button title="Add" onPress={() => void add(text)} />
-        {msg ? <Text style={styles.hint}>{msg}</Text> : null}
-        {unused.length ? <Text style={styles.small}>Suggestions (tap to add):</Text> : null}
-        <View style={styles.chips}>
-          {unused.map((t) => (
-            <Pressable key={t.said} style={styles.chip} onPress={() => void add(t.said)}>
-              <Text>{t.said}</Text>
-            </Pressable>
-          ))}
-        </View>
+        {msg ? (
+          <AppText variant="bodySmall" tone="muted">
+            {msg}
+          </AppText>
+        ) : null}
+        {unused.length ? (
+          <AppText variant="bodySmall" tone="muted">
+            Suggestions (tap one to add it):
+          </AppText>
+        ) : null}
+        {unused.map((t) => (
+          <ListRow
+            key={t.said}
+            title={t.said}
+            onPress={() => void add(t.said)}
+            accessibilityHint="Adds this routine"
+          />
+        ))}
       </Section>
-      <Text style={styles.hint}>
+      <AppText variant="bodySmall" tone="muted">
         Limits: up to {MAX_ROUTINES} routines, at most every 15 minutes. Routines that need the AI
         model wait while battery saver is on or the battery is under 15% (unless charging), and run
         later marked late; a time missed by more than 12 hours is skipped. Charging, unlock and
         headphone triggers work while Sidekick is running (for example with Listen on). Message
         triggers need Notification access (Settings › Connections).
-      </Text>
+      </AppText>
     </Page>
   );
 }

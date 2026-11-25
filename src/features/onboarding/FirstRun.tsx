@@ -1,15 +1,6 @@
 import { addNetworkStateListener } from 'expo-network';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import {
-  AppState,
-  Linking,
-  Platform,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native';
+import { AppState, Linking, Platform, ScrollView, StyleSheet, View } from 'react-native';
 
 import SidekickNative from '../../../modules/sidekick-native';
 import {
@@ -25,6 +16,7 @@ import { allRequiredFiles } from '@/engine/llm-candidates';
 import { getSettings } from '@/engine/settings';
 import { formatBytes, spaceNeeded } from '@/engine/storage';
 import { diskSpace, reserveBytes } from '@/engine/storage-monitor';
+import { AppText, Button, Card, makeStyles, ProgressBar, space } from '@/ui';
 import { markFirstRunDone, runSpeedCheck } from './after-setup';
 import { EXPLAINER, firstRunStep, type FirstRunStep } from './first-run';
 
@@ -115,6 +107,7 @@ export function FirstRun({ onReady }: { onReady: () => void }) {
     };
   }, [decide]);
 
+  const bg = useBg().bg;
   const fraction = progress && progress.total > 0 ? progress.bytes / progress.total : 0;
   const status = !progress
     ? 'Starting…'
@@ -127,72 +120,69 @@ export function FirstRun({ onReady }: { onReady: () => void }) {
         : formatTimeLeft(progress.secondsLeft);
 
   return (
-    <ScrollView contentContainerStyle={styles.page}>
-      <Text style={styles.title}>Getting Sidekick ready</Text>
-      <Text style={styles.lead}>
+    <ScrollView style={bg} contentContainerStyle={styles.page}>
+      <AppText variant="headline">Getting Sidekick ready</AppText>
+      <AppText tone="muted">
         A one-time download of {formatBytes(total)}. You can leave the app; it carries on by itself.
-      </Text>
+      </AppText>
 
       {step?.step === 'short-space' ? (
-        <View style={styles.card}>
-          <Text style={styles.cardText}>
+        <Card>
+          <AppText>
             Sidekick needs {formatBytes(step.shortBy)} more free space on this phone (it always
             leaves some free for the phone itself).
-          </Text>
-          <Pressable style={styles.button} onPress={openStorageSettings} accessibilityRole="button">
-            <Text style={styles.buttonText}>Open storage settings</Text>
-          </Pressable>
-        </View>
+          </AppText>
+          <Button
+            title="Open storage settings"
+            variant="filled"
+            block
+            onPress={openStorageSettings}
+          />
+        </Card>
       ) : (
         <View style={styles.progress}>
-          <View style={styles.bar}>
-            <View style={[styles.fill, { width: `${Math.round(fraction * 100)}%` }]} />
-          </View>
-          <Text style={styles.status}>
+          <ProgressBar fraction={fraction} label="Download progress" />
+          <AppText variant="bodySmall" tone="muted">
             {Math.floor(fraction * 100)}% · {status}
-          </Text>
+          </AppText>
         </View>
       )}
 
       {step?.step === 'ask-mobile' ? (
-        <View style={styles.card}>
-          <Text style={styles.cardText}>
+        <Card>
+          <AppText>
             Download {formatBytes(Math.max(0, total - (progress?.bytes ?? 0)))} now on mobile data,
             or wait for Wi-Fi?
-          </Text>
+          </AppText>
           <View style={styles.row}>
-            <Pressable
-              style={[styles.button, styles.flex]}
+            <Button
+              title="Wait for Wi-Fi"
+              variant="filled"
+              style={styles.flex}
               onPress={() => {
                 waitChosen.current = true;
                 setStep({ step: 'download', wifiOnly: true });
               }}
-              accessibilityRole="button"
-            >
-              <Text style={styles.buttonText}>Wait for Wi-Fi</Text>
-            </Pressable>
-            <Pressable
-              style={[styles.buttonQuiet, styles.flex]}
+            />
+            <Button
+              title="Download now"
+              variant="tonal"
+              style={styles.flex}
               onPress={() => {
                 mobileAllowed.current = true;
                 allowMobileDataOnce();
                 void decide();
               }}
-              accessibilityRole="button"
-            >
-              <Text style={styles.buttonQuietText}>Download now</Text>
-            </Pressable>
+            />
           </View>
-        </View>
+        </Card>
       ) : null}
 
       {error ? (
-        <View style={styles.card}>
-          <Text style={styles.error}>{error}</Text>
-          <Pressable style={styles.button} onPress={() => void decide()} accessibilityRole="button">
-            <Text style={styles.buttonText}>Try again</Text>
-          </Pressable>
-        </View>
+        <Card tone="danger">
+          <AppText tone="danger">{error}</AppText>
+          <Button title="Try again" variant="filled" block onPress={() => void decide()} />
+        </Card>
       ) : null}
 
       <Explainer />
@@ -206,33 +196,21 @@ export function Explainer() {
     <View style={styles.explainer}>
       {EXPLAINER.map((s) => (
         <View key={s.title} style={styles.section}>
-          <Text style={styles.sectionTitle}>{s.title}</Text>
-          <Text style={styles.sectionBody}>{s.body}</Text>
+          <AppText variant="bodyStrong">{s.title}</AppText>
+          <AppText tone="muted">{s.body}</AppText>
         </View>
       ))}
     </View>
   );
 }
 
+const useBg = makeStyles((c) => ({ bg: { backgroundColor: c.bg } }));
+
 const styles = StyleSheet.create({
-  page: { padding: 24, gap: 16 },
-  title: { fontSize: 26, fontWeight: '700' },
-  lead: { fontSize: 16, lineHeight: 22, color: '#444' },
-  progress: { gap: 8 },
-  bar: { height: 8, borderRadius: 4, backgroundColor: '#e3e3e8', overflow: 'hidden' },
-  fill: { height: 8, backgroundColor: '#2f6fed' },
-  status: { fontSize: 15, color: '#555' },
-  card: { padding: 16, borderRadius: 16, backgroundColor: '#f2f2f5', gap: 12 },
-  cardText: { fontSize: 16, lineHeight: 22 },
-  row: { flexDirection: 'row', gap: 10 },
+  page: { padding: space.xl, gap: space.lg },
+  progress: { gap: space.sm },
+  row: { flexDirection: 'row', gap: space.sm },
   flex: { flex: 1 },
-  button: { backgroundColor: '#2f6fed', padding: 14, borderRadius: 12, alignItems: 'center' },
-  buttonText: { color: 'white', fontSize: 16, fontWeight: '600' },
-  buttonQuiet: { backgroundColor: '#e3e3e8', padding: 14, borderRadius: 12, alignItems: 'center' },
-  buttonQuietText: { color: '#222', fontSize: 16, fontWeight: '600' },
-  error: { color: '#b00020', fontSize: 15 },
-  explainer: { gap: 18, marginTop: 12 },
-  section: { gap: 4 },
-  sectionTitle: { fontSize: 17, fontWeight: '600' },
-  sectionBody: { fontSize: 16, lineHeight: 22, color: '#333' },
+  explainer: { gap: space.lg, marginTop: space.md },
+  section: { gap: space.xs },
 });

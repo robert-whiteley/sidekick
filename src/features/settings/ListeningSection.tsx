@@ -1,11 +1,11 @@
 import { useState } from 'react';
-import { Pressable, Text, TextInput, View } from 'react-native';
 
 import { configureListening, wakeLine } from '@/engine/listen';
 import { currentRegion } from '@/engine/region';
 import { getSettings, type Settings, updateSettings } from '@/engine/settings';
 import { type ConsentChoice, lawRequiresConsent } from '@/memory/consent-region';
-import { Button, Row, Section, styles } from './ui';
+import { Button, Row, Section } from './ui';
+import { AppText, PickerRow, TextField } from '@/ui';
 
 const CONSENT_OPTIONS: { value: ConsentChoice; label: string }[] = [
   { value: 'auto', label: 'Automatic' },
@@ -68,9 +68,8 @@ export function ListeningSection({
     <Section title={title}>
       {show('assistant') && (
         <>
-          <Text style={styles.body}>Wake word</Text>
-          <TextInput
-            style={styles.input}
+          <TextField
+            label="Wake word"
             value={phrase}
             onChangeText={setPhrase}
             onSubmitEditing={saveWake}
@@ -78,7 +77,11 @@ export function ListeningSection({
             autoCapitalize="words"
           />
           <Button title="Save wake word" onPress={saveWake} />
-          {msg ? <Text style={styles.hint}>{msg}</Text> : null}
+          {msg ? (
+            <AppText variant="bodySmall" tone="muted">
+              {msg}
+            </AppText>
+          ) : null}
           <Row
             label="Speak answers"
             value={s.speakAnswers}
@@ -116,23 +119,13 @@ export function ListeningSection({
             value={s.instructionsOnly}
             onChange={(v) => set({ instructionsOnly: v })}
           />
-          <Text style={styles.label}>Consent mode</Text>
-          <View style={styles.chips}>
-            {CONSENT_OPTIONS.map((o) => (
-              <Pressable
-                key={o.value}
-                onPress={() => set({ consent: o.value })}
-                style={[styles.chip, s.consent === o.value && styles.chipOn]}
-                accessibilityRole="radio"
-                accessibilityState={{ checked: s.consent === o.value }}
-              >
-                <Text style={[styles.chipText, s.consent === o.value && styles.chipTextOn]}>
-                  {o.label}
-                </Text>
-              </Pressable>
-            ))}
-          </View>
-          <Text style={styles.hint}>{consentHint(s.consent)}</Text>
+          <PickerRow
+            label="Consent mode"
+            hint={consentHint(s.consent)}
+            options={CONSENT_OPTIONS.map((o) => ({ value: o.value, label: o.label }))}
+            value={s.consent}
+            onChange={(v) => set({ consent: v })}
+          />
         </>
       )}
     </Section>

@@ -20,6 +20,7 @@ class UsbCameraAdapter(private val usb: UsbFrameSource, private val rates: Rates
   private var lastSampleAt = 0L
   private var lastVideoAt = 0L
   private var pixels = IntArray(0)
+  private var samples = 0
 
   override fun start(onFrame: (Frame) -> Unit) {
     stopped = false
@@ -39,6 +40,7 @@ class UsbCameraAdapter(private val usb: UsbFrameSource, private val rates: Rates
         }
         if (wantSample) {
           lastSampleAt = now
+          if (samples++ % 15 == 0) Log.i(TAG, "frame ${f.width}x${f.height} luma ${Nv21.meanLuma(f.data, f.width, f.height)}")
           onFrame(Frame(now, bmp))
         }
       }
@@ -101,6 +103,19 @@ object Nv21 {
         out[y * w + x] = (0xff shl 24) or (r shl 16) or (g shl 8) or b
       }
     }
+  }
+
+  /** Mean brightness (0–255) of the Y plane, every 16th pixel. Pure. */
+  fun meanLuma(data: ByteArray, w: Int, h: Int): Int {
+    val n = (w * h).coerceAtMost(data.size)
+    if (n <= 0) return 0
+    var sum = 0L
+    var count = 0
+    for (i in 0 until n step 16) {
+      sum += data[i].toInt() and 0xff
+      count++
+    }
+    return (sum / count).toInt()
   }
 
   private fun clamp(v: Int) = if (v < 0) 0 else if (v > 255) 255 else v

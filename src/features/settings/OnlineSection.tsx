@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react';
-import { Text, TextInput, View } from 'react-native';
+import { View } from 'react-native';
 
 import { getSettings, onSettingsChange, updateSettings } from '@/engine/settings';
 import { normaliseSearxUrl } from '@/web/lookup-logic';
 import { MAX_FEEDS, normaliseFeedUrl } from '@/web/news-logic';
 import { Button, Row, Section, styles } from './ui';
+import { AppText, TextField } from '@/ui';
 
 /** Online lookup: off by default; what is sent and to whom is spelled out here and in PRIVACY.md. */
 export function OnlineSection() {
@@ -40,12 +41,11 @@ export function OnlineSection() {
       />
       {s.webLookup ? (
         <>
-          <Text style={styles.hint}>
+          <AppText variant="bodySmall" tone="muted">
             Optional: your own SearXNG server for full web results (https, with JSON output
             enabled). Your search words are also sent there. Leave empty to not use one.
-          </Text>
-          <TextInput
-            style={styles.input}
+          </AppText>
+          <TextField
             value={url}
             onChangeText={setUrl}
             onEndEditing={() =>
@@ -57,18 +57,22 @@ export function OnlineSection() {
             keyboardType="url"
             accessibilityLabel="SearXNG server address"
           />
-          {bad ? <Text style={styles.small}>Needs a full https:// address; not used.</Text> : null}
+          {bad ? (
+            <AppText variant="bodySmall" tone="muted">
+              Needs a full https:// address; not used.
+            </AppText>
+          ) : null}
 
-          <Text style={styles.hint}>
+          <AppText variant="bodySmall" tone="muted">
             Optional: news feeds (RSS or Atom, https) to read for news questions. The whole feed is
             downloaded and matched on the phone, so no question words are sent to it. Add only feeds
             whose terms allow your use; none are included.
-          </Text>
+          </AppText>
           {s.newsFeeds.map((f) => (
             <View key={f} style={styles.row}>
-              <Text style={[styles.small, styles.flex]} numberOfLines={1}>
+              <AppText variant="bodySmall" tone="muted" style={styles.flex} numberOfLines={1}>
                 {f}
-              </Text>
+              </AppText>
               <Button
                 title="Remove"
                 danger
@@ -77,11 +81,12 @@ export function OnlineSection() {
             </View>
           ))}
           {full ? (
-            <Text style={styles.small}>Up to {MAX_FEEDS} feeds.</Text>
+            <AppText variant="bodySmall" tone="muted">
+              Up to {MAX_FEEDS} feeds.
+            </AppText>
           ) : (
             <>
-              <TextInput
-                style={styles.input}
+              <TextField
                 value={feed}
                 onChangeText={setFeed}
                 onSubmitEditing={addFeed}
@@ -92,16 +97,18 @@ export function OnlineSection() {
                 accessibilityLabel="News feed address"
               />
               {feedBad ? (
-                <Text style={styles.small}>Needs a full https:// address.</Text>
+                <AppText variant="bodySmall" tone="muted">
+                  Needs a full https:// address.
+                </AppText>
               ) : feedUrl ? (
                 <Button title="Add feed" onPress={addFeed} />
               ) : null}
             </>
           )}
-          <Text style={styles.small}>
+          <AppText variant="bodySmall" tone="muted">
             Wikipedia text is CC BY-SA 4.0; news headlines from GDELT (gdeltproject.org) link to the
             publisher. Each answer links to what it used.
-          </Text>
+          </AppText>
         </>
       ) : null}
     </Section>

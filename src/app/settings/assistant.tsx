@@ -10,6 +10,8 @@ import type { HandsFreeMode } from '@/engine/hands-free-logic';
 import { formatMinutes } from '@/engine/place-logic';
 import type { ReadBackMode } from '@/engine/readback-logic';
 import type { SmartDefault } from '@/engine/settings';
+import { MAX_RATE, MIN_RATE } from '@/engine/voice-commands-logic';
+import { SliderRow } from '@/ui';
 
 const MODEL_TIER_LABEL = { small: 'Small and fast', standard: 'Standard', large: 'Large' };
 
@@ -46,20 +48,16 @@ export default function AssistantSettings() {
           recommended={rec.voice}
           onChange={(v) => set({ voiceChoice: v ?? 'auto' })}
         />
-        <ChoiceRow<number>
+        <SliderRow
           label="Speech speed"
           hint={'Also by voice: "speak slower", "speak faster", "normal speed".'}
-          options={[
-            { value: 0.75, label: '75%' },
-            { value: 0.9, label: '90%' },
-            { value: 1, label: 'Normal' },
-            { value: 1.15, label: '115%' },
-            { value: 1.3, label: '130%' },
-            { value: 1.5, label: '150%' },
-          ]}
+          min={MIN_RATE}
+          max={MAX_RATE}
+          step={0.05}
           value={s.speechRate}
           recommended={1}
-          onChange={(v) => set({ speechRate: v === 1 ? null : v })}
+          format={(v) => `${Math.round(v * 100)}%`}
+          onChange={(v) => set({ speechRate: v === null || v === 1 ? null : v })}
         />
       </Section>
       <Section title="Hands-free">

@@ -13,6 +13,10 @@
 | Camera             | `expo-camera`                                                                                                                      | Photo capture is all the MVP needs; vision-camera later if live frame processing is added         |
 | Places             | GeoNames cities500 (offline, towns and villages) + learned places (home/work from dwell time)                                      | Place names with no network                                                                       |
 
+## UI
+
+One design for Android and iOS, the common ground of Material 3 and Apple's guidelines, identical on both (no platform ripple, native Switch or system Alert). Every screen builds from the component library in `src/ui` (rows, switches, sliders, bottom-sheet pickers with a tick, buttons, tabs, dialogs) and one token file, `src/ui/tokens.ts` (light/dark colours, a 4-pt spacing grid, type scale, 48-pt touch targets). `__tests__/ui-conventions-test.ts` is silent until a file in `src/app` or `src/features` imports a raw touchable, Switch, Text or TextInput from react-native, hard-codes a colour or font size, or uses spacing off the grid. The fix is to use or add a `src/ui` component or token, or to mark the line `// ui-exception: <why>` (or the file, in its first 10 lines, `// ui-exception-file: <why>`); an exception without a reason still fails.
+
 ## Memory model
 
 - Store snapshots, audio and transcripts long-term; full video only for the recent past (years of video is ~10 GB/day — not feasible).

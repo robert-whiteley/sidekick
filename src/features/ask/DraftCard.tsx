@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
-import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 
 import { type Draft, drafts, holdDraft, runAction } from '@/engine/actions';
 import { sendsAtText } from '@/integrations/schedule-logic';
 import type { ChatTheme as Theme } from './theme';
+import { AppText, Button, radius, space, TextField } from '@/ui';
 
 /** The editable text of a draft: the message, email body or event title. */
 function mainText(d: Draft): string {
@@ -83,22 +84,36 @@ export function DraftCard({ id, theme }: { id: string; theme: Theme }) {
 
   return (
     <View style={[styles.card, { borderColor: theme.faint }]}>
-      <Text style={[styles.title, { color: theme.text }]}>{d.title}</Text>
-      {detail(d) ? <Text style={{ color: theme.faint }}>{detail(d)}</Text> : null}
+      <AppText variant="bodyStrong" style={{ color: theme.text }}>
+        {d.title}
+      </AppText>
+      {detail(d) ? (
+        <AppText variant="bodySmall" style={{ color: theme.faint }}>
+          {detail(d)}
+        </AppText>
+      ) : null}
       {d.kind !== 'call' &&
         (editing ? (
-          <TextInput
+          <TextField
             value={text}
             onChangeText={setText}
             multiline
             autoFocus
-            style={[styles.body, styles.input, { color: theme.text, borderColor: theme.faint }]}
+            accessibilityLabel="Draft text"
           />
         ) : (
-          <Text style={[styles.body, { color: theme.text }]}>{mainText(d)}</Text>
+          <AppText style={{ color: theme.text }}>{mainText(d)}</AppText>
         ))}
-      {scheduled ? <Text style={{ color: theme.faint }}>{scheduled}</Text> : null}
-      {status ? <Text style={{ color: theme.faint }}>{status}</Text> : null}
+      {scheduled ? (
+        <AppText variant="bodySmall" style={{ color: theme.faint }}>
+          {scheduled}
+        </AppText>
+      ) : null}
+      {status ? (
+        <AppText variant="bodySmall" style={{ color: theme.faint }}>
+          {status}
+        </AppText>
+      ) : null}
       {d.status === 'queued' && d.scheduledAt ? (
         <View style={styles.row}>
           <Btn label="Cancel" onPress={() => drafts.cancel(id)} theme={theme} />
@@ -136,22 +151,16 @@ export function DraftCard({ id, theme }: { id: string; theme: Theme }) {
 }
 
 function Btn(p: { label: string; onPress: () => void; primary?: boolean; theme: Theme }) {
-  return (
-    <Pressable
-      onPress={p.onPress}
-      accessibilityRole="button"
-      style={[styles.btn, p.primary && { backgroundColor: '#2f6fed' }]}
-    >
-      <Text style={{ color: p.primary ? '#fff' : p.theme.text, fontWeight: '600' }}>{p.label}</Text>
-    </Pressable>
-  );
+  return <Button title={p.label} onPress={p.onPress} variant={p.primary ? 'filled' : 'text'} />;
 }
 
 const styles = StyleSheet.create({
-  card: { borderWidth: 1, borderRadius: 14, padding: 12, gap: 6, marginVertical: 6 },
-  title: { fontWeight: '600', fontSize: 15 },
-  body: { fontSize: 16 },
-  input: { borderWidth: 1, borderRadius: 8, padding: 8 },
-  row: { flexDirection: 'row', gap: 8, marginTop: 4 },
-  btn: { paddingVertical: 8, paddingHorizontal: 14, borderRadius: 18 },
+  card: {
+    borderWidth: 1,
+    borderRadius: radius.lg,
+    padding: space.md,
+    gap: space.xs,
+    marginVertical: space.xs,
+  },
+  row: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm, marginTop: space.xs },
 });

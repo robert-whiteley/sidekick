@@ -1,7 +1,8 @@
-import { Image, StyleSheet, Text, View } from 'react-native';
+import { Image, StyleSheet, View } from 'react-native';
 
-import { formatTime, Section, styles } from '@/features/settings/ui';
+import { formatTime, Section } from '@/features/settings/ui';
 import type { Moment } from '@/memory/store';
+import { AppText, radius, space } from '@/ui';
 
 /** Photos and frames Sidekick kept, newest first. */
 export function SavedSection({ moments }: { moments: Moment[] }) {
@@ -9,7 +10,9 @@ export function SavedSection({ moments }: { moments: Moment[] }) {
   return (
     <Section title="Saved">
       {photos.length === 0 && (
-        <Text style={styles.hint}>No saved photos yet. Photos you ask about are kept here.</Text>
+        <AppText variant="bodySmall" tone="muted">
+          No saved photos yet. Photos you ask about are kept here.
+        </AppText>
       )}
       <View style={local.grid}>
         {photos.map((m) => (
@@ -19,9 +22,9 @@ export function SavedSection({ moments }: { moments: Moment[] }) {
               style={local.thumb}
               accessibilityLabel={m.text}
             />
-            <Text style={styles.small} numberOfLines={1}>
+            <AppText variant="bodySmall" tone="muted" numberOfLines={1}>
               {formatTime(m.at)}
-            </Text>
+            </AppText>
           </View>
         ))}
       </View>
@@ -30,7 +33,7 @@ export function SavedSection({ moments }: { moments: Moment[] }) {
 }
 
 const local = StyleSheet.create({
-  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  cell: { width: '31%', gap: 2 },
-  thumb: { width: '100%', aspectRatio: 1, borderRadius: 8, backgroundColor: '#eee' },
+  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm },
+  cell: { width: '31%', gap: space.xxs },
+  thumb: { width: '100%', aspectRatio: 1, borderRadius: radius.sm },
 });

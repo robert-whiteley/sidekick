@@ -20,6 +20,10 @@ A second service, `RoutineTaskService`, is declared `shortService` (`FOREGROUND_
 
 Risk: Play may ask why `location` is needed in the service. Fallback if refused: drop the `location` type and tag moments only while the app is open.
 
+### Set alarms and timers in Clock
+
+- `com.android.alarm.permission.SET_ALARM`: lets Sidekick hand an alarm or timer the user asked for to the Clock app. Install-time, no prompt; without it Clock refuses (found on the Pixel 5, 25 Nov).
+
 ### Exact alarms
 
 - `SCHEDULE_EXACT_ALARM` (declared in `app.json`): reminders at the time the user set. It is user-granted. On Android 14+ it is off by default for new installs. Play's exact-alarm policy restricts only `USE_EXACT_ALARM`, which we do **not** use, so no form is needed. The App content questionnaire may still ask "core functionality"; answer: "Reminders the user approves, delivered at the chosen minute." Phone check: with the permission off, reminders must still fire, perhaps a few minutes late.

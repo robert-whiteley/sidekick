@@ -18,6 +18,9 @@
   <uses-permission android:name="android.permission.READ_SMS" />
   <uses-permission android:name="android.permission.SEND_SMS" />
   <uses-permission android:name="android.permission.READ_CALL_LOG" />
+  <!-- Alarms and timers handed to the Clock app: Clock refuses SET_ALARM/SET_TIMER without this
+       (install-time, no prompt). -->
+  <uses-permission android:name="com.android.alarm.permission.SET_ALARM" />
   <!-- Routines: re-arm the routine alarm after a reboot; a short foreground task runs it. -->
   <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
   <uses-permission android:name="android.permission.WAKE_LOCK" />

@@ -1,8 +1,7 @@
-import { Stack } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import SidekickNative from '../../../modules/sidekick-native';
+import { AppText, OptionItem, Page, Section } from '@/ui';
 import {
   availableModels,
   bytesFor,
@@ -68,17 +67,17 @@ export default function ModelsScreen() {
 
   const line = stateLine(st);
   return (
-    <>
-      <Stack.Screen options={{ title: 'Model' }} />
-      <ScrollView contentContainerStyle={styles.page}>
-        {line ? <Text style={styles.status}>{line}</Text> : null}
+    <Page title="Model">
+      {line ? <AppText tone="primary">{line}</AppText> : null}
+      <Section title="Recommended">
         <Option
           title={`Recommended for this phone: ${catalogModel(rec).label}`}
           hint="Changes by itself if a better model for this phone comes out"
           on={choice === 'recommended'}
           onPress={() => pick('recommended')}
         />
-        <Text style={styles.heading}>Choose a model</Text>
+      </Section>
+      <Section title="Choose a model">
         {availableModels(d).map((m) => (
           <Option
             key={m.id}
@@ -88,7 +87,8 @@ export default function ModelsScreen() {
             onPress={() => pick(m.id)}
           />
         ))}
-        <Text style={styles.heading}>Model updates</Text>
+      </Section>
+      <Section title="Model updates">
         {POLICIES.map((p) => (
           <Option
             key={p.id}
@@ -101,50 +101,15 @@ export default function ModelsScreen() {
             }}
           />
         ))}
-        <Text style={styles.note}>
-          Models are downloaded once and then run on this phone with no internet. A switch only
-          happens after the new model has been checked; the old one is deleted once the new one
-          works.
-        </Text>
-      </ScrollView>
-    </>
+      </Section>
+      <AppText variant="bodySmall" tone="muted">
+        Models are downloaded once and then run on this phone with no internet. A switch only
+        happens after the new model has been checked; the old one is deleted once the new one works.
+      </AppText>
+    </Page>
   );
 }
 
 function Option(p: { title: string; hint: string; on: boolean; onPress: () => void }) {
-  return (
-    <Pressable
-      onPress={p.onPress}
-      style={[styles.option, p.on && styles.optionOn]}
-      accessibilityRole="radio"
-      accessibilityState={{ selected: p.on }}
-    >
-      <View style={[styles.radio, p.on && styles.radioOn]} />
-      <View style={styles.flex}>
-        <Text style={styles.title}>{p.title}</Text>
-        <Text style={styles.hint}>{p.hint}</Text>
-      </View>
-    </Pressable>
-  );
+  return <OptionItem label={p.title} supporting={p.hint} selected={p.on} onPress={p.onPress} />;
 }
-
-const styles = StyleSheet.create({
-  page: { padding: 20, gap: 10 },
-  status: { fontSize: 15, color: '#2f6fed' },
-  heading: { fontSize: 17, fontWeight: '600', marginTop: 14 },
-  option: {
-    flexDirection: 'row',
-    gap: 12,
-    padding: 14,
-    borderRadius: 14,
-    backgroundColor: '#f2f2f5',
-    alignItems: 'center',
-  },
-  optionOn: { backgroundColor: '#e6eefc' },
-  radio: { width: 20, height: 20, borderRadius: 10, borderWidth: 2, borderColor: '#999' },
-  radioOn: { borderColor: '#2f6fed', backgroundColor: '#2f6fed' },
-  flex: { flex: 1, gap: 2 },
-  title: { fontSize: 16, fontWeight: '600' },
-  hint: { fontSize: 14, color: '#555', lineHeight: 19 },
-  note: { fontSize: 14, color: '#666', lineHeight: 20, marginTop: 10 },
-});

@@ -1,11 +1,11 @@
-import { router, Stack, useLocalSearchParams } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
 
-import { Button, confirm, Section, styles } from '@/features/settings/ui';
+import { Button, confirm, Section } from '@/features/settings/ui';
 import type { HeardLine } from '@/memory/conversation-note-logic';
 import { getNote, noteLines, type StoredNote } from '@/memory/conversation-notes';
 import { deleteMoment } from '@/memory/store';
+import { AppText, Page } from '@/ui';
 
 /** A note this recent may still be updating (its conversation is going on). */
 const LIVE_MS = 10 * 60_000;
@@ -40,10 +40,11 @@ export default function NoteScreen() {
   if (note === undefined) return null;
   if (!note)
     return (
-      <View style={local.container}>
-        <Stack.Screen options={{ title: 'Notes' }} />
-        <Text style={styles.hint}>This note was deleted.</Text>
-      </View>
+      <Page title="Notes">
+        <AppText variant="bodySmall" tone="muted">
+          This note was deleted.
+        </AppText>
+      </Page>
     );
   const [title, ...rest] = note.text.split('\n');
   const day = new Date(note.from).toLocaleDateString(undefined, {
@@ -52,30 +53,31 @@ export default function NoteScreen() {
     month: 'short',
   });
   return (
-    <ScrollView contentContainerStyle={local.container}>
-      <Stack.Screen options={{ title: 'Conversation notes' }} />
-      <Text style={styles.h}>{title}</Text>
-      <Text style={styles.hint}>
+    <Page title="Conversation notes">
+      <AppText variant="titleSmall">{title}</AppText>
+      <AppText variant="bodySmall" tone="muted">
         {day}, {time(note.from)}–{time(note.to)}
-      </Text>
+      </AppText>
       {rest.map((l, i) => (
-        <Text key={i} style={styles.body}>
-          {l}
-        </Text>
+        <AppText key={i}>{l}</AppText>
       ))}
-      <Text style={styles.hint}>
+      <AppText variant="bodySmall" tone="muted">
         Action items are offered as follow-ups in Memory › To-dos; nothing is used until you approve
         it.
-      </Text>
+      </AppText>
       <Section title="What was said">
-        {lines.length === 0 && <Text style={styles.hint}>The lines were deleted.</Text>}
+        {lines.length === 0 && (
+          <AppText variant="bodySmall" tone="muted">
+            The lines were deleted.
+          </AppText>
+        )}
         {lines.map((l) => (
-          <Text key={l.id} style={styles.body}>
-            <Text style={styles.small}>
+          <AppText key={l.id}>
+            <AppText variant="bodySmall" tone="muted">
               {time(l.at)} {l.who === 'Me' ? 'You' : l.who}:{' '}
-            </Text>
+            </AppText>
             {l.text}
-          </Text>
+          </AppText>
         ))}
       </Section>
       <Button
@@ -88,8 +90,6 @@ export default function NoteScreen() {
           })
         }
       />
-    </ScrollView>
+    </Page>
   );
 }
-
-const local = StyleSheet.create({ container: { padding: 16, gap: 10 } });

@@ -1,10 +1,10 @@
 import { useState } from 'react';
-import { Text } from 'react-native';
 
 import { deleteAllData, exportAllData } from '@/engine/data-export';
 import { deleteRange } from '@/memory/store';
 import { DeleteBySource } from './SourcesSection';
-import { Button, confirm, Section, styles } from './ui';
+import { Button, confirm, Section } from './ui';
+import { AppText } from '@/ui';
 
 export function DataSection({ onChanged }: { onChanged: () => void }) {
   const [msg, setMsg] = useState('');
@@ -27,10 +27,10 @@ export function DataSection({ onChanged }: { onChanged: () => void }) {
 
   return (
     <Section title="Your data">
-      <Text style={styles.hint}>
+      <AppText variant="bodySmall" tone="muted">
         Everything is stored encrypted on this phone only. Export copies all of it (text, photos,
         video and audio) to a folder you choose.
-      </Text>
+      </AppText>
       <Button title="Export everything" onPress={() => void exportAll()} />
       <Button
         danger
@@ -70,7 +70,11 @@ export function DataSection({ onChanged }: { onChanged: () => void }) {
           )
         }
       />
-      {msg ? <Text style={styles.hint}>{msg}</Text> : null}
+      {msg ? (
+        <AppText variant="bodySmall" tone="muted">
+          {msg}
+        </AppText>
+      ) : null}
     </Section>
   );
 }

@@ -196,4 +196,12 @@ class CaptureLogicTest {
     assertEquals(0xffffffff.toInt(), out[1])
     assertEquals(0xff808080.toInt(), out[2])
   }
+
+  @Test fun meanLumaReadsTheYPlaneOnly() {
+    val w = 8
+    val h = 4
+    val data = ByteArray(w * h * 3 / 2) { if (it < w * h) 200.toByte() else 0 }
+    assertEquals(200, Nv21.meanLuma(data, w, h))
+    assertEquals(0, Nv21.meanLuma(ByteArray(0), w, h))
+  }
 }

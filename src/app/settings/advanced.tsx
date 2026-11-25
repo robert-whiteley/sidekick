@@ -1,12 +1,10 @@
-import { Link } from 'expo-router';
-import { StyleSheet, Text } from 'react-native';
-
 import { RESERVE_OPTIONS } from '@/engine/device-profile';
 import { DEFAULTS } from '@/engine/settings';
 import { ChipSection } from '@/features/settings/ChipSection';
 import { Page } from '@/features/settings/Page';
-import { ACCENT, Button, ChoiceRow, NavRow, Row, Section, styles } from '@/features/settings/ui';
+import { Button, ChoiceRow, NavRow, Row, Section } from '@/features/settings/ui';
 import { useSettings } from '@/features/settings/useSettings';
+import { AppText } from '@/ui';
 
 export default function AdvancedSettings() {
   const { s, rec, set } = useSettings();
@@ -46,9 +44,9 @@ export default function AdvancedSettings() {
       </Section>
       <ChipSection />
       <Section title="Reset">
-        <Text style={styles.hint}>
+        <AppText variant="bodySmall" tone="muted">
           Sets every adjustable setting back to Recommended for this phone.
-        </Text>
+        </AppText>
         <Button
           title="Use all Recommended values"
           onPress={() =>
@@ -67,11 +65,7 @@ export default function AdvancedSettings() {
           }
         />
       </Section>
-      <Link href="/bench" style={local.link}>
-        Speed test (developer)
-      </Link>
+      <NavRow label="Speed test (developer)" href="/bench" />
     </Page>
   );
 }
-
-const local = StyleSheet.create({ link: { fontSize: 16, color: ACCENT, marginTop: 12 } });

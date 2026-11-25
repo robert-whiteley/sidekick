@@ -1,10 +1,11 @@
 import * as Application from 'expo-application';
 import Constants from 'expo-constants';
-import { Linking, Platform, Pressable, Text } from 'react-native';
+import { Linking, Platform } from 'react-native';
 
 import { feedbackMailto } from '@/content/feedback';
 import { Page } from '@/features/settings/Page';
-import { NavRow, Section, styles } from '@/features/settings/ui';
+import { NavRow, Section } from '@/features/settings/ui';
+import { AppText, ListRow } from '@/ui';
 
 /** The support address from app.json expo.extra.support.email (empty until the owner sets one). */
 function supportEmail(): string {
@@ -25,14 +26,14 @@ export default function AboutScreen() {
   const email = supportEmail();
   return (
     <Page title="About">
-      <Text style={styles.body}>
+      <AppText>
         Sidekick {version ?? ''}
         {build ? ` (build ${build})` : ''}
-      </Text>
-      <Text style={styles.hint}>
+      </AppText>
+      <AppText variant="bodySmall" tone="muted">
         Runs on your phone. No accounts, no tracking, nothing sent anywhere unless you turn on
         online lookup or a Google feature.
-      </Text>
+      </AppText>
       <Section title="Sidekick">
         <NavRow label="What's new" hint="Changes in each version" href="/whats-new" />
         <NavRow
@@ -63,10 +64,5 @@ export default function AboutScreen() {
 }
 
 function ActionRow(props: { label: string; hint: string; onPress: () => void }) {
-  return (
-    <Pressable style={styles.item} onPress={props.onPress} accessibilityRole="button">
-      <Text style={styles.link}>{props.label}</Text>
-      <Text style={styles.hint}>{props.hint}</Text>
-    </Pressable>
-  );
+  return <ListRow title={props.label} supporting={props.hint} onPress={props.onPress} />;
 }

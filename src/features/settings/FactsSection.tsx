@@ -1,7 +1,8 @@
-import { Pressable, Text, View } from 'react-native';
+import { View } from 'react-native';
 
 import { deleteFact, saveFact, savedFacts } from '@/memory/store';
 import { Section, styles } from './ui';
+import { AppText, TextButton } from '@/ui';
 
 export type Fact = Awaited<ReturnType<typeof savedFacts>>[number];
 
@@ -19,30 +20,28 @@ export function FactsSection({ facts, onChanged }: { facts: Fact[]; onChanged: (
   const saved = facts.filter((f) => f.status === 'saved');
   return (
     <Section title="About you">
-      <Text style={styles.hint}>{'Say "remember that…" to save a fact.'}</Text>
+      <AppText variant="bodySmall" tone="muted">
+        {'Say "remember that…" to save a fact.'}
+      </AppText>
       {suggested.length > 0 && (
-        <Text style={styles.body}>Suggested from what you said (only used once you approve)</Text>
+        <AppText>Suggested from what you said (only used once you approve)</AppText>
       )}
       {suggested.map((f) => (
         <View key={f.id} style={[styles.item, styles.itemRow]}>
-          <Text style={[styles.body, styles.flex]}>{f.text}</Text>
-          <Pressable onPress={() => void approve(f)}>
-            <Text style={styles.link}>Approve</Text>
-          </Pressable>
-          <Pressable onPress={() => void remove(f)}>
-            <Text style={[styles.link, styles.danger]}>Reject</Text>
-          </Pressable>
+          <AppText style={styles.flex}>{f.text}</AppText>
+          <TextButton title="Approve" onPress={() => void approve(f)} />
+          <TextButton title="Reject" onPress={() => void remove(f)} danger />
         </View>
       ))}
       {saved.length === 0 && suggested.length === 0 && (
-        <Text style={styles.hint}>No facts saved yet.</Text>
+        <AppText variant="bodySmall" tone="muted">
+          No facts saved yet.
+        </AppText>
       )}
       {saved.map((f) => (
         <View key={f.id} style={[styles.item, styles.itemRow]}>
-          <Text style={[styles.body, styles.flex]}>{f.text}</Text>
-          <Pressable onPress={() => void remove(f)}>
-            <Text style={[styles.link, styles.danger]}>Delete</Text>
-          </Pressable>
+          <AppText style={styles.flex}>{f.text}</AppText>
+          <TextButton title="Delete" onPress={() => void remove(f)} danger />
         </View>
       ))}
     </Section>

@@ -1,5 +1,3 @@
-import { Text } from 'react-native';
-
 import {
   AUDIO_KEEP_OPTIONS,
   FPS_OPTIONS,
@@ -11,8 +9,9 @@ import { daysLabel, hoursLabel } from '@/features/settings/choice-logic';
 import { DevicesSection } from '@/features/settings/DevicesSection';
 import { ListeningSection } from '@/features/settings/ListeningSection';
 import { Page } from '@/features/settings/Page';
-import { ChoiceRow, Row, Section, styles } from '@/features/settings/ui';
+import { ChoiceRow, Row, Section } from '@/features/settings/ui';
 import { useSettings } from '@/features/settings/useSettings';
+import { AppText } from '@/ui';
 
 export default function CameraAudioSettings() {
   const { s, rec, set } = useSettings();
@@ -72,9 +71,9 @@ export default function CameraAudioSettings() {
           recommended={rec.audioKeepDays}
           onChange={(v) => set({ audioKeepDays: v })}
         />
-        <Text style={styles.hint}>
+        <AppText variant="bodySmall" tone="muted">
           Recommended values are worked out from this phone and its free space.
-        </Text>
+        </AppText>
       </Section>
       <ListeningSection part="listening" />
     </Page>

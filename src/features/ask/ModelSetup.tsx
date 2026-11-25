@@ -1,9 +1,10 @@
 import { useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { View } from 'react-native';
 
 import SidekickNative from '../../../modules/sidekick-native';
 import { downloadFile, isDownloaded } from '@/engine/downloads';
 import { allRequiredFiles } from '@/engine/llm-candidates';
+import { AppText, Button, makeStyles, ProgressBar, radius, space } from '@/ui';
 
 /** First run: fetch the AI model once. After this Sidekick never needs the internet. */
 export function ModelSetup({ onReady }: { onReady: () => void }) {
@@ -36,37 +37,33 @@ export function ModelSetup({ onReady }: { onReady: () => void }) {
     }
   };
 
+  const styles = useStyles();
   return (
     <View style={styles.card}>
-      <Text style={styles.title}>One-time setup</Text>
-      <Text style={styles.body}>
+      <AppText variant="title">One-time setup</AppText>
+      <AppText>
         Sidekick needs its AI models ({size}). It downloads once over the internet; after that
         everything runs on this phone and nothing you say or see leaves it. Wi-Fi recommended.
-      </Text>
+      </AppText>
       {busy ? (
         <>
-          <View style={styles.bar}>
-            <View style={[styles.fill, { width: `${Math.round(fraction * 100)}%` }]} />
-          </View>
-          <Text style={styles.body}>{status || 'Starting…'}</Text>
+          <ProgressBar fraction={fraction} label="Download progress" />
+          <AppText>{status || 'Starting…'}</AppText>
         </>
       ) : (
-        <Pressable style={styles.button} onPress={start} accessibilityRole="button">
-          <Text style={styles.buttonText}>Download</Text>
-        </Pressable>
+        <Button title="Download" variant="filled" block onPress={() => void start()} />
       )}
-      {error ? <Text style={styles.error}>{error}</Text> : null}
+      {error ? <AppText tone="danger">{error}</AppText> : null}
     </View>
   );
 }
 
-const styles = StyleSheet.create({
-  card: { margin: 20, padding: 20, borderRadius: 16, backgroundColor: '#f2f2f5', gap: 12 },
-  title: { fontSize: 22, fontWeight: '700' },
-  body: { fontSize: 16, lineHeight: 22 },
-  bar: { height: 8, borderRadius: 4, backgroundColor: '#ddd', overflow: 'hidden' },
-  fill: { height: 8, backgroundColor: '#2f6fed' },
-  button: { backgroundColor: '#2f6fed', padding: 14, borderRadius: 12, alignItems: 'center' },
-  buttonText: { color: 'white', fontSize: 17, fontWeight: '600' },
-  error: { color: '#b00020', fontSize: 15 },
-});
+const useStyles = makeStyles((c) => ({
+  card: {
+    margin: space.xl,
+    padding: space.xl,
+    borderRadius: radius.lg,
+    backgroundColor: c.surface,
+    gap: space.md,
+  },
+}));

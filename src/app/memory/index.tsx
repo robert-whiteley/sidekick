@@ -1,6 +1,5 @@
 import { useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useCallback, useState } from 'react';
-import { Pressable, Text, View } from 'react-native';
 
 import { SavedSection } from '@/features/memory/SavedSection';
 import { TimelineSection } from '@/features/memory/TimelineSection';
@@ -8,8 +7,9 @@ import { type Fact, FactsSection } from '@/features/settings/FactsSection';
 import { FollowupsSection } from '@/features/settings/FollowupsSection';
 import { Page } from '@/features/settings/Page';
 import { PeopleSection, type Person } from '@/features/settings/PeopleSection';
-import { NavRow, Section, styles } from '@/features/settings/ui';
+import { NavRow, Section } from '@/features/settings/ui';
 import { listSpeakers, type Moment, recentMoments, savedFacts } from '@/memory/store';
+import { Tabs } from '@/ui';
 
 const TABS = [
   { id: 'you', label: 'You' },
@@ -57,19 +57,7 @@ export default function MemoryScreen() {
 
   return (
     <Page title="Memory">
-      <View style={styles.chips}>
-        {TABS.map((t) => (
-          <Pressable
-            key={t.id}
-            onPress={() => setTab(t.id)}
-            style={[styles.chip, tab === t.id && styles.chipOn]}
-            accessibilityRole="tab"
-            accessibilityState={{ selected: tab === t.id }}
-          >
-            <Text style={[styles.chipText, tab === t.id && styles.chipTextOn]}>{t.label}</Text>
-          </Pressable>
-        ))}
-      </View>
+      <Tabs tabs={TABS} value={tab} onChange={setTab} />
       {tab === 'you' && <FactsSection facts={facts} onChanged={changed} />}
       {tab === 'people' && <PeopleSection people={people} onChanged={changed} />}
       {tab === 'todos' && <FollowupsSection part="list" />}
