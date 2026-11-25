@@ -57,12 +57,36 @@ const KIND_WORDS: [RegExp, FollowupKind][] = [
 ];
 
 /**
+ * What a moment contributes to the follow-up pass. A photo asked about is saved as
+ * "Q: <question to Sidekick>\nA: <answer>": the question is a request to Sidekick, never a to-do
+ * ("Look at the black keyboard"), so only what the photo showed is kept. Null: nothing to read.
+ */
+export function followupLineText(kind: string, text: string): string | null {
+  if (kind !== 'photo' || !/^Q:/.test(text)) return text.trim() || null;
+  const a = text.match(/\nA:\s*([\s\S]*)$/)?.[1]?.trim();
+  return a || null;
+}
+
+/** A title that is a command or question to an assistant, not something to do or attend. */
+const ASSISTANT_REQUEST =
+  /^(calculate|compute|look at|what|whats|what's|who|where|when|why|how|which|tell me|show|describe|translate|explain|read|identify|search|find out|define|convert|summari[sz]e|count|is|are|can|could|do|does)\b/i;
+
+const TITLE_STOP = new Set(
+  'the a an to of and or for on in at with my me i you it is be this that your our we'.split(' '),
+);
+const words = (s: string) =>
+  (s.toLowerCase().match(/[\p{L}\p{N}']+/gu) ?? []).filter(
+    (w) => w.length > 2 && !TITLE_STOP.has(w),
+  );
+
+/**
  * Parses the model's reply. [lineAt] gives each numbered line's time and moment id, so relative
- * times ("tomorrow") are read from when it was said, not when the model ran.
+ * times ("tomorrow") are read from when it was said, not when the model ran. With the line's
+ * text, a title must share a word with it (nothing made up) and must not be a request to Sidekick.
  */
 export function parseFollowups(
   reply: string,
-  lineAt: { at: number; id: number }[],
+  lineAt: { at: number; id: number; text?: string }[],
 ): ProposedFollowup[] {
   const out: ProposedFollowup[] = [];
   for (const raw of reply.split('\n')) {
@@ -80,6 +104,11 @@ export function parseFollowups(
     if (!kind) continue;
     const title = cleanTitle(parts[2]);
     if (title.length < 3 || title.length > 100) continue;
+    if (ASSISTANT_REQUEST.test(title)) continue;
+    if (src.text != null) {
+      const said = new Set(words(src.text));
+      if (!words(title).some((w) => said.has(w))) continue;
+    }
     const whenText = /^(-|none|n\/a|no time)?$/i.test(parts[3]) ? '' : parts[3].slice(0, 60);
     const when = whenText ? parseWhen(whenText, new Date(src.at)) : null;
     const p: ProposedFollowup = {

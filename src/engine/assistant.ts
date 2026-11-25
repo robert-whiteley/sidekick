@@ -47,6 +47,10 @@ export type AnswerResult = {
  * Answers a question using, in order: a photo just taken; else the user's memory, re-reading the
  * original photo of a remembered moment when the question is about something seen.
  */
+
+/** The last question asked, for a spoken follow-up's search words. */
+let lastQuestion: string | undefined;
+
 export async function answer(
   question: string,
   photoNow: string | null,
@@ -129,7 +133,10 @@ export async function answer(
         undoable: o?.undoable,
       }),
     onText,
+    undefined,
+    opts?.keepHistory ? lastQuestion : undefined,
   );
+  lastQuestion = question;
 
   if (photoNow) await rememberPhotoQuestion(photoNow, question, text).catch(() => {});
   else await rememberExchange(question, text).catch(() => {});

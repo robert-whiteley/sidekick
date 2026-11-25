@@ -13,6 +13,8 @@ import { forSpeech, takeSentences } from './sentences';
 export class StreamingSpeaker {
   private buffer = '';
   private spokenUpTo = 0;
+  /** What has been spoken (or queued) so far; a reply that doesn't continue it starts over. */
+  private spoken = '';
   private readonly native = Platform.OS === 'android';
   private readonly answerId: number;
   constructor(private enabled: boolean) {
@@ -22,15 +24,26 @@ export class StreamingSpeaker {
   /** Call with the full answer so far each time it grows. */
   update(full: string) {
     if (!this.enabled) return;
+    this.restartIfReplaced(full);
     this.buffer = full.slice(this.spokenUpTo);
     const { done, rest } = takeSentences(this.buffer);
     for (const s of done) this.say(s);
     this.spokenUpTo = full.length - rest.length;
+    this.spoken = full.slice(0, this.spokenUpTo);
+  }
+
+  /** A new reply (e.g. the answer after an online lookup) is spoken from its start. */
+  private restartIfReplaced(full: string) {
+    if (this.spokenUpTo && !full.startsWith(this.spoken)) {
+      this.spokenUpTo = 0;
+      this.spoken = '';
+    }
   }
 
   /** Call once the answer is complete to speak the last sentence. */
   finish(full: string) {
     if (!this.enabled) return;
+    this.restartIfReplaced(full);
     const tail = full.slice(this.spokenUpTo).trim();
     if (tail) this.say(tail);
     this.spokenUpTo = full.length;

@@ -102,9 +102,9 @@ export function LiveConversation({ listening }: { listening: boolean }) {
   };
 
   return (
-    <View>
+    <View style={local.shrink}>
       {modes}
-      <View style={local.box}>
+      <View style={[local.box, local.shrink]}>
         {commandsOnly && (
           <Text style={local.small}>
             Instructions only: nothing around you is transcribed; say &quot;Sidekick …&quot; or hold
@@ -190,7 +190,8 @@ const local = StyleSheet.create({
     backgroundColor: '#f6f6f8',
   },
   link: { fontSize: 14, color: '#2f6fed' },
-  scroll: { maxHeight: 150, marginTop: 4 },
+  scroll: { maxHeight: 150, flexShrink: 1, marginTop: 4 },
+  shrink: { flexShrink: 1, minHeight: 0 },
   line: { flexDirection: 'row', gap: 6, paddingVertical: 2 },
   who: { fontSize: 14, fontWeight: '600', color: '#2f6fed' },
   text: { fontSize: 14, color: '#222', flexShrink: 1 },

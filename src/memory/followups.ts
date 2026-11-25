@@ -1,6 +1,7 @@
 import { getDb } from './db';
 import {
   type Followup,
+  followupLineText,
   type FollowupKind,
   type FollowupStatus,
   newProposals,
@@ -51,17 +52,25 @@ export async function linesForFollowups(
        AND length(m.text) > 0 AND m.at > ? ORDER BY m.at LIMIT ?`,
     [now - SCAN_WINDOW_MS, limit],
   );
-  return r.rows.map((x) => ({
-    id: x.id as number,
-    at: x.at as number,
-    text: (x.text as string).slice(0, 400),
-    who:
-      x.kind === 'photo'
-        ? 'Photo I took'
-        : x.is_owner
-          ? 'Me'
-          : ((x.name as string | null) ?? 'Someone'),
+  const read = r.rows.map((x) => ({
+    x,
+    text: followupLineText(x.kind as string, x.text as string),
   }));
+  // Nothing to read (a photo question with no answer): mark it now, or it blocks the queue.
+  await markFollowupsScanned(read.filter((l) => l.text == null).map((l) => l.x.id as number));
+  return read
+    .flatMap(({ x, text }) => (text == null ? [] : [{ x, text }]))
+    .map(({ x, text }) => ({
+      id: x.id as number,
+      at: x.at as number,
+      text: text.slice(0, 400),
+      who:
+        x.kind === 'photo'
+          ? 'Photo I took'
+          : x.is_owner
+            ? 'Me'
+            : ((x.name as string | null) ?? 'Someone'),
+    }));
 }
 
 export async function markFollowupsScanned(ids: number[]) {

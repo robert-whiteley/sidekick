@@ -527,7 +527,15 @@ const styles = StyleSheet.create({
   },
   title: { fontSize: 24, fontWeight: '700' },
   link: { fontSize: 16, color: '#2f6fed' },
-  cameraBox: { height: '38%', marginHorizontal: 16, borderRadius: 16, overflow: 'hidden' },
+  // Shrinks (not overflows) when the keyboard takes space, so the input row stays above it.
+  cameraBox: {
+    height: '38%',
+    flexShrink: 1,
+    minHeight: 72,
+    marginHorizontal: 16,
+    borderRadius: 16,
+    overflow: 'hidden',
+  },
   cameraOff: { flex: 1, backgroundColor: '#eee', alignItems: 'center', justifyContent: 'center' },
   cameraOffText: { fontSize: 16, color: '#555' },
   toggles: {

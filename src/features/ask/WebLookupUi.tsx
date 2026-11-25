@@ -1,30 +1,44 @@
 import { useNetworkState } from 'expo-network';
 import { useEffect, useState } from 'react';
-import { Linking, StyleSheet, Text, View } from 'react-native';
+import { Linking, Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { getSettings, onSettingsChange } from '@/engine/settings';
+import { getSettings, onSettingsChange, updateSettings } from '@/engine/settings';
 import { browserSearchQuery, type WebSource } from '@/web/lookup';
 
-/** "Offline" unless online lookup is on and the phone has a connection; "Online" when just used. */
+/**
+ * Online/Offline button: tap to turn online lookup on or off (off by default). Shows "Offline"
+ * whenever the phone has no internet (airplane mode, no signal), whatever the setting.
+ */
+export function onlineLabel(enabled: boolean, connected: boolean): 'Online' | 'Offline' {
+  return enabled && connected ? 'Online' : 'Offline';
+}
+
 export function OnlineBadge({ used }: { used: boolean }) {
   const [enabled, setEnabled] = useState(getSettings().webLookup);
   useEffect(() => onSettingsChange((s) => setEnabled(s.webLookup)), []);
   const net = useNetworkState();
   const connected = net.isConnected !== false && net.isInternetReachable !== false;
-  const label = !enabled || !connected ? 'Offline' : used ? 'Online' : 'Lookup on';
+  const label = onlineLabel(enabled, connected);
+  const online = label === 'Online';
   return (
-    <View
-      style={[styles.badge, label === 'Online' && styles.on]}
+    <Pressable
+      onPress={() => updateSettings({ webLookup: !enabled })}
+      hitSlop={8}
+      style={[styles.badge, online && styles.on, online && used && styles.used]}
+      accessibilityRole="switch"
+      accessibilityState={{ checked: enabled }}
       accessibilityLabel={
-        label === 'Offline'
-          ? 'Offline: answers come only from this phone'
-          : label === 'Online'
-            ? 'Online: this answer used an online lookup'
-            : 'Online lookup is on'
+        online
+          ? 'Online: questions may be looked up on Wikipedia and DuckDuckGo. Tap to go offline.'
+          : enabled
+            ? 'Offline: no internet. Answers come only from this phone.'
+            : 'Offline: answers come only from this phone. Tap to allow online lookup.'
       }
     >
-      <Text style={[styles.badgeText, label === 'Online' && styles.onText]}>{label}</Text>
-    </View>
+      <Text style={[styles.badgeText, online && styles.onText]}>
+        {!online && enabled ? 'Offline · no internet' : label}
+      </Text>
+    </Pressable>
   );
 }
 
@@ -99,6 +113,7 @@ const styles = StyleSheet.create({
   on: { backgroundColor: '#2f6fed' },
   badgeText: { fontSize: 12, color: '#555', fontWeight: '600' },
   onText: { color: '#fff' },
+  used: { borderWidth: 2, borderColor: '#9db8f5' },
   sources: { gap: 4, marginTop: 8 },
   source: { fontSize: 13, color: '#2f6fed' },
 });

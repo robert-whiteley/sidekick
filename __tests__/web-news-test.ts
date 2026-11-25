@@ -441,3 +441,38 @@ describe('Gemma writes the search words', () => {
     }
   });
 });
+
+describe('searchTopic', () => {
+  const { searchTopic } = jest.requireActual('@/web/lookup-logic');
+  it('keeps the earlier topic for a follow-up that leans on it', () => {
+    expect(
+      searchTopic(
+        'And when did that change happen?',
+        'Why did KiwiSaver change its default funds?',
+      ),
+    ).toBe('Why did KiwiSaver change its default funds; And when did that change happen?');
+  });
+  it('leaves a new, self-contained question alone', () => {
+    expect(searchTopic('How tall is the Shard?', 'Who won the 2022 world cup?')).toBe(
+      'How tall is the Shard?',
+    );
+    expect(searchTopic('when did that happen', undefined)).toBe('when did that happen');
+  });
+});
+
+describe('trailing LOOKUP', () => {
+  const { requestsLookup, withoutLookupTail } = jest.requireActual('@/web/lookup-logic');
+  it('counts a reason followed by LOOKUP as a lookup request', () => {
+    expect(
+      requestsLookup(
+        'I do not have information about why Kiwi Saver changed its default funds. LOOKUP',
+      ),
+    ).toBe(true);
+    expect(requestsLookup('You can look it up in the manual.')).toBe(false);
+  });
+  it('never shows a trailing or partial LOOKUP', () => {
+    expect(withoutLookupTail('I do not know. LOOK')).toBe('I do not know.');
+    expect(withoutLookupTail('I do not know. LOOKUP')).toBe('I do not know.');
+    expect(withoutLookupTail('Turn left.')).toBe('Turn left.');
+  });
+});

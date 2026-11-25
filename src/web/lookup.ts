@@ -12,6 +12,8 @@ import {
   LOOKUP_HINT,
   LOOKUP_TIMEOUT_MS,
   NEWS_TIMEOUT_MS,
+  searchTopic,
+  withoutLookupTail,
   mergeSources,
   MAX_SOURCES,
   mightBeLookup,
@@ -300,6 +302,8 @@ export async function askWithLookup<T extends Asked>(
   ) => Promise<T>,
   onText: (full: string) => void,
   deps: LookupDeps = defaultDeps,
+  /** The earlier question in a spoken conversation, so a follow-up's search keeps its topic. */
+  previous?: string,
 ): Promise<T & { web: WebSource[]; webQuery?: string }> {
   const enabled = deps.enabled();
   if (!enabled || photo) return { ...(await ask(build(''), onText)), web: [] };
@@ -311,8 +315,9 @@ export async function askWithLookup<T extends Asked>(
   const lookup = async (): Promise<WebSource[]> => {
     if (!(await deps.online())) return [];
     const t0 = Date.now();
-    const fromModel = await deps.writeQuery(question, names).catch(() => null);
-    const q = fromModel ?? buildQuery(question, names);
+    const topic = searchTopic(question, previous);
+    const fromModel = await deps.writeQuery(topic, names).catch(() => null);
+    const q = fromModel ?? buildQuery(topic, names);
     if (!q) return [];
     webQuery = q;
     const tWords = Date.now() - t0;
@@ -337,17 +342,22 @@ export async function askWithLookup<T extends Asked>(
 
   // 'ask-model': hold the streamed text back while it could still be "LOOKUP".
   let shown = false;
+  let lastShown = '';
   const first = await ask(
     build(LOOKUP_HINT),
     (full) => {
       if (!shown && mightBeLookup(full)) return;
+      const visible = withoutLookupTail(full);
+      if (!visible) return;
       shown = true;
-      onText(full);
+      lastShown = visible;
+      onText(visible);
     },
     { undoable: true },
   );
   if (!requestsLookup(first.text)) {
     if (!shown && first.text) onText(first.text);
+    else if (first.text !== lastShown) onText(first.text); // a held-back "L…" was a word
     return { ...first, web: [] };
   }
   // The hidden "LOOKUP" turn leaves the chat: a spoken follow-up sees only question and answer.

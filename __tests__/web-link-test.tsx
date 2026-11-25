@@ -1,10 +1,15 @@
 import { act, fireEvent, render, screen } from '@testing-library/react-native';
 
-import { sourceLabel, WebSearchLink } from '@/features/ask/WebLookupUi';
+import * as settings from '@/engine/settings';
+import { OnlineBadge, onlineLabel, sourceLabel, WebSearchLink } from '@/features/ask/WebLookupUi';
 
 jest.mock('expo-network', () => ({ useNetworkState: () => ({}), getNetworkStateAsync: jest.fn() }));
 jest.mock('@/memory/store', () => ({ listSpeakers: jest.fn(async () => []) }));
-jest.mock('@/engine/settings', () => ({ getSettings: jest.fn(), onSettingsChange: jest.fn() }));
+jest.mock('@/engine/settings', () => ({
+  getSettings: jest.fn(() => ({ webLookup: false })),
+  onSettingsChange: jest.fn(() => () => {}),
+  updateSettings: jest.fn(),
+}));
 jest.mock('@/engine/llm', () => ({
   askLlmAside: jest.fn(),
   cancelLlm: jest.fn(),
@@ -56,5 +61,18 @@ describe('Search the web in your browser', () => {
         date: '2026-11-23',
       }),
     ).toBe('Source: GDELT — Talks collapse · x.example · 2026-11-23');
+  });
+});
+
+describe('Online/Offline button', () => {
+  it('shows Offline without internet even when lookup is on', () => {
+    expect(onlineLabel(true, false)).toBe('Offline');
+    expect(onlineLabel(false, true)).toBe('Offline');
+    expect(onlineLabel(true, true)).toBe('Online');
+  });
+  it('turns online lookup on when tapped', async () => {
+    await render(<OnlineBadge used={false} />);
+    await fireEvent.press(screen.getByRole('switch'));
+    expect(settings.updateSettings).toHaveBeenCalledWith({ webLookup: true });
   });
 });
