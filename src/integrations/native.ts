@@ -25,6 +25,15 @@ export type NowPlaying = {
   playing: boolean;
 };
 
+export type RecordingStatus = {
+  id: string;
+  doneMs: number;
+  totalMs: number;
+  finished: boolean;
+  error: string | null;
+  running: boolean;
+};
+
 export type MediaCommand = 'play' | 'pause' | 'toggle' | 'next' | 'previous' | 'stop';
 
 export type OpenMessageApp = 'whatsapp' | 'sms' | 'telegram' | 'signal';
@@ -85,9 +94,21 @@ type IntegrationsNative = {
   stopRing?(): boolean;
   /** Opens [url] in [pkg] ('' = any app). */
   openLink?(url: string, pkg: string): boolean;
-  /** JSON {text?, subject?, imagePath?, at} shared into Sidekick, once. */
+  /** JSON SharedItem (share-in.ts) shared into Sidekick, once. */
   takeShared?(): string | null;
-  addListener?(event: 'onShared', listener: () => void): { remove(): void };
+  addListener?(event: 'onShared' | 'onRecording', listener: () => void): { remove(): void };
+  /** Text selection menu: the app that sent the text can still take new text back. */
+  processTextWaiting?(): boolean;
+  /** Gives [text] back to that app (null: unchanged) and returns to it. */
+  finishProcessText?(text: string | null): boolean;
+  // Shared recordings (Recordings.kt), transcribed in the background.
+  recordingStart?(id: string, path: string): boolean;
+  recordingStatus?(id: string): RecordingStatus | null;
+  /** One JSON object per line: {at, durationMs, text, voice}. */
+  recordingLines?(id: string): string;
+  recordingCancel?(id: string): void;
+  recordingForget?(id: string): void;
+  recordingsUnfinished?(): string[];
   isLocked?(): boolean;
   // Texts and call history (Telephony.kt): only while Sidekick is the default assistant.
   /** JSON {assistant, readSms, sendSms, callLog}. */

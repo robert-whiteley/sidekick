@@ -331,6 +331,13 @@ export const TOOLS: ToolSpec[] = [
       /\b(camera|frames?|fps|frame rate|front|back|rear|selfie|flip|resolution|detail|quality|sharper|clearer|hd|720p?|1080p?|480p?)\b/,
   },
   {
+    name: 'missed',
+    desc: 'short summary of my unread notifications (what I missed), by person and app',
+    kind: 'info',
+    args: {},
+    words: /\b(miss|missed|notifications?|unread|catch me up|catch up|while i was)\b/,
+  },
+  {
     name: 'feedback',
     desc: 'send feedback about Sidekick to its makers',
     kind: 'action',

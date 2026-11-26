@@ -130,7 +130,19 @@ import { NoticeItem, useNotices } from './NoticeLines';
 import { ScreenGrabBar } from './ScreenGrabBar';
 import { DARK, LIGHT } from './theme';
 import { useEntry } from './useEntry';
-import { sharedComposerText, watchShares } from '@/engine/share-in';
+import { sharedComposerText, sharedKind, watchShares } from '@/engine/share-in';
+import {
+  answerShared,
+  attachmentFor,
+  cancelRecording,
+  finishRecording,
+  recordingStatus,
+  resumeRecordings,
+  watchRecordings,
+} from '@/engine/shared-doc';
+import type { Attachment } from '@/engine/shared-doc-logic';
+import { integrationsNative } from '@/integrations/native';
+import { AttachmentBar, TextResultActions } from './AttachmentBar';
 
 type Phase = 'idle' | 'loading' | 'thinking' | 'answering';
 
@@ -196,6 +208,12 @@ export function AskScreen({
   const conversation = useRef(new Conversation());
   const queuedRef = useRef<{ q: string; followUp: boolean } | null>(null);
   const [screen, setScreen] = useState<ScreenGrab | null>(null);
+  // A shared file, recording, web page or selected text the next questions are about.
+  const [attachment, setAttachment] = useState<Attachment | null>(null);
+  const attachmentRef = useRef<Attachment | null>(null);
+  useEffect(() => {
+    attachmentRef.current = attachment;
+  }, [attachment]);
   const [cameraReady, setCameraReady] = useState(false);
   // Opened hands-free (tile, widget, assistant) or the mic was tapped: a tap, or a timeout, ends it.
   const handsFree = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -585,24 +603,99 @@ export function AskScreen({
     }
   };
 
-  // Shared into Sidekick from another app: a picture to ask about, or text in the composer.
+  // Shared into Sidekick from another app: a picture to ask about, text in the composer, or a
+  // file, recording, link or selected text as the chat's attachment (shared-doc.ts).
   useEffect(
     () =>
       watchShares((item) => {
-        if (item.imagePath)
-          setScreen({ shot: item.imagePath, text: '', at: Date.now(), shared: true });
-        const text = sharedComposerText(item);
-        if (text) setQuestion((cur) => (cur.trim() ? `${cur.trim()}\n${text}` : text));
+        const kind = sharedKind(item);
+        if (kind === 'image' || kind === 'text') {
+          if (item.imagePath)
+            setScreen({ shot: item.imagePath, text: '', at: Date.now(), shared: true });
+          const text = sharedComposerText(item);
+          if (text) setQuestion((cur) => (cur.trim() ? `${cur.trim()}\n${text}` : text));
+          return;
+        }
+        if (!kind) return;
+        setStatus('Opening what you shared…');
+        void attachmentFor(item)
+          .then((a) => {
+            if (!a) return;
+            setScreen(null);
+            setAttachment(a);
+          })
+          .catch((e) => console.log(`[share] ${String(e)}`))
+          .finally(() => setStatus(''));
       }),
     [],
   );
 
+  // A recording being read: progress, then who said what (saved to memory) and a line in the chat.
+  const recordingDone = useCallback((line: string, at = Date.now()) => {
+    setMessages((m) => [...m, { id: `r${at}`, role: 'assistant', text: line, at }]);
+  }, []);
+  const recordingId = attachment?.recordingId && !attachment.text ? attachment.recordingId : null;
+  useEffect(() => {
+    if (!recordingId) return;
+    let finishing = false;
+    const check = () => {
+      const st = recordingStatus(recordingId);
+      if (!st) return;
+      if ((st.finished || st.error) && !finishing) {
+        finishing = true;
+        void finishRecording(recordingId, offRecordRef.current).then((r) => {
+          if (!r) return;
+          setAttachment((a) =>
+            a?.recordingId === recordingId
+              ? r.text
+                ? { ...a, text: r.text, progress: 1 }
+                : { ...a, error: r.line }
+              : a,
+          );
+          recordingDone(r.line);
+        });
+        return;
+      }
+      const progress = st.totalMs ? Math.min(0.99, st.doneMs / st.totalMs) : 0;
+      setAttachment((a) => (a?.recordingId === recordingId ? { ...a, progress } : a));
+    };
+    check();
+    const off = watchRecordings(check);
+    const timer = setInterval(check, 5000);
+    return () => {
+      off();
+      clearInterval(timer);
+    };
+  }, [recordingId, recordingDone]);
+  // Recordings left reading when the app was closed carry on; finished ones are saved.
+  useEffect(() => {
+    void resumeRecordings(offRecordRef.current).then((done) => {
+      for (const r of done) recordingDone(r.line);
+    });
+  }, [recordingDone]);
+
+  const closeAttachment = () => {
+    const a = attachmentRef.current;
+    if (a?.recordingId && !a.text && !a.error) cancelRecording(a.recordingId);
+    // Selected text: the other app gets nothing back, and its waiting step closes.
+    if (a?.kind === 'selection' && a.replaceable) integrationsNative()?.finishProcessText?.(null);
+    setAttachment(null);
+  };
+
+  const replaceInApp = (text: string) => {
+    const ok = integrationsNative()?.finishProcessText?.(text) ?? false;
+    setStatus(ok ? '' : 'That app is no longer waiting for the text. Copy it instead.');
+    if (ok) setAttachment(null);
+  };
+
   const ask = async (spoken?: string, followUp = false, offRecordNow = offRecordRef.current) => {
     // A screenshot from the assist key is for questions asked soon after, not ones much later.
-    const grab = screen && Date.now() - screen.at < SCREEN_TTL_MS ? screen : null;
+    const att = attachmentRef.current;
+    const grab = !att && screen && Date.now() - screen.at < SCREEN_TTL_MS ? screen : null;
     if (screen && !grab) setScreen(null);
     const q =
       (spoken ?? question).trim() ||
+      (att ? 'Summarise this.' : '') ||
       (grab
         ? grab.shared
           ? SHARED_QUESTION
@@ -682,7 +775,12 @@ export function AskScreen({
       let imagePath: string | null = null;
       const visible = AppState.currentState === 'active';
       if (grab) imagePath = grab.shot;
-      else if (cameraOn && visible && (q === DEFAULT_PHOTO_QUESTION || asksAboutWhatIsInView(q))) {
+      else if (
+        !att &&
+        cameraOn &&
+        visible &&
+        (q === DEFAULT_PHOTO_QUESTION || asksAboutWhatIsInView(q))
+      ) {
         const pic = await camera.current?.takePictureAsync({ quality: 0.6, shutterSound: false });
         imagePath = stripFile(pic?.uri);
       }
@@ -705,18 +803,31 @@ export function AskScreen({
         routine: !!routine,
       } as Parameters<typeof answerQuestion>[3];
       holdLiveCamera(true);
-      const r = await answerQuestion(
-        grab ? screenQuestion(q, grab) : q,
-        imagePath,
-        (full) => {
-          if (!answered) setStatus('');
-          answered = true;
-          setPhase('answering');
-          setMessages((m) => patchMessage(m, replyId, { text: full }));
-          sp.update(full);
-        },
-        opts,
-      );
+      const onAnswerText = (full: string) => {
+        if (!answered) setStatus('');
+        answered = true;
+        setPhase('answering');
+        setMessages((m) => patchMessage(m, replyId, { text: full }));
+        sp.update(full);
+      };
+      const r: Awaited<ReturnType<typeof answerQuestion>> = att
+        ? await answerShared(
+            att,
+            q,
+            onAnswerText,
+            (line) => {
+              if (!answered) setStatus(line);
+            },
+            offRecordNow,
+          ).then((x) => {
+            // A web page read once is kept for the next question about it.
+            if (x.page && att.kind === 'page')
+              setAttachment((a) =>
+                a === att ? { ...att, text: x.page!.text, name: x.page!.title } : a,
+              );
+            return { ...x, usedPhoto: null, sources: [], ttftMs: 0, local: true };
+          })
+        : await answerQuestion(grab ? screenQuestion(q, grab) : q, imagePath, onAnswerText, opts);
       // Android's voice says when it has finished (onVoiceIdle); background passes wait for that.
       // A read-back is always said (it asks "Send it?"), even when answers aren't spoken.
       const readBack = !!r.readBackId;
@@ -743,6 +854,7 @@ export function AskScreen({
               : { question: '' },
           media: mediaForAnswer(r as typeof r & { media?: ChatMedia[] }),
           draftId: r.draftId,
+          textResult: att?.kind === 'selection' || undefined,
         }),
       );
       if (!speak) conversation.current.answered(Date.now());
@@ -866,13 +978,15 @@ export function AskScreen({
     [messages, noticeList],
   );
 
-  const placeholder = screen
-    ? screen.shared
-      ? SHARED_QUESTION
-      : SCREEN_QUESTION
-    : cameraOn
-      ? DEFAULT_PHOTO_QUESTION
-      : 'Ask Sidekick';
+  const placeholder = attachment
+    ? 'Ask about it'
+    : screen
+      ? screen.shared
+        ? SHARED_QUESTION
+        : SCREEN_QUESTION
+      : cameraOn
+        ? DEFAULT_PHOTO_QUESTION
+        : 'Ask Sidekick';
 
   return (
     <ForceScheme scheme={dark ? 'dark' : 'light'}>
@@ -912,6 +1026,13 @@ export function AskScreen({
                     onMute={speakingId === it.m.id ? mute : undefined}
                   />
                   {it.m.draftId ? <DraftCard id={it.m.draftId} theme={theme} /> : null}
+                  {it.m.textResult && !it.m.pending && it.m.text ? (
+                    <TextResultActions
+                      text={it.m.text}
+                      canReplace={!!attachment?.replaceable}
+                      onReplace={() => replaceInApp(it.m.text)}
+                    />
+                  ) : null}
                 </View>
               ) : 'n' in it && it.n ? (
                 <NoticeItem key={it.key} n={it.n} theme={theme} />
@@ -924,7 +1045,14 @@ export function AskScreen({
             ) : null}
           </ScrollView>
 
-          {screen ? (
+          {attachment ? (
+            <AttachmentBar
+              attachment={attachment}
+              busy={phase !== 'idle'}
+              onAsk={(q) => void ask(q)}
+              onClose={closeAttachment}
+            />
+          ) : screen ? (
             <ScreenGrabBar grab={screen} onSave={saveScreen} onClose={() => setScreen(null)} />
           ) : null}
 

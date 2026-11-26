@@ -51,7 +51,7 @@ type Deps = {
   load: () => OnlineJob[];
   save: (jobs: OnlineJob[]) => void;
   online: () => Promise<boolean>;
-  answer: (question: string) => Promise<string>;
+  answer: (question: string, job?: OnlineJob) => Promise<string>;
   remember: (question: string, answer: string) => Promise<void>;
   notify: (title: string, body: string) => Promise<void>;
   active: () => boolean;
@@ -88,7 +88,10 @@ function defaultDeps(): Deps {
       if (s) return s.online;
       return require('@/web/lookup').isOnline();
     },
-    answer: async (q) => {
+    answer: async (q, job) => {
+      // A shared or pasted link: read that page now (throws while still offline).
+      if (job?.kind === 'page' && job.url)
+        return (await require('./shared-doc').answerPageNow(job.url, q)) as string;
       const { answer } = require('./assistant');
       const r = await answer(q, null, () => {}, { routine: true, forceLookup: true });
       // Android says online but nothing gets through yet: keep the question for the next wake-up.
@@ -156,9 +159,14 @@ export function syncOnlineNative() {
 }
 
 /** Keeps [question] for when the phone is back online; returns the line to say now. */
-export function queueOnline(kind: OnlineJobKind, question: string, now = Date.now()): string {
+export function queueOnline(
+  kind: OnlineJobKind,
+  question: string,
+  now = Date.now(),
+  url?: string,
+): string {
   const jobs = d().load();
-  const job: OnlineJob = { id: `oq${now}`, kind, question, askedAt: now };
+  const job: OnlineJob = { id: `oq${now}`, kind, question, askedAt: now, ...(url ? { url } : {}) };
   d().save(addJob(jobs, job));
   syncOnlineNative();
   return queuedLine(kind);
@@ -186,7 +194,7 @@ export function drainOnlineQueue(now = Date.now()): Promise<void> {
         if (!(await d().online())) return;
         let text: string;
         try {
-          text = await d().answer(j.question);
+          text = await d().answer(j.question, j);
         } catch (e) {
           console.log(`[online] answer failed: ${String(e)}`);
           return; // try again on the next wake-up
@@ -240,7 +248,23 @@ export function startOnlineQueue(): () => void {
   void (async () => {
     if (d().load().length && (await d().online())) await drainOnlineQueue();
   })();
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  /* eslint-disable @typescript-eslint/no-require-imports */
   const { onRoutinesChange } = require('./routines-store');
-  return onRoutinesChange(() => syncOnlineNative()) as () => void;
+  const { getSettings, onSettingsChange } = require('./settings');
+  /* eslint-enable @typescript-eslint/no-require-imports */
+  // A page waits for Online to be switched on, not only for the internet.
+  let wasOn: boolean = !!getSettings().webLookup;
+  const offSettings = onSettingsChange((s: { webLookup: boolean }) => {
+    const turnedOn = !wasOn && s.webLookup;
+    wasOn = s.webLookup;
+    if (turnedOn && d().load().length)
+      void d()
+        .online()
+        .then((on) => (on ? drainOnlineQueue() : undefined));
+  }) as () => void;
+  const offRoutines = onRoutinesChange(() => syncOnlineNative()) as () => void;
+  return () => {
+    offSettings();
+    offRoutines();
+  };
 }

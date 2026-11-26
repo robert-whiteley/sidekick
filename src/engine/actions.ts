@@ -295,6 +295,14 @@ async function fromIntent(intent: Intent, now: Date): Promise<PlannedAction | nu
         ),
       };
     }
+    case 'missed': {
+      if (!native) return notOnPhone();
+      if (!isOn('notifications', 'read')) return off('Reading notifications');
+      if (!native.notificationAccess()) return needNotificationAccess('tell you what you missed');
+      // Loaded when asked: the model module needs the native engine.
+      const { summariseMissed } = await import('./missed');
+      return { kind: 'reply', text: await summariseMissed(messageThreads(false)) };
+    }
     case 'readMessages': {
       if (!native) return notOnPhone();
       if (!isOn('messages', 'read')) return off('Reading messages');

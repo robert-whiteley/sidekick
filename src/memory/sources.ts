@@ -137,6 +137,24 @@ export async function addNote(text: string, at = Date.now()) {
   await d.execute('INSERT INTO moments (kind, at, text) VALUES (?, ?, ?)', ['note', at, t]);
 }
 
+/**
+ * A file shared into Sidekick (a recording's transcript), kept as 'file' moments in passages like
+ * a folder file, so search finds it and Delete by source removes it. [key] names the share.
+ */
+export async function addSharedFile(key: string, label: string, text: string, at = Date.now()) {
+  const items = fileItems('shared:', key, label, at, text, '1', 400);
+  if (!items.length) return 0;
+  const d = await db();
+  await d.transaction(async (tx) => {
+    for (const i of items)
+      await tx.execute(
+        'INSERT INTO moments (kind, at, text, source_key, source_ver) VALUES (?, ?, ?, ?, ?)',
+        ['file', i.at, i.text, i.key, i.ver],
+      );
+  });
+  return items.length;
+}
+
 export async function countKind(kind: SourceKind): Promise<number> {
   const d = await db();
   const r = await d.execute('SELECT COUNT(*) AS n FROM moments WHERE kind = ?', [kind]);
@@ -197,7 +215,7 @@ function walk(dir: Directory, path: string, depth: number, out: FoundFile[]) {
 }
 
 /** A PDF's text, page by page, on the native side (Android): embedded text, else OCR. */
-async function readPdf(uri: string) {
+export async function readPdf(uri: string) {
   const ocr = ocrReady();
   const t0 = Date.now();
   const r = await readPdfPages({

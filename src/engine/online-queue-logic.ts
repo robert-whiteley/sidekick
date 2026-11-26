@@ -3,19 +3,22 @@
  * back online (online-queue.ts). Pure logic, tested.
  */
 
-export type OnlineJobKind = 'lookup' | 'weather';
+export type OnlineJobKind = 'lookup' | 'weather' | 'page';
 
 export type OnlineJob = {
   id: string;
   kind: OnlineJobKind;
   question: string;
   askedAt: number;
+  /** 'page': the web page to read (a shared or pasted link). */
+  url?: string;
 };
 
 /** A forecast asked for hours ago is stale; a general question keeps for a few days. */
 const KEEP_MS: Record<OnlineJobKind, number> = {
   weather: 6 * 60 * 60_000,
   lookup: 3 * 24 * 60 * 60_000,
+  page: 3 * 24 * 60 * 60_000,
 };
 
 /** At most this many wait (oldest dropped first). */
@@ -33,12 +36,13 @@ const norm = (q: string) =>
 
 /** Adds [job] unless the same question is already waiting; keeps the newest MAX_ONLINE_JOBS. */
 export function addJob(jobs: OnlineJob[], job: OnlineJob): OnlineJob[] {
-  if (jobs.some((j) => norm(j.question) === norm(job.question))) return jobs;
+  if (jobs.some((j) => norm(j.question) === norm(job.question) && j.url === job.url)) return jobs;
   return [...jobs, job].slice(-MAX_ONLINE_JOBS);
 }
 
 /** What Sidekick says when it queues one. */
 export function queuedLine(kind: OnlineJobKind): string {
+  if (kind === 'page') return "I'll read the page as soon as Sidekick is online.";
   return kind === 'weather'
     ? "There's no internet right now. I'll get the forecast as soon as you're back online."
     : "I'll look that up online as soon as you're back online.";

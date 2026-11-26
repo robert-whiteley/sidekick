@@ -348,3 +348,24 @@ Left out on iPhone, with why (users see the reason in Phone features, Connection
   sentence is being made on its thread could crash, so it needs its own idle hook first).
 - Built: two free-space levels. Rejected: refusing photos the user takes as soon as space is under
   the reserve (they would be refused with gigabytes free); only under the 500 MB / 1% floor.
+
+## Share in, web pages, text tools, "What did I miss?" (26 Nov)
+
+- **Later: iPhone share extension and text tools.** Sharing files into the iPhone app and an "Ask
+  Sidekick" action on selected text need native extension targets (Share / Action extension), an
+  App Group to hand files to the app, and extra EAS provisioning profiles; none can be tested here
+  without an iPhone. Cheapest first step when there is one: `CFBundleDocumentTypes` (Open in
+  Sidekick) for PDFs and audio, then a share extension. The iPhone app still reads links pasted
+  into the chat, and pictures from the screenshot share.
+- **Later: "What did I miss?" on iPhone.** iOS gives apps no access to other apps' notifications.
+- **Rejected: a readability library** (Mozilla Readability, `@mozilla/readability`, Apache-2.0) for
+  web pages. It needs a DOM (jsdom or linkedom) in React Native, adding megabytes and parser
+  dependencies for one feature. Sidekick's own extraction (`src/web/page-logic.ts`) keeps headings,
+  paragraphs and list items that are not mostly links, which is enough for articles and Wikipedia.
+  Pages built by scripts (apps, some news sites) give no text and say so.
+- **Not saved: text tools results.** Text selected in another app is often someone else's message;
+  the proofread or rewrite is shown, copied or sent back, never kept in memory.
+- **Kept to one pass: shared documents over ~190,000 characters** (24 parts). The rest is left out
+  and the answer says so; reading more parts would take minutes on the Pixel 5 per question.
+- **Left out: video files** in share-in (only audio, PDF and text). Recordings from video apps can
+  be shared as audio by most recorders; video files are large to copy in.

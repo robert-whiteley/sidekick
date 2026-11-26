@@ -19,6 +19,8 @@ export type Intent =
   | { type: 'nowPlaying' }
   | { type: 'readMessages'; name: string | null }
   | { type: 'readNotifications' }
+  /** "What did I miss?": a short summary of unread notifications (tool router only). */
+  | { type: 'missed' }
   | {
       type: 'event';
       title: string;
