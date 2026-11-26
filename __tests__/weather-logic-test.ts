@@ -7,7 +7,7 @@ import {
   parseWeatherQuestion,
   symbolWords,
 } from '@/web/weather-logic';
-import { _clearWeatherCache, getForecast } from '@/web/weather';
+import { _clearWeatherCache, forecastUnreachable, getForecast } from '@/web/weather';
 
 jest.mock('expo-network', () => ({
   getNetworkStateAsync: jest.fn(async () => ({ isConnected: true, isInternetReachable: true })),
@@ -164,6 +164,14 @@ describe('getForecast', () => {
       throw new Error('offline');
     });
     expect(await getForecast(1, 2, fail as unknown as typeof fetch)).toBeNull();
+    // No server answered: the weather question waits for the internet (location.ts).
+    expect(forecastUnreachable()).toBe(true);
+  });
+
+  it('a server that answers with an error is not "unreachable"', async () => {
+    const refused = jest.fn(async () => res(503, null));
+    expect(await getForecast(3, 4, refused as unknown as typeof fetch)).toBeNull();
+    expect(forecastUnreachable()).toBe(false);
   });
 });
 

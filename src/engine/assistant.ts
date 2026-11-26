@@ -91,6 +91,8 @@ export type AnswerResult = {
   readBackId?: string;
   /** Stored moments the answer is about (video clip or still), shown in the chat player. */
   media?: { momentAt: number; kind: 'video' | 'photo' | 'audio'; path?: string }[];
+  /** It needed the internet and there was none: kept for later (online-queue.ts). */
+  waitingOnline?: boolean;
 };
 
 /**
@@ -270,6 +272,7 @@ export async function answer(
       ttftMs: 0,
       local: !loc.web,
       web: loc.web,
+      waitingOnline: loc.waitingOnline,
     };
   }
   const remember = REMEMBER.exec(question.trim());
@@ -480,6 +483,16 @@ export async function answer(
   );
   const { stats, web, webQuery } = looked;
   let { text } = looked;
+  // A back-online run that still can't reach the internet: nothing to keep, it waits again.
+  if (looked.offline && opts?.forceLookup)
+    return {
+      text,
+      usedPhoto: image,
+      sources,
+      ms: stats.totalMs,
+      ttftMs: stats.ttftMs,
+      waitingOnline: true,
+    };
   // Needed the internet but there was none: kept and answered once back online.
   if (looked.offline && !opts?.forceLookup && !offRecord) {
     text = `${text}\n\n${queueOnline('lookup', question)}`;
@@ -506,6 +519,7 @@ export async function answer(
     ttftMs: stats.ttftMs,
     web,
     webQuery,
+    waitingOnline: (looked.offline && !offRecord) || undefined,
     media: recall?.media
       ? [{ momentAt: recall.media.at, kind: recall.media.kind, path: recall.media.path }]
       : speechClipFor(question, sources),

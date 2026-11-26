@@ -281,3 +281,73 @@ repeats, the full camera speed run.
   off, contacts permission back to "ask", test routine and video files deleted from the phone.
   Do Not Disturb left on. A routine "tell me a fun fact about otters" (daily 17:27, from an earlier
   test) is still on the phone.
+
+## Round 6 (26 Nov, sk61, Pixel 5)
+
+Pixel 5 on USB (450 mA) then an AC charger, battery 31–39%, up to 34 °C, thermal status 0.
+
+- **Offline with only Sidekick blocked** (Android still says online, badge stays "Online"): weather
+  ("Paris tomorrow") said "I couldn't get the forecast just now. Try again in a minute." and wasn't
+  queued; news and "who is the prime minister of Japan" found 0 sources and the model answered "I do
+  not have access to real-time …" in about 7 s, not queued either. "Synonym for happy" answered
+  "Joyful" in about 23 s (router picked memory search, 17 s). Network back: weather answered at once.
+  Cause: only Android's own offline flag counted as offline. **Fixed** (sk62): a forecast or search
+  where every request failed now counts as offline, so the question is queued ("I'll look that up
+  online as soon as you're back online") and the queue keeps it until a retry actually reaches the
+  internet. Retries happen on a network change or app start, so with only Sidekick blocked the answer
+  waits for one of those.
+- **Question speed** (Pixel 5, CPU): Listen and Live camera off: 23 s (router 15 s), 14 s for a
+  Wikipedia question. Live camera on, Listen off: 22 s (router 11 s), 22 s. Live camera and Listen on:
+  55 s (router 42 s), 25 s. Frame embedding pauses while a question runs (no frames stored in the
+  73 s of a question) and embedding runs one at a time. The router often picks memory search for
+  general questions, which costs 10–20 s. The logged first-token time repeats the same value across
+  questions (stale metric, minor).
+- **Typed camera settings**: "more frames" → 1 per second (11 s), "set the frame rate to 2" → 2 per
+  second (11 s), "switch to the front camera" (18 s) and back (9 s), "lower the frame rate" 2 → 1 →
+  0.5 all worked. At the minimum (0.5) "lower the frame rate" failed twice: it went to the model,
+  which said "I cannot lower the frame rate…" with a Wikipedia source. Cause: the router's call came
+  with no usable arguments and the question words weren't used. **Fixed**: the question's own words
+  fill in (number, more/less, front/back/flip); at the minimum it says "Already at the fewest
+  frames, 1 frame every 2 seconds."
+- **Frame captions on the charger**: captions ran (7 frames captioned). With the battery falling 37 →
+  31% on 450 mA USB they kept running. Cause: the drain check compared only the first and last
+  reading in the window, and the level bounces by 1%. **Fixed**: it compares the latest reading with
+  the highest one.
+- **One-off routine**: "in 2 minutes, tell me a fun fact" made a routine at once: "OK. Today at 14:26,
+  I'll tell you a fun fact." (the round 5d wording is fixed). It fired on time and spoke a fact
+  27 s later. The spent one-off stays in the Routines list ("last ran") until deleted (minor).
+  Deleted after the test.
+- **Place names**: "where am I" gave the right street and town. Camera frames had no place in the
+  Timeline. Cause: frames were stored without the last known location. **Fixed**: frames get the
+  place known within the last 10 minutes.
+- **Light mode**: chat, Settings, Camera & audio, Privacy and Routines all readable. Night mode
+  restored.
+- **Locked "resume the camera"**: unlocked, typed pause/resume worked and the notification showed
+  "Sidekick camera is paused" with Resume camera / Stop. Locked, two failures:
+  1. The Sidekick notification didn't show on the lock screen at all. Cause: its channel was "low"
+     importance, which the Pixel hides on the lock screen, and a channel's importance can't be
+     changed once created. **Fixed**: a new "Listening and camera" channel at default importance
+     with no sound or vibration, public on the lock screen; the old channel is removed.
+  2. Spoken "Hey Sidekick, resume the camera" was heard but answered "Unlock your phone first, then
+     ask me again." Cause: the locked-phone guard ran before the camera commands. **Fixed**: camera
+     commands, speech speed and "stop listening" now run while locked; everything else still asks
+     to unlock.
+- Junk suggested facts from commands, such as "My preference is to resume the camera.", show in
+  Memory → You (left alone).
+- The "tell me a fun fact about otters" routine (daily 17:27) is still on the phone.
+- **Re-checked on sk62** (same phone, AC charger, 39–65%): with only Sidekick blocked, "weather in
+  Madrid tomorrow" was queued ("There's no internet right now. I'll get the forecast as soon as
+  you're back online."); "who is the prime minister of Japan" gave the model's own answer plus "I'll
+  look that up online as soon as you're back online." After unblocking and an app restart both
+  answers arrived as "You asked at …" cards (the Japan one used Wikipedia, 1 source, but the model
+  still named a former prime minister). A forecast asked earlier was answered from the cache while
+  blocked. "lower the frame rate" at 0.5 → "Already at the fewest frames, 1 frame every 2 seconds."
+  (9 s). Camera frames now show the town in the Timeline. Locked: the "Sidekick is listening (camera
+  paused)" notification shows on the lock screen with Resume camera / Stop camera / Stop; Resume
+  camera from the lock screen resumed it ("Sidekick is watching and listening") without unlocking;
+  Stop ended everything. The spoken "Hey Sidekick, resume the camera" from the laptop speaker wasn't
+  picked up twice on sk62 (microphone recording, not silenced), so the locked voice path is
+  covered by tests only this round.
+- Restored: Sidekick network unblocked, Live camera off, Listen off (service stopped from the
+  notification; as found), lens Back and 0.5 frames per second (Recommended), Online lookup on,
+  night mode on, screen-stay-on back to off. Phone left locked for the owner to unlock.

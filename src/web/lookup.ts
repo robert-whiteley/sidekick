@@ -48,6 +48,9 @@ import {
 
 export type { WebSource };
 
+/** Requests that got an answer from a server / that never reached one (network error, timeout). */
+const net = { reached: 0, failed: 0 };
+
 /** GET JSON with a timeout; any failure is null (the answer then stays offline). */
 export async function fetchJson(
   url: string,
@@ -65,7 +68,11 @@ export async function fetchJson(
         'Api-User-Agent': USER_AGENT,
       },
       credentials: 'omit',
+    }).catch((e: unknown) => {
+      net.failed++;
+      throw e;
     });
+    net.reached++;
     if (!res.ok) return null;
     return await res.json();
   } catch {
@@ -94,7 +101,11 @@ export async function fetchText(
         'User-Agent': USER_AGENT,
       },
       credentials: 'omit',
+    }).catch((e: unknown) => {
+      net.failed++;
+      throw e;
     });
+    net.reached++;
     if (!res.ok || (res.url && !res.url.startsWith('https://'))) return null;
     if (Number(res.headers?.get?.('content-length') ?? 0) > MAX_FEED_BYTES) return null;
     const text = await res.text();
@@ -252,6 +263,11 @@ export type LookupDeps = {
   knownNames: () => Promise<string[]>;
   online: () => Promise<boolean>;
   search: (query: string, opts: SearchOptions) => Promise<WebSource[]>;
+  /**
+   * The last search reached no server at all: Android said online but Sidekick's requests can't
+   * get out (a firewall or VPN app, Data Saver, a dead Wi-Fi). Treated like being offline.
+   */
+  unreachable?: () => boolean;
   /** Gemma's search words (names already stripped), or null to use the rule-based query. */
   writeQuery: (question: string, names: string[]) => Promise<string | null>;
   /** Drops the model's last chat turn (its "LOOKUP" reply) so follow-ups never see it. */
@@ -265,13 +281,21 @@ async function knownNames(): Promise<string[]> {
     .filter((n): n is string => !!n);
 }
 
+let lastUnreachable = false;
+
 const defaultDeps: LookupDeps = {
   enabled: () => getSettings().webLookup,
   searxUrl: () => getSettings().searxngUrl,
   feeds: () => getSettings().newsFeeds,
   knownNames,
   online: isOnline,
-  search: searchWeb,
+  search: async (query, opts) => {
+    const before = { ...net };
+    const found = await searchWeb(query, opts);
+    lastUnreachable = !found.length && net.reached === before.reached && net.failed > before.failed;
+    return found;
+  },
+  unreachable: () => lastUnreachable,
   // Loading the model isn't counted in the budget: the answer needs it next anyway.
   writeQuery: async (question, names) => {
     await ensureLlm();
@@ -340,6 +364,7 @@ export async function askWithLookup<T extends Asked>(
       now: deps.now(),
     };
     const found = await deps.search(q, opts).catch(() => [] as WebSource[]);
+    if (!found.length && deps.unreachable?.()) offline = true;
     onStatus?.(
       found.length
         ? `Reading ${found.length} ${found.length === 1 ? 'source' : 'sources'}…`

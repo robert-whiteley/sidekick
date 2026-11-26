@@ -20,6 +20,17 @@ export type VoiceCommand =
   /** Frame rate, phone lens, image detail (picked by the tool router, no fixed phrases). */
   | { type: 'cameraSetting'; change: CameraChange };
 
+/**
+ * Commands that may run with the phone locked: they only switch the camera or mic (the same as the
+ * notification's Pause / Resume / Stop buttons) or the speech speed, and never say anything
+ * personal. Everything else waits for an unlock (phone-controls.ts lockedReply).
+ */
+export function commandSafeWhenLocked(cmd: VoiceCommand | null): boolean {
+  if (!cmd) return false;
+  if (cmd.type === 'camera' || cmd.type === 'speed') return true;
+  return cmd.type === 'listening' && !cmd.on;
+}
+
 /** Speech speed limits (1 = normal). */
 export const MIN_RATE = 0.5;
 export const MAX_RATE = 2;

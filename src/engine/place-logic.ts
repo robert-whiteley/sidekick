@@ -45,3 +45,18 @@ export function inQuietHours(nowMin: number, start: number, end: number): boolea
   if (start === end) return false;
   return start < end ? nowMin >= start && nowMin < end : nowMin >= start || nowMin < end;
 }
+
+/** How far a camera frame's time may be from the phone's last position for it to be tagged. */
+export const FRAME_PLACE_MAX_GAP_MS = 10 * 60_000;
+
+/**
+ * The position to tag a camera frame with: the last known one, if it was taken within
+ * FRAME_PLACE_MAX_GAP_MS of the frame (frames reach memory in batches, up to a few minutes late).
+ */
+export function placeForFrame<T extends LatLon & { at: number }>(
+  frameAt: number,
+  last: T | null,
+): T | null {
+  if (!last || !Number.isFinite(last.at)) return null;
+  return Math.abs(frameAt - last.at) <= FRAME_PLACE_MAX_GAP_MS ? last : null;
+}

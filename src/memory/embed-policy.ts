@@ -65,5 +65,8 @@ export const DRAIN_WINDOW_MS = 10 * 60_000;
 export function drainingOnCharger(samples: BatterySample[], now: number): boolean {
   const recent = samples.filter((x) => x.charging && x.level >= 0 && now - x.at <= DRAIN_WINDOW_MS);
   if (recent.length < 2) return false;
-  return recent[recent.length - 1].level < recent[0].level - 0.005;
+  // Against the highest reading, not the first: levels come in whole percents and bounce back a
+  // point now and then (31, 32, 31 …), which hid a falling battery when only the ends were compared.
+  const highest = Math.max(...recent.map((x) => x.level));
+  return recent[recent.length - 1].level < highest - 0.005;
 }
