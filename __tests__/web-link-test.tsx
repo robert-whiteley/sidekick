@@ -1,7 +1,14 @@
 import { act, fireEvent, render, screen } from '@testing-library/react-native';
 
 import * as settings from '@/engine/settings';
-import { OnlineBadge, onlineLabel, sourceLabel, WebSearchLink } from '@/features/ask/WebLookupUi';
+import {
+  OnlineBadge,
+  onlineLabel,
+  searchedLabel,
+  sourceLabel,
+  WebSearchLink,
+  WebSources,
+} from '@/features/ask/WebLookupUi';
 
 jest.mock('expo-network', () => ({ useNetworkState: () => ({}), getNetworkStateAsync: jest.fn() }));
 jest.mock('@/memory/store', () => ({ listSpeakers: jest.fn(async () => []) }));
@@ -48,6 +55,13 @@ describe('Search the web in your browser', () => {
   test('no question: no link', async () => {
     await render(<WebSearchLink question="" />);
     expect(screen.queryByText('Search the web in your browser')).toBeNull();
+  });
+
+  test('says the web was searched, with the number of sources', async () => {
+    const s = { name: 'Wikipedia', title: 'Cats', url: 'https://x.example/c', text: 'Cats' };
+    await render(<WebSources sources={[s, { ...s, url: 'https://x.example/d' }]} />);
+    expect(screen.getByText('Searched the web · 2 sources')).toBeTruthy();
+    expect(searchedLabel(1)).toBe('Searched the web · 1 source');
   });
 
   test('source label shows site and date', () => {

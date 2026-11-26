@@ -51,11 +51,19 @@ export function sourceLabel(s: WebSource): string {
   return `Source: ${s.name} — ${s.title}${extra ? ` · ${extra}` : ''}${s.licence ? ` (${s.licence})` : ''}`;
 }
 
+/** "Searched the web · 3 sources": says plainly that this answer used the internet. */
+export function searchedLabel(count: number): string {
+  return `Searched the web · ${count} source${count === 1 ? '' : 's'}`;
+}
+
 /** Links to the pages an answer used, with their licence (Wikipedia: CC BY-SA 4.0). */
 export function WebSources({ sources }: { sources: WebSource[] }) {
   if (!sources.length) return null;
   return (
     <View style={styles.sources}>
+      <AppText variant="bodySmall" tone="muted" accessibilityRole="header">
+        {searchedLabel(sources.length)}
+      </AppText>
       {sources.map((s) => (
         <Tappable
           key={s.url || s.title}
