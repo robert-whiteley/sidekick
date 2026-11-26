@@ -61,7 +61,7 @@ struct LookIntent: AppIntent {
 }
 
 /// Siri phrases and the actions shown in the Shortcuts app and the Action Button picker.
-/// Optional titles pick the iOS 16 initialiser (the app supports iOS 16.4).
+/// Plain literals: Apple reads these at build time (compile-time constants).
 struct SidekickShortcuts: AppShortcutsProvider {
   static var appShortcuts: [AppShortcut] {
     AppShortcut(
@@ -70,8 +70,8 @@ struct SidekickShortcuts: AppShortcutsProvider {
         "Ask \(.applicationName)",
         "Ask \(.applicationName) a question",
       ],
-      shortTitle: "Ask Sidekick" as LocalizedStringResource?,
-      systemImageName: "bubble.left" as String?
+      shortTitle: "Ask Sidekick",
+      systemImageName: "bubble.left"
     )
     AppShortcut(
       intent: VoiceQuestionIntent(),
@@ -79,8 +79,8 @@ struct SidekickShortcuts: AppShortcutsProvider {
         "Talk to \(.applicationName)",
         "Start a voice question in \(.applicationName)",
       ],
-      shortTitle: "Voice question" as LocalizedStringResource?,
-      systemImageName: "mic" as String?
+      shortTitle: "Voice question",
+      systemImageName: "mic"
     )
     AppShortcut(
       intent: LookIntent(),
@@ -88,8 +88,8 @@ struct SidekickShortcuts: AppShortcutsProvider {
         "What am I looking at in \(.applicationName)",
         "Open the \(.applicationName) camera",
       ],
-      shortTitle: "What am I looking at?" as LocalizedStringResource?,
-      systemImageName: "camera" as String?
+      shortTitle: "What am I looking at?",
+      systemImageName: "camera"
     )
   }
 }
