@@ -72,3 +72,9 @@ Sources: [SMS or Call Log permission groups](https://support.google.com/googlepl
 [Foreground service and full-screen intent requirements](https://support.google.com/googleplay/android-developer/answer/13392821),
 [Background location](https://support.google.com/googleplay/android-developer/answer/9799150),
 [Exact alarms: Android 14 changes](https://developer.android.com/about/versions/14/changes/schedule-exact-alarms).
+
+## Health apps declaration: ACTIVITY_RECOGNITION (as submitted)
+
+Feature: **Activity and fitness**. Description:
+
+> Sidekick is an on-device AI assistant. When the user asks "how many steps have I taken today?", it answers from the phone's built-in step counter, which needs the activity recognition permission. Sidekick asks for the permission only the first time the user asks about steps, after an in-app notice explaining why, and the user can turn steps off in Settings. While the app is open it reads the step counter every 15 minutes to work out today's total. Only the step count is used; no other activity, health or location data is read. Step counts are stored only on the phone and are never uploaded, shared or used for ads.

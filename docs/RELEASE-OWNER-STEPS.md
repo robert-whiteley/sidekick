@@ -51,17 +51,18 @@ Each task in that list: click it → answer → **Save** → back to the Dashboa
   - AI asset declaration: **Label assets as created or edited using AI** → label only `icon.png` and
     `featureGraphic.png` (Claude made them); the screenshots are real app screens.
 
-## 3. Foreground service permissions (appears under Policy → App content after the first upload)
+## 3. Foreground service permissions (Policy → App content, after the first upload)
 
-One video covers all four uses: `sidekick-play-video.mp4` in your Windows **Downloads** folder
-(1 min 43 s). Upload it once at https://studio.youtube.com → Create → Upload videos → visibility
-**Unlisted** → copy the link. Then tick each type below, paste its text, and paste **the same link**
-into all four video boxes:
+Video link for every box: `https://www.youtube.com/watch?v=wAmXAETkeAM` (your Unlisted video).
+Short service isn't listed and needs nothing.
 
-- Microphone: `Sidekick is a voice assistant. When the user turns on Listening, it keeps hearing for its wake word and transcribes conversations on the device, including with the screen off or another app open. The user starts it from the app, a permanent notification with a Stop button is shown the whole time, and stopping it ends all microphone use. Audio is processed on the phone and never uploaded.`
-- Camera: `With Live camera on, Sidekick keeps seeing through the phone or a connected USB camera so the user can later ask about what they saw ("what did that sign say?"). It runs with the screen off for hands-free use with a chest-mounted or USB camera. The user turns it on in the app; the notification shows that the camera is on and has a Stop button. Frames are processed and stored only on the phone.`
-- Location: `While Listening or Live camera is running (started by the user in the app), Sidekick tags each saved moment with the town it was in, using a place list built into the app, so the user can ask "what did I see in Bristol?". Location is only read while that user-started service runs and never leaves the phone.`
-- Short service: `Runs a routine the user created in the app (a scheduled recap, briefing or reminder check) at the time they chose, on the device, and stops when it finishes.`
+- [x] **Camera** → tick **Other** → video link → description:
+      `When the user turns on Live camera, Sidekick keeps seeing through the phone or a connected USB camera so they can later ask about what they saw ("what did that sign say?"). It runs with the screen off for hands-free use with a chest-mounted or USB camera. It must start immediately because the user turns it on to capture what is in front of them now; a paused or restarted capture would miss those moments. A notification with a Stop button shows the whole time. Frames are processed and stored only on the phone.`
+- [x] **Location** → tick **Other** (not "Background location updates") → video link → description:
+      `While Listening or Live camera is running (started by the user in the app), Sidekick tags each saved moment with the town it was in, using a place list built into the app, so the user can ask "what did I see in Bristol?". It starts immediately with the user-started capture and stops with it; it cannot be paused or restarted separately because each moment must be tagged as it is saved. Location is read only while that service runs and never leaves the phone.`
+- [x] **Microphone** → tick **Background audio input** → video link. (If a description box appears:
+      `When the user turns on Listening, Sidekick keeps hearing for its wake word and transcribes conversations on the device, including with the screen off or another app open. It must start immediately because the user is speaking now, and pausing or restarting would lose what is said. A notification with a Stop button shows the whole time; audio never leaves the phone.`)
+- [x] **Save**.
 
 Not needed now: SMS and Call Log declaration (release 2; see the end), background location (not used).
 
@@ -83,7 +84,9 @@ Not needed now: SMS and Call Log declaration (release 2; see the end), backgroun
 
 Google's rule for new personal accounts: **12+ testers opted in for 14 days in a row**, then apply.
 
-- [ ] Test and release → Testing → Closed testing → **Create track** (or use Alpha) → Create release →
+- [x] Health apps declaration (appeared after the upload): **Activity and fitness**; the step-counter
+      description is in `docs/store/permissions-declaration.md`.
+- [x] Test and release → Testing → Closed testing → **Create track** (or use Alpha) → Create release →
       upload the `.aab` (or "Add from library") → release notes `First test release.` → Next → Save →
       **Send for review**.
 - [x] Testers → **Google Groups** → `sidekick-testers@googlegroups.com` → Save. Testers join
