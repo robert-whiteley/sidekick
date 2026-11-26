@@ -16,6 +16,7 @@ import {
   stepBrightness,
 } from './phone-controls-logic';
 import { quickAnswer } from './quick-answers';
+import { commandSafeWhenLocked, parseVoiceCommand } from '@/engine/quick-commands-logic';
 import { extraSafeWhenLocked } from './extras';
 
 type Native = NonNullable<ReturnType<typeof integrationsNative>>;
@@ -46,6 +47,8 @@ export function lockedReply(question: string): string | null {
   const c = parseControl(question);
   if (safeWhenLocked(c, question, quickAnswer(question) !== null)) return null;
   if (extraSafeWhenLocked(question)) return null;
+  // Pause / resume / stop the camera, stop listening: what the lock-screen notification does.
+  if (commandSafeWhenLocked(parseVoiceCommand(question))) return null;
   return 'Unlock your phone first, then ask me again.';
 }
 

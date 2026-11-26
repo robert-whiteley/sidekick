@@ -61,6 +61,7 @@ test('other questions are not recaps', () => {
 
 test('topics leave out time words and empty words', () => {
   expect(recapTopic('what did we talk about on Tuesday')).toBeNull();
+  expect(recapTopic('What did I talk about with Hamid?')).toBe('hamid');
   expect(recapTopic('recap our chat about holidays over the weekend')).toBe('holidays');
   expect(withoutTimeWords('the budget in the last 2 hours')).toBe('the budget');
   expect(withoutTimeWords('what did I see 5 minutes ago')).toBe('what did I see');

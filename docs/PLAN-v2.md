@@ -80,7 +80,7 @@ Integrations now (each with its own switches in Connections):
 - Automations and voice: every action is available by voice and in typed chat.
 
 Dev tooling (owner): auto-memory off for this repo; facts live in repo docs (this file,
-AGENTS.md, ADRs). Minimal hooks only (see AGENTS.md).
+docs/RULES.md, ADRs), searched when needed. No CLAUDE.md/AGENTS.md: a hook and CI block them.
 
 Owner steps needed later (not blocking the build):
 
@@ -194,7 +194,7 @@ Owner steps needed later (not blocking the build):
 
 - [x] Model download starts by itself on Wi-Fi in the background (Android DownloadManager /
       foreground service: continues with the app closed; iOS background URLSession). On mobile
-      data: card "Download 3.1 GB now on mobile data, or wait for Wi-Fi?" (default: wait). Android (DownloadManager); iOS part deferred with iOS. Fresh-install run not phone-tested.
+      data: card "Download 3.1 GB now on mobile data, or wait for Wi-Fi?" (default: wait). Android (DownloadManager); iPhone (expo-file-system background download task, 26 Nov, built and unit-tested, not run on an iPhone). Fresh-install run not phone-tested.
 - [x] Storage check first; if not enough: card with the size needed and a link to the phone's
       storage settings. Built + unit-tested, not phone-tested.
 - [x] While downloading: a static page explaining what Sidekick is and does, in plain words:
@@ -317,7 +317,15 @@ Owner steps needed later (not blocking the build):
 ## Future notes (not this version)
 
 - Recommend a better device for missing features / speed. → ROADMAP Future
-- iOS versions of everything (iOS deferred). → ROADMAP Future
+- [x] iPhone version (no longer deferred, 26 Nov): built for the App Store from the same code; what
+      iOS can't do is hidden or explained (ADR 0006 "iPhone"). Left: first EAS iOS build (compile
+      check of the Swift), TestFlight run on the iPhone 13 mini, App Store Connect forms and
+      screenshots (owner, `docs/RELEASE-OWNER-STEPS.md` section 10). → ROADMAP Future
+- [x] iPhone wording (26 Nov, from the first TestFlight screenshots): no Android words on iPhone
+      (Face ID / passcode, Save to Photos, App Store, location while open); consent, Instructions
+      only and pause places hidden; "what am I looking at?" opens the camera; the iPhone prompt
+      says what the app can do. One place for these texts (`src/engine/platform-text.ts`) and a
+      test (`__tests__/ios-wording-test.tsx`). Built and tested in jest; not yet run on the iPhone.
 
 ## Storage estimates (to measure)
 

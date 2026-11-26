@@ -5,6 +5,7 @@ import { postCodeCards, scanCodes } from './codes';
 import { codePromptLine } from './codes-logic';
 import { answerRecap } from './recap';
 import { recallContext } from '@/memory/recall';
+import { routineFirst } from './route-trace-logic';
 import { postRoutineCard, routineRequest } from './routines-store';
 import SidekickNative from '../../modules/sidekick-native';
 import {
@@ -27,7 +28,8 @@ import {
 } from './conversation';
 import { getSettings } from './settings';
 import { clearChatState, loadChatState, saveChatState } from '@/memory/chat-state';
-import { SYSTEM_PROMPT } from './prompts';
+import { IPHONE, onIphone, platformText } from './platform-text';
+import { questionPart, SYSTEM_PROMPT } from './prompts';
 import { keptFile } from '@/memory/media-files';
 import { speechClipFor } from './speech-clip';
 import type { Moment } from '@/memory/store';
@@ -39,7 +41,7 @@ import {
   savedFacts,
   searchMemory,
 } from '@/memory/store';
-import { asksAboutSomethingSeen } from '@/memory/search-logic';
+import { asksAboutSomethingSeen, wantsCameraNow } from '@/memory/search-logic';
 import { ocrPromptLine } from '@/memory/photo-text';
 import { photoTextOrNull } from './photo-ocr';
 import { memoryStatus } from './progress';
@@ -90,6 +92,8 @@ export type AnswerResult = {
   readBackId?: string;
   /** Stored moments the answer is about (video clip or still), shown in the chat player. */
   media?: { momentAt: number; kind: 'video' | 'photo' | 'audio'; path?: string }[];
+  /** It needed the internet and there was none: kept for later (online-queue.ts). */
+  waitingOnline?: boolean;
 };
 
 /**
@@ -196,6 +200,8 @@ export async function answer(
     routed?: boolean;
     /** A question kept until back online (online-queue.ts): look it up whatever the rules say. */
     forceLookup?: boolean;
+    /** Dev answers bench: a routed action is reported, never done (no draft, timer or reminder). */
+    dryActions?: boolean;
   },
 ): Promise<AnswerResult> {
   onText = trackAnswer(onText); // "repeat that"
@@ -213,6 +219,9 @@ export async function answer(
   // Speech speed, repeat, "what can you do?", listening/camera on/off, watches, scan (no model).
   const command = await runQuickCommand(question, photoNow).catch(() => null);
   if (command) return done(command);
+  // iPhone: no live camera (ADR 0006), so "what am I looking at?" needs a photo first; the
+  // model would only guess (or talk about other phones). The Ask screen opens the camera.
+  if (onIphone() && !photoNow && wantsCameraNow(question)) return done(IPHONE.takePhotoFirst);
   const offRecord = opts?.offTheRecord ?? getSettings().offTheRecord ?? false;
   if (!offRecord) offRecordStarted = false;
   // Time words the rules can't read ("over Christmas"): the model gives the span once, and
@@ -242,6 +251,8 @@ export async function answer(
     };
   };
   const routed = async (o: RouteOutcome): Promise<AnswerResult | null> => {
+    if (opts?.dryActions && (o.kind === 'plan' || o.kind === 'rules'))
+      return done(`[dry] ${o.kind === 'rules' ? o.text : 'action'}`);
     switch (o.kind) {
       case 'reply':
         return done(o.text);
@@ -255,8 +266,14 @@ export async function answer(
   };
   // Where am I / was I / did I park, "call this place the gym", the weather (location.ts).
   // Before "remember …" so "remember this place as …" names a place instead of saving a fact.
-  const loc = photoNow ? null : await answerLocation(question, { offRecord }).catch(() => null);
-  if (loc) {
+  // Not for a routine about them ("every Monday at 8 tell me the weather"): that's set up below.
+  const isRoutine = !photoNow && !opts?.routine && !offRecord && routineFirst(question, new Date());
+  const loc =
+    photoNow || isRoutine ? null : await answerLocation(question, { offRecord }).catch(() => null);
+  // Nothing in location history ("where did I park?", "where was I on Tuesday?"): the notes may
+  // still say ("parked on level 4"), so memory answers; the reason is given if it has nothing.
+  const noPlace = loc?.empty ? loc.text : null;
+  if (loc && !noPlace) {
     onText(loc.text);
     return {
       text: loc.text,
@@ -266,6 +283,7 @@ export async function answer(
       ttftMs: 0,
       local: !loc.web,
       web: loc.web,
+      waitingOnline: loc.waitingOnline,
     };
   }
   const remember = REMEMBER.exec(question.trim());
@@ -287,10 +305,7 @@ export async function answer(
   if (tr && (!photoNow || tr.fromView)) {
     let source = tr.text;
     if (tr.fromView) {
-      if (!photoNow)
-        return done(
-          'Point the camera at the text (or show it on screen and hold the home button), then say "translate this".',
-        );
+      if (!photoNow) return done(platformText('translateNeedsPhoto'));
       status('Reading the text…');
       source = (await photoTextOrNull(photoNow)) ?? '';
       if (!source.trim()) return done("I can't see any text to translate.");
@@ -365,7 +380,7 @@ export async function answer(
 
   // No rule knew it: the model may pick a tool (any phrasing; tools-logic.ts). Plain questions
   // skip this and go straight to the answer below.
-  if (!photoNow && !opts?.routed) {
+  if (!photoNow && !opts?.routed && !noPlace) {
     const outcome = await routeWithTools(question, {
       routine: opts?.routine,
       offRecord,
@@ -394,6 +409,8 @@ export async function answer(
   } catch (e) {
     console.log(`[assistant] memory unavailable: ${String(e)}`);
   }
+
+  if (noPlace && !sources.length) return done(noPlace);
 
   let image = photoNow;
   if (!image && asksAboutSomethingSeen(question)) {
@@ -451,7 +468,7 @@ export async function answer(
     question,
     !!image,
     (webPart) =>
-      `${agenda}${person}${webPart}${notes}${seenText}${recallPart}Question: ${recall?.modelQuestion ?? withClipboard(question) ?? question}`,
+      `${agenda}${person}${webPart}${notes}${seenText}${recallPart}${questionPart(recall?.modelQuestion ?? withClipboard(question) ?? question)}`,
     async (prompt, t, o) => {
       const r = await askLlm(prompt, image, t, {
         system,
@@ -479,6 +496,16 @@ export async function answer(
   );
   const { stats, web, webQuery } = looked;
   let { text } = looked;
+  // A back-online run that still can't reach the internet: nothing to keep, it waits again.
+  if (looked.offline && opts?.forceLookup)
+    return {
+      text,
+      usedPhoto: image,
+      sources,
+      ms: stats.totalMs,
+      ttftMs: stats.ttftMs,
+      waitingOnline: true,
+    };
   // Needed the internet but there was none: kept and answered once back online.
   if (looked.offline && !opts?.forceLookup && !offRecord) {
     text = `${text}\n\n${queueOnline('lookup', question)}`;
@@ -505,6 +532,7 @@ export async function answer(
     ttftMs: stats.ttftMs,
     web,
     webQuery,
+    waitingOnline: (looked.offline && !offRecord) || undefined,
     media: recall?.media
       ? [{ momentAt: recall.media.at, kind: recall.media.kind, path: recall.media.path }]
       : speechClipFor(question, sources),

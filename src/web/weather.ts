@@ -19,6 +19,15 @@ import {
 const KV = 'weather.cache.v1';
 const TIMEOUT_MS = 6000;
 let mem: CachedForecast | null = null;
+/** The last forecast request never reached a server (no network for Sidekick, or timed out). */
+let unreachable = false;
+
+/**
+ * True when the last getForecast found no server: Android may say the phone is online while
+ * Sidekick's own requests can't get out (a firewall or VPN app, Data Saver, a dead Wi-Fi). The
+ * question then waits for the internet like an offline one (online-queue.ts).
+ */
+export const forecastUnreachable = () => unreachable;
 
 function cached(key: string): CachedForecast | null {
   if (mem?.key === key) return mem;
@@ -58,6 +67,7 @@ export async function getForecast(
 ): Promise<Forecast | null> {
   const key = cacheKey(lat, lon);
   const c = cached(key);
+  unreachable = false;
   if (c && now < c.expires) return parseForecast(c.json);
   const ctl = new AbortController();
   const timer = setTimeout(() => ctl.abort(), TIMEOUT_MS);
@@ -83,6 +93,7 @@ export async function getForecast(
     return parseForecast(json);
   } catch {
     // Offline or timed out: an older forecast is better than none.
+    unreachable = !c;
     return c ? parseForecast(c.json) : null;
   } finally {
     clearTimeout(timer);

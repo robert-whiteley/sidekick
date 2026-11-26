@@ -3,6 +3,7 @@ import { View } from 'react-native';
 
 import { formatMinutes, parseTime } from '@/engine/place-logic';
 import { addPausePlaceHere, pushPauseRules, removePausePlace } from '@/engine/places';
+import { IPHONE, onIphone } from '@/engine/platform-text';
 import { getSettings, type Settings, updateSettings } from '@/engine/settings';
 import { Button, Row, Section, styles } from './ui';
 import { AppText, TextButton, TextField } from '@/ui';
@@ -44,6 +45,46 @@ export function AutoPauseSection() {
     setS(getSettings());
   };
 
+  const times = (
+    <View style={styles.itemRow}>
+      <TextField
+        containerStyle={styles.flex}
+        value={start}
+        onChangeText={setStart}
+        onEndEditing={saveTimes}
+        placeholder="22:00"
+        accessibilityLabel="Quiet hours start"
+      />
+      <AppText> to </AppText>
+      <TextField
+        containerStyle={styles.flex}
+        value={end}
+        onChangeText={setEnd}
+        onEndEditing={saveTimes}
+        placeholder="07:00"
+        accessibilityLabel="Quiet hours end"
+      />
+    </View>
+  );
+  const note = msg ? (
+    <AppText variant="bodySmall" tone="muted">
+      {msg}
+    </AppText>
+  ) : null;
+
+  // iPhone: nothing listens in the background to pause (ADR 0006); the times still set when
+  // "Quiet at night" keeps answers silent.
+  if (onIphone())
+    return (
+      <Section title="Quiet hours">
+        <AppText variant="bodySmall" tone="muted">
+          {IPHONE.quietHoursSection}
+        </AppText>
+        {times}
+        {note}
+      </Section>
+    );
+
   return (
     <Section title="Auto-pause">
       <AppText variant="bodySmall" tone="muted">
@@ -56,27 +97,7 @@ export function AutoPauseSection() {
         value={s.quietHours}
         onChange={(v) => set({ quietHours: v })}
       />
-      {s.quietHours && (
-        <View style={styles.itemRow}>
-          <TextField
-            containerStyle={styles.flex}
-            value={start}
-            onChangeText={setStart}
-            onEndEditing={saveTimes}
-            placeholder="22:00"
-            accessibilityLabel="Quiet hours start"
-          />
-          <AppText> to </AppText>
-          <TextField
-            containerStyle={styles.flex}
-            value={end}
-            onChangeText={setEnd}
-            onEndEditing={saveTimes}
-            placeholder="07:00"
-            accessibilityLabel="Quiet hours end"
-          />
-        </View>
-      )}
+      {s.quietHours && times}
       <AppText>Pause listening here</AppText>
       <TextField
         value={name}
@@ -85,11 +106,7 @@ export function AutoPauseSection() {
         autoCapitalize="words"
       />
       <Button title="Pause listening here" onPress={pauseHere} />
-      {msg ? (
-        <AppText variant="bodySmall" tone="muted">
-          {msg}
-        </AppText>
-      ) : null}
+      {note}
       {s.pausePlaces.map((p) => (
         <View key={p.id} style={styles.itemRow}>
           <AppText style={styles.flex}>

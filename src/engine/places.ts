@@ -8,7 +8,10 @@ import { setPlaceRegion } from './region';
 import { getSettings, updateSettings } from './settings';
 
 /** Where something happened: coordinates plus an offline place name ("Leeds, GB"). */
-export type Here = LatLon & { place: string | null };
+export type Here = LatLon & {
+  place: string | null;
+  /** when the position was taken (ms) */ at: number;
+};
 
 /** The nearest town or village ("Bloxham, GB"), offline; null if none within 30 km or no data. */
 export function placeName(p: LatLon): string | null {
@@ -21,7 +24,7 @@ export function here(): Here | null {
   try {
     const l = SidekickNative.lastLocation();
     if (!l) return null;
-    return { lat: l.lat, lon: l.lon, place: placeName(l) };
+    return { lat: l.lat, lon: l.lon, place: placeName(l), at: l.at };
   } catch {
     return null;
   }
@@ -43,6 +46,14 @@ setPlaceRegion(currentRegion);
 
 /** Optional: asks for location so memories get place names. Everything works without it. */
 export async function askLocationPermission(): Promise<boolean> {
+  if (Platform.OS === 'ios') {
+    // "While Using the App" only: the iPhone records places while Sidekick is open.
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { iosAskLocation } = require('../../modules/sidekick-native/src/ios-location') as {
+      iosAskLocation(): Promise<boolean>;
+    };
+    return iosAskLocation();
+  }
   if (Platform.OS !== 'android') return false;
   if (SidekickNative.hasLocationPermission()) return true;
   const r = await PermissionsAndroid.requestMultiple([

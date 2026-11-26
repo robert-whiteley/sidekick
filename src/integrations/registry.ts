@@ -4,7 +4,13 @@
  * can't run yet ("Needs Notification access").
  */
 
-export type IntegrationSwitch = { id: string; label: string; default: boolean };
+export type IntegrationSwitch = {
+  id: string;
+  label: string;
+  default: boolean;
+  /** Also works on iPhone, though the rest of an Android-only integration doesn't. */
+  iphone?: boolean;
+};
 
 export type Integration = {
   id: string;
@@ -14,6 +20,8 @@ export type Integration = {
   switches: IntegrationSwitch[];
   androidOnly?: boolean;
   needs?: string;
+  /** `needs` on iPhone, when it differs. */
+  needsIphone?: string;
   /**
    * Uses the optional Google sign-in: hidden as "Not set up yet" until the OAuth client id is
    * configured (google.ts googleConfigured). Turning its switch on must go through
@@ -63,14 +71,15 @@ export const INTEGRATIONS: Integration[] = [
     description:
       'Battery, storage, steps and screen time when you ask; read or copy the clipboard; ring the phone when you can’t find it.',
     switches: [
-      { id: 'battery', label: 'Battery and storage', default: true },
-      { id: 'steps', label: 'Steps (from the phone’s step counter)', default: true },
+      { id: 'battery', label: 'Battery and storage', default: true, iphone: true },
+      { id: 'steps', label: 'Steps (from the phone’s step counter)', default: true, iphone: true },
       { id: 'screenTime', label: 'Screen time per app', default: true },
       { id: 'clipboard', label: 'Read and copy the clipboard', default: true },
       { id: 'findPhone', label: 'Find my phone (rings for 30 s)', default: true },
     ],
     androidOnly: true,
     needs: 'Physical activity for steps and Usage access for screen time (asked the first time)',
+    needsIphone: 'Motion & Fitness for steps (asked the first time)',
   },
   {
     id: 'appLinks',

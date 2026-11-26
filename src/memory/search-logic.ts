@@ -52,6 +52,20 @@ export function asksAboutWhatIsInView(q: string): boolean {
   );
 }
 
+/**
+ * Does the question only make sense with the camera looking now ("what am I looking at?", "what
+ * is this?", "can you see the bus?", "watch live")? Narrower than asksAboutWhatIsInView: with no
+ * photo, the iPhone opens its camera instead of asking the model. Questions about the past
+ * ("what did I see this morning?") are memory questions, not this.
+ */
+export function wantsCameraNow(q: string): boolean {
+  if (/\b(saw|seen|earlier|yesterday|ago|this morning|last|did i|was i|were)\b/i.test(q))
+    return false;
+  return /\b(what am i (looking at|seeing|holding)|in front of me|(can|do) you see|what do you see|look at this|watch (this|live)|live (video|stream|view)|what('s| is) (this|that)( thing)?\??$|read (this|that)\??$)/i.test(
+    q.trim(),
+  );
+}
+
 /** Prompt formats EmbeddingGemma 2 was trained with. */
 export const embedQuery = (q: string) => `task: search result | query: ${q}`;
 export const embedDocument = (t: string) => `title: none | text: ${t}`;

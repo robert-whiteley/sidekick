@@ -42,11 +42,21 @@ const NAME = "([A-Za-z][a-z'-]{1,20})";
 const SELF: [RegExp, boolean][] = [
   [new RegExp(`\\bmy name(?:'s| is) ${NAME}\\b`, 'i'), true],
   // "I'm tired." is not a name: only with a greeting before or "nice to meet you" after.
-  [new RegExp(`\\b(?:hi|hello|hey)[,\\s]+(?:i'm|i am) ${NAME}\\b`, 'i'), true],
+  [
+    new RegExp(
+      `\\b(?:hi|hiya|hello|hey)(?: there| all| everyone| guys)?[,\\s]+(?:i'm|i am) ${NAME}\\b`,
+      'i',
+    ),
+    true,
+  ],
   [new RegExp(`\\b(?:i'm|i am) ${NAME}[,.!\\s]+(?:nice|pleased|good) to meet`, 'i'), true],
+  [new RegExp(`\\b(?:i'm|i am) ${NAME},? by the way\\b`, 'i'), true],
   // "It's Sam here" can be passing on a message; "call me Sam" can be a nickname: suggest only.
   [new RegExp(`\\b(?:this is|it's) ${NAME}\\s*(?:speaking|here)\\b`, 'i'), false],
   [new RegExp(`\\bcall me ${NAME}\\b`, 'i'), false],
+  // "And I'm Ruth." after others introduced themselves. Needs the speech model's capital letter
+  // ("and I'm late." is not a name) and stays a suggestion ("And I'm English.").
+  [new RegExp(`\\b[Aa]nd (?:I'm|I am) ([A-Z][a-z'-]{1,20})\\s*[,.!]`), false],
 ];
 
 /** Ways of calling someone by name; the flag: whether they are expected to answer. */
@@ -133,6 +143,23 @@ export function addresseeOf(
     if (before.length) return before[before.length - 1].speakerId;
   }
   return nearestOnly(line, others);
+}
+
+/**
+ * Whether a "Sam, can you…" cue can be settled now. Lines are stored one at a time as they are
+ * heard, so when the cue's line arrives the answer hasn't been heard yet; it waits until another
+ * voice answers or the reply window has passed ([now] is the newest line heard).
+ */
+export function replySettled(line: Utterance, nearby: Utterance[], now: number): boolean {
+  if (now - line.at > REPLY_WINDOW_MS) return true;
+  return nearby.some(
+    (u) =>
+      u.speakerId != null &&
+      !u.isOwner &&
+      u.speakerId !== line.speakerId &&
+      u.at > line.at &&
+      u.at - line.at <= REPLY_WINDOW_MS,
+  );
 }
 
 function nearestOnly(line: Utterance, nearby: Utterance[]): number | null {
@@ -224,11 +251,12 @@ const ROLE_CUES: [RegExp, string][] = [
     'bus driver',
   ],
   [
-    /\b(ready to order|would you like to order|take your order|can i get you|any drinks|something to drink|looking after your table|your table|for starters|your starters|dessert menu|enjoy your meal)\b/i,
+    /\b(ready to order|would you like to order|take your order|can i get you|any drinks|something to drink|looking after your table|your table|for starters|your starters|dessert menu|enjoy your meal|need a (few|couple of) (more )?minutes)\b/i,
     'waiter',
   ],
   [
-    /\b(do you need a bag|would you like a bag|next customer|card or cash|would you like (your|a) receipt)\b/i,
+    // Loose on purpose: speech-to-text drops words ("You need a bag?", "Card were cash").
+    /\b(need a bag|like a bag|next customer|card or cash|cash or card|(your|a) receipt|is that everything)\b/i,
     'shop assistant',
   ],
   [/\b(what seems to be the problem|any allergies to medication|take a deep breath)\b/i, 'doctor'],

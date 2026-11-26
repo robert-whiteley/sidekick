@@ -20,4 +20,16 @@ test('integrations say why they are unavailable', () => {
   expect(
     integrationAvailability({ androidOnly: true }, { ...android, platform: 'ios' }).why,
   ).toMatch(/iPhone/);
+  const phoneInfo = {
+    androidOnly: true,
+    switches: [
+      { id: 'steps', label: 'Steps', default: true, iphone: true },
+      { id: 'screenTime', label: 'Screen time', default: true },
+    ],
+  };
+  expect(integrationAvailability(phoneInfo, { platform: 'ios' })).toEqual({
+    available: true,
+    only: ['steps'],
+  });
+  expect(integrationAvailability(phoneInfo, android)).toEqual({ available: true });
 });

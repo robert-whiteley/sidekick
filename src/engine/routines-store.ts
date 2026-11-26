@@ -16,6 +16,7 @@ import {
   parseRoutine,
   upcoming,
 } from './routines-logic';
+import { IPHONE } from './platform-text';
 import { getSettings, updateSettings } from './settings';
 import { parseIntent } from '@/integrations/parse';
 import type { KvStore } from '@/integrations/prefs';
@@ -216,7 +217,7 @@ export function openExactRoutineSettings() {
 
 export function migrateBriefing(now = Date.now()) {
   const s = getSettings();
-  if (!s.followupDigest) return;
+  if (!s.followupDigest || Platform.OS === 'ios') return;
   const b = briefingRoutine(s.digestHour ?? 8);
   const exists = listRoutines().some((r) => r.action === b.action && r.when.type === 'daily');
   if (!exists) addRoutine(b.said, b.when, b.action, now);
@@ -238,6 +239,8 @@ export function routineRequest(
   if (!p) return null;
   if (!p.ok) return { text: p.reason };
   if (p.when.type === 'once' && parseIntent(p.action, now)) return null;
+  // iPhone: an app can't wake itself to run the model, so there are no routines (ADR 0006).
+  if (Platform.OS === 'ios') return { text: IPHONE.routines };
   const r = addRoutine(question.trim(), p.when, p.action, now.getTime());
   if (!r.ok) return { text: r.reason };
   // Without "Alarms & reminders" Android delays the alarm (a minute up to ~10 in Doze); say so,

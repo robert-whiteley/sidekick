@@ -91,6 +91,8 @@ function defaultDeps(): Deps {
     answer: async (q) => {
       const { answer } = require('./assistant');
       const r = await answer(q, null, () => {}, { routine: true, forceLookup: true });
+      // Android says online but nothing gets through yet: keep the question for the next wake-up.
+      if (r.waitingOnline) throw new Error('still offline');
       return r.text as string;
     },
     remember: (q, a) => require('@/memory/store').rememberExchange(q, a),

@@ -97,7 +97,8 @@ import { READ_BACK_REPLY_MS } from '@/engine/readback-logic';
 import { getSettings } from '@/engine/settings';
 import { StreamingSpeaker } from '@/engine/speaker';
 import { Conversation } from '@/engine/conversation';
-import { asksAboutWhatIsInView } from '@/memory/search-logic';
+import { IPHONE, onIphone } from '@/engine/platform-text';
+import { asksAboutWhatIsInView, wantsCameraNow } from '@/memory/search-logic';
 import { embedWhenIdle } from '@/memory/embed-idle';
 import { syncSourcesIfDue } from '@/memory/sources';
 import { capturePhoto, ingestJournal, learnOwnerVoice, syncOwnerVoice } from '@/memory/store';
@@ -607,6 +608,26 @@ export function AskScreen({
       return;
     }
     if (!q || busyRef.current) return;
+    // iPhone: no live camera to look through (ADR 0006). "What am I looking at?" with the camera
+    // closed opens it instead of asking the model blind; the next send takes the photo.
+    if (onIphone() && !grab && !cameraOn && wantsCameraNow(q)) {
+      const at = Date.now();
+      const allowed = permission?.granted || (await requestPermission()).granted;
+      if (allowed) setUseCamera(true);
+      setQuestion(q === DEFAULT_PHOTO_QUESTION ? '' : q);
+      setMessages((m) => [
+        ...m,
+        { id: `u${at}`, role: 'user', text: q, at, spoken: spoken !== undefined },
+        {
+          id: `a${at}`,
+          role: 'assistant',
+          text: allowed ? IPHONE.cameraOpened : IPHONE.takePhotoFirst,
+          at,
+        },
+      ]);
+      if (!allowed) setStatus('Camera permission is needed.');
+      return;
+    }
     busyRef.current = true;
     holdBackground();
     awaitingVoiceRef.current = false;
@@ -905,20 +926,23 @@ export function AskScreen({
                   onCameraReady={() => setCameraReady(true)}
                 />
               )}
-              <Tappable
-                feedback="dim"
-                style={[styles.liveToggle, live && styles.liveToggleOn]}
-                onPress={() => void toggleLive()}
-                accessibilityRole="switch"
-                accessibilityState={{ checked: live }}
-                accessibilityLabel="Live camera memory"
-                hitSlop={12}
-              >
-                {live ? <View style={styles.liveDot} /> : null}
-                <AppText variant="badge" tone="onMedia">
-                  Live
-                </AppText>
-              </Tappable>
+              {/* Live camera memory films in the background: Android only (ADR 0006). */}
+              {Platform.OS !== 'ios' && (
+                <Tappable
+                  feedback="dim"
+                  style={[styles.liveToggle, live && styles.liveToggleOn]}
+                  onPress={() => void toggleLive()}
+                  accessibilityRole="switch"
+                  accessibilityState={{ checked: live }}
+                  accessibilityLabel="Live camera memory"
+                  hitSlop={12}
+                >
+                  {live ? <View style={styles.liveDot} /> : null}
+                  <AppText variant="badge" tone="onMedia">
+                    Live
+                  </AppText>
+                </Tappable>
+              )}
               <IconButton
                 name="close"
                 size={22}

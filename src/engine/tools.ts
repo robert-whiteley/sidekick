@@ -19,13 +19,15 @@ import {
   ROUTER_SYSTEM,
   routerPrompt,
   toolByName,
+  type ToolCall,
   type ToolSpec,
   type ToolStep,
+  type Validated,
   validateCall,
   wantsModelRange,
 } from './tools-logic';
 import { runParsedCommand } from './quick-commands';
-import { parseFrames } from './camera-settings-logic';
+import { cameraChangeFor } from './camera-settings-logic';
 import { runExtra } from '@/integrations/extras';
 import type { Extra, RideApp, SearchApp } from '@/integrations/extras-logic';
 import { runControl } from '@/integrations/phone-controls';
@@ -233,17 +235,8 @@ async function runTool(
       return command({ type: 'listening', on: a.on === true });
     case 'camera':
       return command({ type: 'camera', on: a.on === true });
-    case 'camera_setting': {
-      const pick = <T extends string>(v: unknown) => (str(v) || undefined) as T | undefined;
-      return command({
-        type: 'cameraSetting',
-        change: {
-          ...parseFrames(a.frames),
-          lens: pick(a.lens),
-          detail: pick(a.detail),
-        },
-      });
-    }
+    case 'camera_setting':
+      return command({ type: 'cameraSetting', change: cameraChangeFor(a, question) });
     case 'feedback':
       return runFeedback(str(a.text));
     case 'reply':
@@ -336,16 +329,9 @@ export async function routeWithTools(
   const compound = isCompound(question);
   const steps: ToolStep[] = [];
   for (let step = 0; step < MAX_TOOL_STEPS; step++) {
-    const t0 = Date.now();
-    const reply = await ask(routerPrompt(question, now, tools, steps), ROUTER_SYSTEM, 140).catch(
-      () => '',
-    );
-    const call = parseToolReply(reply);
-    log(
-      `step ${step + 1}: ${call?.tool ?? 'unparsed'} (${Date.now() - t0} ms, ${tools.length} tools)`,
-    );
-    if (!call || call.tool === 'none') return step ? lastOutcome(steps) : null;
-    const v = validateCall(call, step ? [...tools, toolByName('reply')!] : tools);
+    const { call, v, ms } = await askRouter(question, now, tools, steps, ask);
+    log(`step ${step + 1}: ${call?.tool ?? 'unparsed'} (${ms} ms, ${tools.length} tools)`);
+    if (!call || call.tool === 'none' || !v) return step ? lastOutcome(steps) : null;
     if (!v.ok) {
       log(`rejected: ${v.error}`);
       return step ? lastOutcome(steps) : null;
@@ -361,6 +347,59 @@ export async function routeWithTools(
     steps.push({ tool: call.tool, args: v.args, result: await resultText(outcome, ctx, question) });
   }
   return lastOutcome(steps);
+}
+
+/** One router step: the model's pick for [question], checked against the offered tools. */
+async function askRouter(
+  question: string,
+  now: Date,
+  tools: ToolSpec[],
+  steps: ToolStep[],
+  ask: NonNullable<RouteContext['ask']>,
+): Promise<{ call: ToolCall | null; v: Validated | null; ms: number }> {
+  const t0 = Date.now();
+  const reply = await ask(routerPrompt(question, now, tools, steps), ROUTER_SYSTEM, 140).catch(
+    () => '',
+  );
+  const call = parseToolReply(reply);
+  const v =
+    call && call.tool !== 'none'
+      ? validateCall(call, steps.length ? [...tools, toolByName('reply')!] : tools)
+      : null;
+  return { call, v, ms: Date.now() - t0 };
+}
+
+export type ToolPick = {
+  offered: string[];
+  tool: string | null;
+  args: Record<string, unknown>;
+  error?: string;
+  ms: number;
+};
+
+/**
+ * The router's first pick for [question] without running it (the dev answers bench): the tools
+ * offered, the call and whether it passed the schema. Null when no tool would be offered.
+ */
+export async function pickToolOnly(
+  question: string,
+  ctx: Pick<RouteContext, 'routine' | 'offRecord' | 'now' | 'ask'> = {},
+): Promise<ToolPick | null> {
+  const tools = relevantTools(question, ctx);
+  if (!tools.length) return null;
+  const { call, v, ms } = await askRouter(
+    question,
+    ctx.now ?? new Date(),
+    tools,
+    [],
+    ctx.ask ?? defaultAsk,
+  );
+  const offered = tools.map((t) => t.name);
+  if (!call) return { offered, tool: null, args: {}, error: 'unparsed', ms };
+  if (call.tool === 'none' || !v) return { offered, tool: 'none', args: {}, ms };
+  return v.ok
+    ? { offered, tool: call.tool, args: v.args, ms }
+    : { offered, tool: call.tool, args: call.args, error: v.error, ms };
 }
 
 function lastOutcome(steps: ToolStep[]): RouteOutcome | null {

@@ -4,6 +4,8 @@
  * silent speed check. Pure decisions here (tested); FirstRun.tsx shows them.
  */
 
+import { platformText } from '@/engine/platform-text';
+
 export type MobilePref = 'ask' | 'auto' | 'off';
 
 export type FirstRunStep =
@@ -36,9 +38,7 @@ export type IntroMessage = { text: string; tries: string[] };
 /** The first message in the chat once Sidekick is ready. Tries are tappable questions. */
 export function introMessage(): IntroMessage {
   return {
-    text:
-      "Hi, I'm ready. I run entirely on this phone, so nothing you show me or say leaves it. " +
-      'Point the camera at something and ask, or tell me something to remember.',
+    text: platformText('introText'),
     tries: ['What am I looking at?', 'Remind me to call Mum at 6', 'What did I do yesterday?'],
   };
 }
@@ -47,7 +47,7 @@ export function introMessage(): IntroMessage {
 export const EXPLAINER: { title: string; body: string }[] = [
   {
     title: 'What Sidekick does',
-    body: 'An assistant that sees and hears what you do, remembers it, and answers questions about it.',
+    body: platformText('explainerWhat'),
   },
   {
     title: 'Your data stays on your phone',
@@ -59,7 +59,7 @@ export const EXPLAINER: { title: string; body: string }[] = [
   },
   {
     title: "What it's good at",
-    body: "Remembering what you saw and heard, reminders, drafting messages and emails, and telling you about what's in front of you.",
+    body: platformText('explainerGoodAt'),
   },
   {
     title: 'Its limits',

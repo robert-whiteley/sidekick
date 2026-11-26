@@ -1,4 +1,5 @@
 import {
+  commandSafeWhenLocked,
   helpText,
   MAX_RATE,
   MIN_RATE,
@@ -97,5 +98,43 @@ describe('helpText', () => {
     expect(all).toMatch(/calendar/);
     expect(all).toMatch(/look things up online/);
     expect(all).not.toMatch(/More with/);
+  });
+});
+
+describe('commandSafeWhenLocked', () => {
+  it('lets the camera and mic be switched with the phone locked', () => {
+    expect(commandSafeWhenLocked(p('Resume the camera.'))).toBe(true);
+    expect(commandSafeWhenLocked(p('pause the camera'))).toBe(true);
+    expect(commandSafeWhenLocked(p('stop the camera'))).toBe(true);
+    expect(commandSafeWhenLocked(p('stop listening'))).toBe(true);
+    expect(commandSafeWhenLocked(p('speak slower'))).toBe(true);
+  });
+  it('keeps anything that could say something personal for after an unlock', () => {
+    expect(commandSafeWhenLocked(p('repeat that'))).toBe(false);
+    expect(commandSafeWhenLocked(p('start listening'))).toBe(false);
+    expect(commandSafeWhenLocked(p('what did Sam say'))).toBe(false);
+    expect(commandSafeWhenLocked(null)).toBe(false);
+  });
+});
+
+describe('help on iPhone', () => {
+  const on = {
+    camera: false,
+    listening: false,
+    memory: true,
+    calendar: true,
+    messages: false,
+    email: false,
+    online: false,
+    location: false,
+  };
+  it('offers no alarms, timers or Listen', () => {
+    const t = helpText({ ...on, iphone: true });
+    expect(t).not.toMatch(/alarms|timers|Listen/);
+    expect(t).toMatch(/set reminders/);
+    expect(t).toMatch(/More with Online lookup in Settings/);
+  });
+  it('Android still offers them', () => {
+    expect(helpText(on)).toMatch(/timers and alarms.*Listen/s);
   });
 });

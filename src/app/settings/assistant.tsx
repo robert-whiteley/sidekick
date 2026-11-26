@@ -8,6 +8,7 @@ import { ChoiceRow, NavRow, Row, Section } from '@/features/settings/ui';
 import { useSettings } from '@/features/settings/useSettings';
 import type { HandsFreeMode } from '@/engine/hands-free-logic';
 import { formatMinutes } from '@/engine/place-logic';
+import { onIphone, platformText } from '@/engine/platform-text';
 import type { ReadBackMode } from '@/engine/readback-logic';
 import type { SmartDefault } from '@/engine/settings';
 import { MAX_RATE, MIN_RATE } from '@/engine/quick-commands-logic';
@@ -17,37 +18,44 @@ const MODEL_TIER_LABEL = { small: 'Small and fast', standard: 'Standard', large:
 
 export default function AssistantSettings() {
   const { s, rec, set } = useSettings();
+  // iPhone (ADR 0006): no background listening, so no languages heard around you, live
+  // conversation notes or Natural voice; Apple's speech recogniser hears the question.
+  const iphone = onIphone();
   return (
     <Page title="Assistant">
-      <Section title="Languages">
-        <Row
-          label="Understand other languages around me"
-          hint={
-            'Sidekick speaks English. With this on, it also hears 24 other European languages ' +
-            'around you (French, German, Spanish, Polish, Ukrainian…) and shows an English ' +
-            'translation under each line, so you can ask "what did the waiter say?". English ' +
-            'is understood a little less well in quiet (2.9% → 3.8% words wrong) and much less ' +
-            'well in noise (7.2% → 17.9%). Needs a 0.5 GB download on Wi-Fi.'
-          }
-          value={s.understandOtherLanguages}
-          onChange={(v) => {
-            set({ understandOtherLanguages: v });
-            applySpeechModel();
-          }}
-        />
-      </Section>
+      {iphone ? null : (
+        <Section title="Languages">
+          <Row
+            label="Understand other languages around me"
+            hint={
+              'Sidekick speaks English. With this on, it also hears 24 other European languages ' +
+              'around you (French, German, Spanish, Polish, Ukrainian…) and shows an English ' +
+              'translation under each line, so you can ask "what did the waiter say?". English ' +
+              'is understood a little less well in quiet (2.9% → 3.8% words wrong) and much less ' +
+              'well in noise (7.2% → 17.9%). Needs a 0.5 GB download on Wi-Fi.'
+            }
+            value={s.understandOtherLanguages}
+            onChange={(v) => {
+              set({ understandOtherLanguages: v });
+              applySpeechModel();
+            }}
+          />
+        </Section>
+      )}
       <Section title="Voice">
-        <ChoiceRow
-          label="Voice for answers"
-          hint="One voice is used all the time; it never switches mid-answer."
-          options={[
-            { value: 'pocket', label: 'Natural voice' },
-            { value: 'system', label: "Phone's voice" },
-          ]}
-          value={s.voiceChoice === 'auto' ? null : s.voiceChoice}
-          recommended={rec.voice}
-          onChange={(v) => set({ voiceChoice: v ?? 'auto' })}
-        />
+        {!iphone && (
+          <ChoiceRow
+            label="Voice for answers"
+            hint="One voice is used all the time; it never switches mid-answer."
+            options={[
+              { value: 'pocket', label: 'Natural voice' },
+              { value: 'system', label: "Phone's voice" },
+            ]}
+            value={s.voiceChoice === 'auto' ? null : s.voiceChoice}
+            recommended={rec.voice}
+            onChange={(v) => set({ voiceChoice: v ?? 'auto' })}
+          />
+        )}
         <SliderRow
           label="Speech speed"
           hint={'Also by voice: "speak slower", "speak faster", "normal speed".'}
@@ -63,9 +71,7 @@ export default function AssistantSettings() {
       <Section title="Hands-free">
         <ChoiceRow<ReadBackMode>
           label="Read back before sending"
-          hint={
-            'Says what it is about to send ("Text to Sam: running late. Send it?") and listens for yes, no, "change it to …" or "add …". The countdown starts after.'
-          }
+          hint={platformText('readBackHint')}
           options={[
             { value: 'voice', label: 'When I speak' },
             { value: 'always', label: 'Always' },
@@ -77,7 +83,7 @@ export default function AssistantSettings() {
         />
         <ChoiceRow<HandsFreeMode>
           label="Driving and walking mode"
-          hint="Spoken answers, read-back and bigger buttons. Automatic: when the car's Bluetooth connects or you ask with the headset button."
+          hint={platformText('handsFreeHint')}
           options={[
             { value: 'auto', label: 'Automatic' },
             { value: 'on', label: 'Always on' },
@@ -89,7 +95,10 @@ export default function AssistantSettings() {
         />
         <ChoiceRow<'on' | 'off'>
           label="Quiet at night"
-          hint={`No speaking out loud from ${formatMinutes(s.quietStart)} to ${formatMinutes(s.quietEnd)} or in Do Not Disturb. Headphones and the car still get answers. Times: Privacy › Auto-pause.`}
+          hint={platformText('quietSpeechHint', {
+            start: formatMinutes(s.quietStart),
+            end: formatMinutes(s.quietEnd),
+          })}
           options={[
             { value: 'on', label: 'On' },
             { value: 'off', label: 'Off' },
@@ -131,7 +140,7 @@ export default function AssistantSettings() {
       </Section>
       <ListeningSection part="assistant" />
       <FollowupsSection part="settings" />
-      <NotesRecapSection />
+      {iphone ? null : <NotesRecapSection />}
       <EntryPointsSection />
     </Page>
   );

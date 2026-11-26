@@ -48,6 +48,7 @@ import { queueOnline } from './online-queue';
 import { packFind } from './geo-pack';
 import { haversineM, type LatLon } from './place-logic';
 import { askLocationPermission, currentRegion, placeName } from './places';
+import { platformText } from './platform-text';
 import { getSettings } from './settings';
 import { parseTimeRange } from '@/memory/time-range';
 import { deletePlace, fixesBetween, namePlace, pruneTrack } from '@/memory/places-store';
@@ -57,7 +58,7 @@ import {
   MET_SOURCE_URL,
   parseWeatherQuestion,
 } from '@/web/weather-logic';
-import { getForecast, online } from '@/web/weather';
+import { forecastUnreachable, getForecast, online } from '@/web/weather';
 import type { WebSource } from '@/web/lookup-logic';
 
 const DAY = 86_400_000;
@@ -150,11 +151,17 @@ async function where(p: Fix | LatLon, withStreet: boolean): Promise<string> {
 
 // --- Answers ---
 
-export type LocationAnswer = { text: string; web?: WebSource[] };
+export type LocationAnswer = {
+  text: string;
+  web?: WebSource[];
+  /** Kept until the internet works (online-queue.ts); a back-online run tries again later. */
+  waitingOnline?: boolean;
+  /** Nothing recorded for this question: memory notes may still answer it (assistant.ts). */
+  empty?: boolean;
+};
 
 const OFF = 'Location memory is off. Turn it on in Settings → Privacy → Location.';
-const NOT_RECORDED =
-  "I don't know: your location is only remembered while Sidekick is listening or open, with location allowed.";
+const notRecorded = () => platformText('locationNotRecorded');
 
 async function needPermission(): Promise<string | null> {
   if (hasPermission()) return null;
@@ -176,10 +183,10 @@ export async function answerLocation(
   const q = parseLocationQuestion(question, now);
   if (!q) return null;
 
-  const perm = await needPermission();
-  if (perm) return { text: perm };
   const history = q.kind !== 'whereNow';
-  if (history && getSettings().locationMemory === false) return { text: OFF };
+  const perm = await needPermission();
+  if (perm) return { text: perm, empty: history };
+  if (history && getSettings().locationMemory === false) return { text: OFF, empty: true };
 
   switch (q.kind) {
     case 'whereNow': {
@@ -227,10 +234,7 @@ export async function answerLocation(
     case 'parked': {
       const fixes = await fixesBetween(now.getTime() - 3 * DAY, now.getTime() + 1);
       const spot = parkedSpot(fixes);
-      if (!spot)
-        return {
-          text: "I don't know where you parked. I mark the spot when your car's Bluetooth disconnects while Sidekick is listening.",
-        };
+      if (!spot) return { text: platformText('parkingUnknown'), empty: true };
       const w = await where(spot, true);
       const me = await fixNow();
       const when = whenText(spot.at, now);
@@ -246,7 +250,7 @@ export async function answerLocation(
     case 'whereAt': {
       const fixes = await fixesBetween(q.at - DAY / 24, q.at + DAY / 24);
       const f = fixAt(fixes, q.at);
-      if (!f) return { text: NOT_RECORDED };
+      if (!f) return { text: notRecorded(), empty: true };
       return { text: `${cap(q.label)} you were ${await where(f, false)}.` };
     }
     case 'lastAt': {
@@ -290,7 +294,8 @@ export async function answerLocation(
       };
       const to = Math.min(range.to, now.getTime());
       const visits = visitsFrom(await fixesBetween(range.from, to));
-      if (!visits.length) return { text: `I don't have any places for ${range.label}.` };
+      if (!visits.length)
+        return { text: `I don't have any places for ${range.label}.`, empty: true };
       const stays: { w: string; from: number; to: number }[] = [];
       for (const v of visits) {
         const w = (await where(v, false)).replace(/^(at|in|near) /, '');
@@ -364,13 +369,14 @@ async function weatherAnswer(
   if (!pos)
     return { text: 'I can\'t get your location right now. Say a town, like "weather in Leeds".' };
   // Offline: kept and answered when the phone is back online (online-queue.ts).
-  if (!(await online()))
-    return {
-      text: question
-        ? queueOnline('weather', question, now.getTime())
-        : "There's no internet right now, so I can't get the forecast.",
-    };
+  const offline = (): LocationAnswer =>
+    question
+      ? { text: queueOnline('weather', question, now.getTime()), waitingOnline: true }
+      : { text: "There's no internet right now, so I can't get the forecast." };
+  if (!(await online())) return offline();
   const f = await getForecast(pos.lat, pos.lon);
+  // Android says online but no server answered: the same as offline.
+  if (!f && forecastUnreachable()) return offline();
   if (!f) return { text: "I couldn't get the forecast just now. Try again in a minute." };
   const country = q.town ? null : currentRegion().country;
   const text = describeForecast(f, q, now, {

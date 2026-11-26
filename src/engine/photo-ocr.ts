@@ -4,8 +4,12 @@ import { formatOcr } from '@/memory/photo-text';
 import { isDownloaded, modelPath } from './downloads';
 import { OCR_FILES } from './models';
 
-/** Photo OCR (PP-OCRv6 small) is Android-only for now, and needs its three files. */
+/**
+ * Photo text: PP-OCRv6 small on Android (needs its three files), Apple's on-device Vision on
+ * iPhone (built in, nothing to download; the native side ignores the model paths).
+ */
 export function ocrReady(): boolean {
+  if (Platform.OS === 'ios') return true;
   return Platform.OS === 'android' && Object.values(OCR_FILES).every(isDownloaded);
 }
 

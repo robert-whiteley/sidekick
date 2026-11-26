@@ -150,7 +150,8 @@ export function parseExtra(question: string): Extra | null {
       if (!/^(my|your)$/i.test(m[2]))
         return { type: 'birthday', name: m[2].trim(), within: 'next' };
     if (
-      /^(whose|who('s| has| has a)?|any|are there any|is there a|what) .*birthdays?\b/i.test(q) ||
+      /^(whose|who('s| has| has a)?|any|are there any|is there a) .*birthdays?\b/i.test(q) ||
+      /^what (birthdays|birthdays? (are|is) (coming|next|soon))\b/i.test(q) ||
       /\bbirthdays? (coming up|this week|this month|next)\b/i.test(q) ||
       /^(upcoming |next )birthdays?$/i.test(q)
     )
@@ -227,6 +228,19 @@ export function startOfDay(t: number): number {
   const d = new Date(t);
   d.setHours(0, 0, 0, 0);
   return d.getTime();
+}
+
+/** iPhone: the period to ask Motion & Fitness for (today so far, or all of yesterday). */
+export function stepWindow(day: 'today' | 'yesterday', now: number): { start: Date; end: Date } {
+  const midnight = startOfDay(now);
+  if (day === 'today') return { start: new Date(midnight), end: new Date(now) };
+  return { start: new Date(startOfDay(midnight - 1)), end: new Date(midnight) };
+}
+
+/** "1,234 steps today." */
+export function stepsSentence(steps: number, day: 'today' | 'yesterday'): string {
+  const n = Math.max(0, Math.round(steps));
+  return `${n.toLocaleString()} step${n === 1 ? '' : 's'} ${day}.`;
 }
 
 const NEAR_MIDNIGHT_MS = 30 * 60_000;

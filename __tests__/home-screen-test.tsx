@@ -1,4 +1,5 @@
 import { render, screen } from '@testing-library/react-native';
+import { Platform } from 'react-native';
 
 import HomeScreen from '@/app/index';
 
@@ -25,7 +26,14 @@ jest.mock('../modules/sidekick-native', () => ({
 }));
 
 test('first run downloads the model by itself', async () => {
+  Platform.OS = 'android';
   await render(<HomeScreen />);
   expect(screen.getByText('Getting Sidekick ready')).toBeTruthy();
   expect(screen.getByText(/3\.5 GB/)).toBeTruthy();
+});
+
+test('the iPhone downloads less: speech and photo text are built into iOS', async () => {
+  Platform.OS = 'ios';
+  await render(<HomeScreen />);
+  expect(screen.getByText(/3\.0 GB/)).toBeTruthy();
 });

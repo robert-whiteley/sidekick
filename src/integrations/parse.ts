@@ -170,8 +170,22 @@ function durationSeconds(s: string): number | null {
   return total > 0 ? Math.round(total) : null;
 }
 
+/** "Text me…", "call myself": no contact to send to; the request is for an answer instead. */
+const SELF = /^(me|myself|us|ourselves|i)$/i;
+
 /** Reads one request. `contacts` (names) helps split "text Sam Taylor I'm late". */
 export function parseIntent(question: string, now: Date, contacts: string[] = []): Intent | null {
+  const i = parseIntentRaw(question, now, contacts);
+  if (
+    i &&
+    (i.type === 'message' || i.type === 'email' || i.type === 'call') &&
+    SELF.test(i.name.trim())
+  )
+    return null;
+  return i;
+}
+
+function parseIntentRaw(question: string, now: Date, contacts: string[]): Intent | null {
   const q = clean(question);
   if (!q) return null;
   let m: RegExpExecArray | null;
@@ -204,7 +218,10 @@ export function parseIntent(question: string, now: Date, contacts: string[] = []
     return { type: 'nowPlaying' };
 
   // --- Timers and alarms ---
-  if (/\btimer\b/i.test(q) && /^(set|start|make|put on|create)?\s*(an? )?\b/i.test(q)) {
+  if (
+    /\b(timer|countdown|count down)\b/i.test(q) &&
+    /^(set|start|make|put on|create)?\s*(an? )?\b/i.test(q)
+  ) {
     const secs = durationSeconds(q);
     const label = /\btimer for (?:the )?([a-z ]+?) (?:for|in)\b/i.exec(q)?.[1] ?? '';
     if (

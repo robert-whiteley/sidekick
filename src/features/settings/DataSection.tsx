@@ -1,6 +1,7 @@
 import { useState } from 'react';
 
 import { deleteAllData, exportAllData } from '@/engine/data-export';
+import { platformText } from '@/engine/platform-text';
 import { deleteRange } from '@/memory/store';
 import { DeleteBySource } from './SourcesSection';
 import { Button, confirm, Section } from './ui';
@@ -28,8 +29,7 @@ export function DataSection({ onChanged }: { onChanged: () => void }) {
   return (
     <Section title="Your data">
       <AppText variant="bodySmall" tone="muted">
-        Everything is stored encrypted on this phone only. Export copies all of it (text, photos,
-        video and audio) to a folder you choose.
+        {platformText('exportHint')}
       </AppText>
       <Button title="Export everything" onPress={() => void exportAll()} />
       <Button
@@ -61,13 +61,9 @@ export function DataSection({ onChanged }: { onChanged: () => void }) {
         danger
         title="Delete everything"
         onPress={() =>
-          confirm(
-            'Delete everything?',
-            'All memories, people, facts, photos, video, settings and downloaded models are permanently deleted, as if Sidekick was uninstalled. The app then closes.',
-            async () => {
-              await deleteAllData();
-            },
-          )
+          confirm('Delete everything?', platformText('deleteAllBody'), async () => {
+            await deleteAllData();
+          })
         }
       />
       {msg ? (

@@ -1,0 +1,3 @@
+# False positives: a variable name (env.ASC_KEY_P8), not a key.
+d45ec6d5d225856b1871421b5a1a4f1b573e46c4:scripts/asc-submit.mjs:generic-api-key:32
+dd89800977feb97b56e2c16cdaa6d18bff79f4fe:scripts/asc-submit.mjs:generic-api-key:32

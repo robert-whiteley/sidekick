@@ -5,6 +5,7 @@ import {
   FRAME_WINDOW_OPTIONS,
   VIDEO_KEEP_OPTIONS,
 } from '@/engine/device-profile';
+import { IPHONE, onIphone } from '@/engine/platform-text';
 import type { ImageDetail } from '@/engine/settings';
 import { daysLabel, hoursLabel } from '@/features/settings/choice-logic';
 import { DevicesSection } from '@/features/settings/DevicesSection';
@@ -16,6 +17,15 @@ import { AppText } from '@/ui';
 
 export default function CameraAudioSettings() {
   const { s, rec, set } = useSettings();
+  if (onIphone())
+    return (
+      <Page title="Camera & audio">
+        <Section title="Camera memory">
+          <AppText>{IPHONE.liveCameraSettings}</AppText>
+        </Section>
+        <ListeningSection part="listening" />
+      </Page>
+    );
   return (
     <Page title="Camera & audio">
       <DevicesSection />

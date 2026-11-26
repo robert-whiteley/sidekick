@@ -308,6 +308,20 @@ object CaptureLogicLock {
 object ServiceNotice {
   data class Text(val title: String, val body: String, val actions: List<String>)
 
+  /**
+   * The ongoing notification's channel. Default importance (3), because Android (Pixel's default
+   * "hide silent notifications") leaves low-importance ones off the lock screen, and the camera /
+   * mic indicator with Pause and Stop must be there while the phone is locked. No sound and no
+   * vibration, so it never alerts. A channel's importance can't change once created, so this is a
+   * new id; the old low-importance "listen" channel is deleted.
+   */
+  const val CHANNEL = "service"
+  const val CHANNEL_NAME = "Listening and camera"
+  const val CHANNEL_IMPORTANCE = 3 // NotificationManager.IMPORTANCE_DEFAULT
+  const val CHANNEL_SOUND = false
+  const val CHANNEL_VIBRATE = false
+  const val OLD_CHANNEL = "listen"
+
   /** Actions: "pauseCamera" / "resumeCamera", "stopCamera" (when the mic stays on), "stop". */
   fun text(
     listening: Boolean,

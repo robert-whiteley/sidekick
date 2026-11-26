@@ -1,6 +1,6 @@
 import { router } from 'expo-router';
 import { useState } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { Platform, StyleSheet, View } from 'react-native';
 
 import { Icon } from './Icon';
 import type { ChatTheme } from './theme';
@@ -68,15 +68,18 @@ export function ChatHeader({
           </Tappable>
         ) : null}
         <View style={styles.right}>
-          <IconButton
-            name="listen"
-            size={20}
-            color={theme.icon}
-            selected={listening}
-            role="switch"
-            onPress={onListen}
-            accessibilityLabel="Listen in the background"
-          />
+          {/* iPhone apps can't listen in the background (ADR 0006): hold the mic instead. */}
+          {Platform.OS !== 'ios' && (
+            <IconButton
+              name="listen"
+              size={20}
+              color={theme.icon}
+              selected={listening}
+              role="switch"
+              onPress={onListen}
+              accessibilityLabel="Listen in the background"
+            />
+          )}
           <IconButton
             name="settings"
             color={theme.icon}

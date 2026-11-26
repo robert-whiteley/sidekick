@@ -3,6 +3,7 @@ import { Platform } from 'react-native';
 
 import SidekickNative from '../../modules/sidekick-native';
 import { getSettings, type ImageDetail, type Settings } from './settings';
+import { platformText } from './platform-text';
 
 /** What Sidekick knows about this phone, read instantly (no test needed). */
 export type DeviceProfile = {
@@ -151,8 +152,26 @@ export type PhoneFeature = {
   why?: string;
 };
 
+/**
+ * Android ways in and hardware that an iPhone has no equivalent of: not listed there at all
+ * ("Quick Settings tile: not possible" means nothing to an iPhone user).
+ */
+const NOT_LISTED_ON_IPHONE = new Set([
+  'usbCamera',
+  'heat',
+  'assistant',
+  'tile',
+  'widget',
+  'splitAudio',
+]);
+
 /** Pure: every feature, with whether this phone can do it and why not (tested). */
 export function phoneFeatures(p: DeviceProfile): PhoneFeature[] {
+  const all = allPhoneFeatures(p);
+  return p.platform === 'ios' ? all.filter((f) => !NOT_LISTED_ON_IPHONE.has(f.id)) : all;
+}
+
+function allPhoneFeatures(p: DeviceProfile): PhoneFeature[] {
   const android = p.platform === 'android';
   const ios = p.platform === 'ios';
   const notIphone = (what: string) => (ios ? `Not possible on iPhone: ${what}` : 'Android only');
@@ -160,7 +179,18 @@ export function phoneFeatures(p: DeviceProfile): PhoneFeature[] {
   const notOnPlay = 'Not possible: Google Play doesn’t allow apps to do this';
   return [
     { id: 'chat', name: 'Ask by typing or voice', available: true },
-    { id: 'camera', name: 'Live camera memory', available: true },
+    {
+      id: 'listen',
+      name: platformText('listenFeature', {}, ios ? 'ios' : 'android'),
+      available: !ios,
+      why: notIphone('apps can’t keep the microphone on in the background; hold the mic to ask'),
+    },
+    {
+      id: 'camera',
+      name: 'Live camera memory',
+      available: !ios,
+      why: notIphone('apps can’t film in the background; take a photo to ask about it'),
+    },
     {
       id: 'usbCamera',
       name: 'USB camera (e.g. a worn camera)',
@@ -176,8 +206,10 @@ export function phoneFeatures(p: DeviceProfile): PhoneFeature[] {
     {
       id: 'pocketVoice',
       name: 'Natural voice',
-      available: p.ramMb === 0 || p.ramMb >= 3500,
-      why: 'Not enough memory on this phone; the system voice is used',
+      available: !ios && (p.ramMb === 0 || p.ramMb >= 3500),
+      why: ios
+        ? 'Not built for iPhone yet; the iPhone’s own voice reads answers'
+        : 'Not enough memory on this phone; the system voice is used',
     },
     {
       id: 'heat',
@@ -282,7 +314,11 @@ export function phoneFeatures(p: DeviceProfile): PhoneFeature[] {
       name: 'Sums, unit conversions and world time (exact, no AI)',
       available: true,
     },
-    { id: 'translate', name: 'Translate, including the text in the camera view', available: true },
+    {
+      id: 'translate',
+      name: platformText('translateFeature', {}, ios ? 'ios' : 'android'),
+      available: true,
+    },
     {
       id: 'screenQuestion',
       name: '“What’s on my screen?”',
@@ -295,7 +331,11 @@ export function phoneFeatures(p: DeviceProfile): PhoneFeature[] {
       available: android,
       why: notIphone('only Siri works on the lock screen'),
     },
-    { id: 'appLock', name: 'App lock (fingerprint, face or PIN)', available: true },
+    {
+      id: 'appLock',
+      name: platformText('appLockFeature', {}, ios ? 'ios' : 'android'),
+      available: true,
+    },
     { id: 'offline', name: 'Works fully offline', available: true },
   ];
 }

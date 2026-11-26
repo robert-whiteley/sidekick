@@ -1,4 +1,5 @@
 import { NativeModule, requireNativeModule } from 'expo';
+import { Platform } from 'react-native';
 
 import type {
   CameraConfig,
@@ -20,6 +21,7 @@ import type {
   SidekickNativeModuleEvents,
   VoiceInfo,
 } from './SidekickNative.types';
+import { withIosFallbacks } from './ios-fallbacks';
 
 declare class SidekickNativeModule extends NativeModule<SidekickNativeModuleEvents> {
   getDeviceInfo(): DeviceInfo;
@@ -48,12 +50,17 @@ declare class SidekickNativeModule extends NativeModule<SidekickNativeModuleEven
   /** Bytes in the partial file so far. */
   downloadPartBytes(destPath: string): number;
   fileExists(path: string): boolean;
+  /** iPhone: keeps a file out of iCloud and computer backups (the database). */
+  excludeFromBackup?(path: string): boolean;
+  /** iPhone: the bundled offline place-name pack (Android reads it from assets). */
+  geoPack?(): Uint8Array | null;
   readText(path: string): string | null;
   copyFile(src: string, dst: string): boolean;
   deleteFile(path: string): boolean;
   /**
    * Android: wipes all app data (files, databases, settings, models) like an uninstall, then the
-   * system closes the app. False if the system refused.
+   * system closes the app. False if the system refused. iPhone: wipes the same (and the keychain);
+   * the app then restarts its JS.
    */
   wipeAllData?(): boolean;
   exportZip(json: string, files: string[], destPath: string): Promise<string>;
@@ -123,6 +130,8 @@ declare class SidekickNativeModule extends NativeModule<SidekickNativeModuleEven
   pttStart(): void;
   pttStop(): Promise<{ text: string; voice: number[] | null }>;
   speechWarmUp(): Promise<boolean>;
+  /** iPhone: asks for Speech Recognition access (on-device only); true when allowed. */
+  speechRequestAccess?(): Promise<boolean>;
   /** Parakeet CPU threads (1-8, default 4); reloads speech-to-text if already loaded. */
   speechSetAsrThreads(threads: number): Promise<boolean>;
   /** Android: speech-to-text build folder (v2 English / v3 multilingual); false if not downloaded. */
@@ -236,4 +245,7 @@ declare class SidekickNativeModule extends NativeModule<SidekickNativeModuleEven
   mediaButtonsEnable(on: boolean): void;
 }
 
-export default requireNativeModule<SidekickNativeModule>('SidekickNative');
+const native = requireNativeModule<SidekickNativeModule>('SidekickNative');
+
+/** On iPhone, Android-only calls answer "not available" instead of throwing (ios-fallbacks.ts). */
+export default Platform.OS === 'ios' ? withIosFallbacks(native) : native;

@@ -20,6 +20,17 @@ export type VoiceCommand =
   /** Frame rate, phone lens, image detail (picked by the tool router, no fixed phrases). */
   | { type: 'cameraSetting'; change: CameraChange };
 
+/**
+ * Commands that may run with the phone locked: they only switch the camera or mic (the same as the
+ * notification's Pause / Resume / Stop buttons) or the speech speed, and never say anything
+ * personal. Everything else waits for an unlock (phone-controls.ts lockedReply).
+ */
+export function commandSafeWhenLocked(cmd: VoiceCommand | null): boolean {
+  if (!cmd) return false;
+  if (cmd.type === 'camera' || cmd.type === 'speed') return true;
+  return cmd.type === 'listening' && !cmd.on;
+}
+
 /** Speech speed limits (1 = normal). */
 export const MIN_RATE = 0.5;
 export const MAX_RATE = 2;
@@ -150,6 +161,47 @@ export function parseVoiceCommand(question: string): VoiceCommand | null {
   )
     return { type: 'scan' };
 
+  const cam = cameraChange(q);
+  if (cam) return { type: 'cameraSetting', change: cam };
+
+  return null;
+}
+
+const UP = /^(?:raise|increase|up|boost|turn up|bump up|use (?:a )?higher|higher)$/;
+const DOWN = /^(?:lower|reduce|decrease|drop|cut|turn down|use (?:a )?lower)$/;
+
+/** Plain camera-setting requests ("lower the frame rate", "use the front camera"); others go to the router. */
+function cameraChange(q: string): CameraChange | null {
+  const s = q.replace(/\b(the |my |live )+/g, '').replace(/\s+/g, ' ');
+  let m: RegExpExecArray | null;
+  const FRAMES =
+    '(?:camera )?(?:frame ?rate|fps|frames?(?: per second| a second)?)(?: on camera| for camera)?';
+  if ((m = new RegExp(`^(\\w+(?: \\w+){0,2}) ${FRAMES}$`).exec(s))) {
+    if (UP.test(m[1])) return { frames: 'more' };
+    if (DOWN.test(m[1])) return { frames: 'fewer' };
+  }
+  if (
+    (m =
+      /^(?:(?:use|take|grab|capture|shoot|record) )?(more|fewer|less) (?:camera )?(?:frames|pictures|photos|images)(?: per second| a second| each second)?$/.exec(
+        s,
+      ))
+  )
+    return { frames: m[1] === 'more' ? 'more' : 'fewer' };
+  if (
+    (m =
+      /^(?:switch|change|flip|swap|go|turn)?(?: ?to)? ?(?:use )?(front|selfie|back|rear|main) (?:facing )?camera$/.exec(
+        s,
+      ))
+  )
+    return { lens: m[1] === 'front' || m[1] === 'selfie' ? 'front' : 'back' };
+  if (/^(?:flip|swap|switch|turn) (?:camera|cameras|lens)(?: around| over)?$/.test(s))
+    return { lens: 'flip' };
+  const DETAIL =
+    '(?:camera )?(?:resolution|detail|image detail|image quality|picture quality)(?: on camera| for camera)?';
+  if ((m = new RegExp(`^(\\w+(?: \\w+){0,2}) ${DETAIL}$`).exec(s))) {
+    if (UP.test(m[1])) return { detail: 'higher' };
+    if (DOWN.test(m[1])) return { detail: 'lower' };
+  }
   return null;
 }
 
@@ -175,20 +227,25 @@ export function helpText(on: {
   email: boolean;
   online: boolean;
   location: boolean;
+  /** iPhone: no timers, alarms or background Listen to offer. */
+  iphone?: boolean;
 }): string {
   const can: string[] = [
     'answer questions and remember things you tell me',
-    'set reminders, timers and alarms',
+    on.iphone ? 'set reminders' : 'set reminders, timers and alarms',
     'do sums and conversions, and translate',
   ];
   if (on.camera)
     can.push(
       'tell you what the camera sees, and watch for something ("tell me when you see my bus")',
     );
+  else if (on.iphone) can.push('look at a photo you take with the camera button');
   else can.push('look at a photo ("what am I looking at?")');
   if (on.memory)
     can.push(
-      'find what you saw or heard earlier ("what did Sam say this morning?") and recap any time',
+      on.iphone
+        ? 'find what you told me or showed me earlier ("what was the wifi password on that sign?") and recap any time'
+        : 'find what you saw or heard earlier ("what did Sam say this morning?") and recap any time',
     );
   if (on.listening) can.push('keep live notes of conversations');
   if (on.calendar) can.push('read and add calendar events');
@@ -197,7 +254,7 @@ export function helpText(on: {
   if (on.location) can.push('say where you were');
   if (on.online) can.push('look things up online');
   const off: string[] = [];
-  if (!on.listening) off.push('Listen');
+  if (!on.listening && !on.iphone) off.push('Listen');
   if (!on.online) off.push('Online lookup');
   const tail = off.length ? ` More with ${off.join(' and ')} in Settings.` : '';
   return `I can ${can.slice(0, -1).join(', ')} and ${can.at(-1)}.${tail}`;

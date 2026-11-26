@@ -1,15 +1,48 @@
 /**
- * Answers worked out in code, not by the model: sums, unit conversions and the time in another
- * city. Exact and instant (a small model gets arithmetic wrong). Pure; tested in
+ * Answers worked out in code, not by the model: sums, unit conversions, the time in another
+ * city, and dates (date-answers.ts). Exact and instant (a small model gets arithmetic wrong). Pure; tested in
  * __tests__/quick-answers-test.ts.
  */
+
+import { dateAnswer } from './date-answers';
 
 const LEAD =
   /^(?:hey |ok |okay )?(?:sidekick,? )?(?:please )?(?:(?:can|could) you (?:tell me |work out )?)?(?:what(?:'s| is| are)|whats|calculate|compute|work out|how much is|tell me)?\s*/i;
 const TAIL = /[\s,]*(?:please|thanks)?[?.!\s]*$/i;
 
+/** "Half of 87", "double 12", "a quarter of 30". */
+function fractionOf(question: string): string | null {
+  const m =
+    /^(half|a half|one half|a third|one third|a quarter|one quarter|double|twice|triple|three quarters)(?: of)? (-?[\d.,]+)$/.exec(
+      question.toLowerCase().replace(LEAD, '').replace(TAIL, '').trim(),
+    );
+  if (!m) return null;
+  const n = Number(m[2].replace(/,/g, ''));
+  if (!Number.isFinite(n)) return null;
+  const f: Record<string, number> = {
+    half: 0.5,
+    'a half': 0.5,
+    'one half': 0.5,
+    'a third': 1 / 3,
+    'one third': 1 / 3,
+    'a quarter': 0.25,
+    'one quarter': 0.25,
+    double: 2,
+    twice: 2,
+    triple: 3,
+    'three quarters': 0.75,
+  };
+  return formatNumber(n * f[m[1]]);
+}
+
 export function quickAnswer(question: string, now: Date = new Date()): string | null {
-  return timeIn(question, now) ?? convertUnits(question) ?? calculate(question);
+  return (
+    timeIn(question, now) ??
+    fractionOf(question) ??
+    dateAnswer(question, now) ??
+    convertUnits(question) ??
+    calculate(question)
+  );
 }
 
 // --- Numbers ---
@@ -304,16 +337,18 @@ export function convertUnits(question: string): string | null {
   let amount: number | null;
   let from: string;
   let to: string;
-  const howMany = /^how many (.+?) (?:are )?(?:in|to|per) (?:an? |one )?(?:(\S+) )??(.+)$/.exec(q);
+  // "How many ml are in 2.5 litres", "how many pounds is 2 kg", "how many feet in a mile".
+  const howMany =
+    /^how many (.+?) (?:(?:are |is )?(?:there )?(?:in|to|per)|is|are|make|makes) (?:an? |one )?(.+)$/.exec(
+      q,
+    );
   let m: RegExpExecArray | null;
   if (howMany) {
     to = howMany[1];
-    amount = howMany[2] ? parseAmount(howMany[2]) : 1;
-    from = howMany[3];
-    if (amount === null) {
-      from = `${howMany[2]} ${howMany[3]}`;
-      amount = 1;
-    }
+    const first = /^(\S+)\s+(.+)$/.exec(howMany[2]);
+    const n = first ? parseAmount(first[1]) : null;
+    amount = n ?? 1;
+    from = n !== null && first ? first[2] : howMany[2];
   } else if ((m = /^(-?[\d.,/]+|[a-z]+)\s*(.+?) (?:in|to|into|as) (.+)$/.exec(q))) {
     amount = parseAmount(m[1]);
     from = m[2];

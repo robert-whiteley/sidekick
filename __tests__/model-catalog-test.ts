@@ -65,11 +65,16 @@ test('after a switch only the old model files the new one does not use are dropp
 });
 
 test('right after a switch the previous model is the fallback', () => {
-  const c = llmCandidates('QTI SM7250', '/m', {
-    id: 'gemma-4-e4b',
-    sha: MODEL_FILES.gemmaE4B.sha256,
-    previous: 'gemma-4-e2b',
-  });
+  const c = llmCandidates(
+    'QTI SM7250',
+    '/m',
+    {
+      id: 'gemma-4-e4b',
+      sha: MODEL_FILES.gemmaE4B.sha256,
+      previous: 'gemma-4-e2b',
+    },
+    false,
+  );
   expect(c.map((x) => x.modelPath)).toEqual([
     '/m/gemma-4-E4B-it.litertlm',
     '/m/gemma-4-E4B-it.litertlm',

@@ -126,7 +126,35 @@ Google's rule for new personal accounts: **12+ testers opted in for 14 days in a
 
 Until Google approves, only listed test users can use the Google features; the rest of the app works for everyone.
 
-## 10. Later
+## 10. iPhone (App Store)
+
+App Store Connect: https://appstoreconnect.apple.com → Apps → **Sidekick – On-device AI**. Every answer
+to paste is in `docs/store/app-store.md`. Nothing here costs money (the Apple Developer membership is
+already paid).
+
+Done:
+
+- [x] App record created: Apple ID `6838426860`, bundle ID `app.ondevice.sidekick`, version 1.0.
+- [x] EAS has the iOS distribution certificate, provisioning profile and App Store Connect API key,
+      so Claude builds and uploads without you (`eas.json` submit `ascAppId` 6838426860).
+- [x] The iPhone app itself: built from the same code; what it can't do on iPhone is hidden or
+      explained in the app (`docs/store/app-store.md` lists it).
+
+Your steps (all done, 26 Nov):
+
+- [x] **TestFlight**: installed on your iPhone; works.
+- [x] **Screenshots**: 2 real ones, 1206 × 2622, in "iPhone with Dynamic Island (medium)" (other sizes
+      were rejected). No made-up screenshots (risk of rejection).
+- [x] **Version 1.0 texts, subtitle, categories, copyright, URLs**: Claude pushed them from
+      `store.config.json` (`eas metadata:push`).
+- [x] **Age Rating** (EAS can't set it; Apple added a "social media" question): set by you, 18+.
+- [x] **App Privacy** "Data Not Collected", **App Review Information**, **Pricing and Availability**:
+      set by you.
+- [x] **Build 4 attached, content rights "no third-party content", submitted for review**: Claude, with
+      `scripts/asc-submit.mjs`. State: Waiting for Review. Apple emails you the result; forward any
+      questions to Claude.
+
+## 11. Later
 
 - [ ] At ~800 monthly users (Play Console → Statistics): tell Claude, to switch quick fixes off by
       default or self-host them (`docs/RELEASE.md` D). Free up to 1,000 monthly users.

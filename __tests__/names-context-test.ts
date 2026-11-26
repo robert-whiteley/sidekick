@@ -135,4 +135,12 @@ describe('roleFromLines', () => {
   it('says nothing without a cue', () => {
     expect(roleFromLines(['A single ticket to the station please, Clara.'])).toBeNull();
   });
+  it('a shop assistant even when speech-to-text drops words', () => {
+    expect(roleFromLines(['Lovely. You need a bag for those?'])).toBe('shop assistant');
+    expect(roleFromLines(['Hello again. Is that everything for today?'])).toBe('shop assistant');
+    expect(roleFromLines(['Cash or card?'])).toBe('shop assistant');
+  });
+  it('a waiter giving people a few minutes', () => {
+    expect(roleFromLines(['Do you need a few more minutes?'])).toBe('waiter');
+  });
 });

@@ -12,6 +12,7 @@ import { listWatches, looksLikeName, matchWatches } from './focus-logic';
 import { isListening, startListening, stopListening } from './listen';
 import { liveCameraOn, pauseLiveCamera, startLiveCamera, stopLiveCamera } from './live-camera';
 import { locationMemoryOn } from './location-track';
+import { IPHONE, platformText } from './platform-text';
 import { getSettings, updateSettings } from './settings';
 import {
   helpText,
@@ -87,19 +88,22 @@ async function execute(
     }
     case 'repeat':
       return lastAnswer || "I haven't said anything yet.";
-    case 'help':
+    case 'help': {
+      const android = Platform.OS === 'android';
       return helpText({
-        camera: Platform.OS === 'android',
-        listening: Platform.OS === 'android' && isListening(),
+        camera: android,
+        listening: android && isListening(),
         memory: true,
         calendar: isOn('calendar', 'read'),
-        messages: isOn('messages', 'read'),
-        email: isOn('email', 'send'),
+        messages: android && isOn('messages', 'read'),
+        email: android && isOn('email', 'send'),
         online: getSettings().webLookup,
         location: safe(locationMemoryOn),
+        iphone: Platform.OS === 'ios',
       });
+    }
     case 'listening': {
-      if (Platform.OS !== 'android') return 'Listening in the background needs Android.';
+      if (Platform.OS !== 'android') return IPHONE.listen;
       if (!cmd.on) {
         if (!isListening()) return "I'm not listening.";
         stopListening();
@@ -113,7 +117,7 @@ async function execute(
       return `Listening for "${getSettings().wakePhrase}".`;
     }
     case 'camera': {
-      if (Platform.OS !== 'android') return 'The live camera needs Android.';
+      if (Platform.OS !== 'android') return IPHONE.liveCamera;
       // Pause / resume keep the service, so they also work with the phone locked.
       if (cmd.pause && liveCameraOn()) {
         pauseLiveCamera(!cmd.on);
@@ -131,7 +135,7 @@ async function execute(
       return startLiveCamera() ? 'Camera on.' : 'Tap the camera button to turn it on.';
     }
     case 'cameraSetting': {
-      if (Platform.OS !== 'android') return 'Changing camera settings needs Android.';
+      if (Platform.OS !== 'android') return IPHONE.cameraSettings;
       const t = currentTuning();
       const r = recommended();
       const lens = getSettings().cameraLens === 'front' ? 'front' : 'back';
@@ -153,6 +157,7 @@ async function execute(
       return reply;
     }
     case 'watch': {
+      if (Platform.OS !== 'android') return IPHONE.liveCamera;
       const original = originalWords(question, cmd.what);
       if (looksLikeName(original))
         return `I can't recognise people by their face, so I can't watch for ${original}. I can watch for things like "a red car" or "the number 12 bus".`;
@@ -172,7 +177,7 @@ async function execute(
       return listWatches(currentWatches());
     case 'scan': {
       const path = photoNow ?? latestFramePaths(1)[0] ?? null;
-      if (!path) return 'Point the camera at the code, then say "scan this".';
+      if (!path) return platformText('scanNeedsPhoto');
       const codes = await scanCodes(path);
       if (!codes.length) return "I can't find a QR code or barcode. Hold it closer and steadier.";
       postCodeCards(codes);

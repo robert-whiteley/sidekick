@@ -24,7 +24,7 @@ Read this before proposing any of these again. Each line says why.
 
 - **Pocket TTS on the Pixel 5:** first sound 3.8–4.3 s per sentence while Gemma is still writing (laptop: 0.6 s; voice-sample length makes no difference). The app falls back to the system voice automatically when a short sentence takes over 2.5 s. Faster phones keep Pocket. Background model passes (names, follow-ups) now wait while Sidekick answers or speaks (`foreground-gate.ts`, max 3 min), so they no longer slow the first sound further.
 
-- **iOS:** deferred. No OCR, assistant role, tile or widget there yet.
+- **iOS:** built 26 Nov (section "iPhone (26 Nov)" below); not yet run on an iPhone.
 
 ## Later (not built yet)
 
@@ -159,7 +159,7 @@ Read this before proposing any of these again. Each line says why.
 - Built: a location track (encrypted DB) while Listening / Live camera runs (native, journaled) or the app is open (every 5 min); places named by voice ("call this place the gym", "this is home"); where am I / where was I at 3 / where did I park / when was I last at X / how long at X / where have I been; enter/leave events for routines (`onPlaceChange`, `src/engine/location-track.ts`); weather from MET Norway (Online lookup only, position rounded to ~1 km). Settings → Privacy → Location (switch, places, delete history).
 - No ACCESS_BACKGROUND_LOCATION: Play requires a declaration and review for it, and Android 14+ blocks while-in-use location in services started from the background. Positions are kept only while the user-started service runs or the app is open; when Android restarts the service on its own (in the background) it restarts without location (and stops instead of crashing if Android refuses the start).
 - Parking: marked when a car kit's Bluetooth (by name, as hands-free mode) disconnects while Sidekick runs; otherwise guessed from the first slow fix after driving speed, which can be a few hundred metres off (updates are at most every 5 min / 100 m to save battery).
-- Place names offline: GeoNames cities500 (every town and village ≥ 500 people, 226 551 places) packed to 5.2 MB (2.7 MB in the download), replacing the 1.4 MB towns ≥ 15 000 table. Android only for now (iOS gets no place name until the pack is bundled there). Street names come from Android's Geocoder (Google, online) only when Online lookup is on.
+- Place names offline: GeoNames cities500 (every town and village ≥ 500 people, 226 551 places) packed to 5.2 MB (2.7 MB in the download), replacing the 1.4 MB towns ≥ 15 000 table. On iPhone the same pack is bundled in the app (26 Nov). Street names come from Android's Geocoder (Google, online) only when Online lookup is on.
 - Rejected: Open-Meteo (free tier is non-commercial only). MET Norway needs an identifying User-Agent: "Sidekick/1.0 https://robert-whiteley.github.io/sidekick-site" (no personal details).
 - Left out: named places in the Timeline (it shows the town); Android 16 "home/work" from Google is not readable by apps. Frequent places are now offered for naming once, while the user is there ("You're often here (near Banbury, evenings). Name it?" Home / Work / Other… / Not now; never asked again for that spot).
 - Place routines ("when I get home …") run only while Sidekick is open or listening (its foreground service reads the position). Left out with the app fully closed: it needs ACCESS_BACKGROUND_LOCATION, which Google Play allows only after a Permissions Declaration (core-feature justification, a prominent in-app disclosure, a demo video, review; often refused when the feature isn't the app's main purpose), and Android geofencing comes from Google Play services (closed source). Owner's call if wanted later.
@@ -222,4 +222,76 @@ Read this before proposing any of these again. Each line says why.
 ## One look on Android and iOS (25 Nov)
 
 - The UI is one shared component library (`src/ui`) with one token file, identical on both platforms (owner: same on iOS and Android); `__tests__/ui-conventions-test.ts` fails when a screen bypasses it without a `// ui-exception: <why>`.
-- Later (with the iOS work): icons still come from each phone's own set (Material Symbols on Android, SF Symbols on iOS via expo-symbols). Making them identical means bundling the Material Symbols font (Apache-2.0) on iOS too.
+- Icons: identical since 26 Nov. Android draws Material Symbols through expo-symbols; the iPhone draws the same glyphs from the bundled Material Symbols font (Apache-2.0, `@expo-google-fonts/material-symbols`), checked against expo-symbols' codepoints by `__tests__/icons-test.ts`.
+
+## iPhone (26 Nov)
+
+Built for the App Store from the same code (no Mac: EAS builds in the cloud). Swift in
+`modules/sidekick-native/ios/`; every native call Swift doesn't implement has a safe iPhone answer in
+`modules/sidekick-native/src/ios-fallbacks.ts` (a test fails if one is missing), so nothing crashes or
+hangs. Not compiled locally (no Swift toolchain on Linux); the first EAS build is the compile check.
+
+Works on iPhone: chat by typing or holding the mic (Apple Speech, on the device), the Gemma model and
+memory search (LiteRT-LM Swift, CPU), photos and "what am I looking at?", text in photos (Apple
+Vision instead of the PaddleOCR models), QR/barcodes, PDFs, memory and recall, reminders, calendar,
+contacts, maps, battery/storage/steps (Core Motion through expo-sensors), place names (the same
+GeoNames pack, location "while using" through expo-location), the model download (background
+URLSession through expo-file-system), app lock, export and delete-everything, online lookup.
+
+Left out on iPhone, with why (users see the reason in Phone features, Connections or the reply):
+
+- **Background listening, wake word, live conversation notes:** iOS doesn't let an app keep the
+  microphone on in the background for this. Hold the mic instead. Reply: "iPhone apps can't listen
+  in the background. Hold the mic button to ask." Privacy hides Consent mode, Instructions only and
+  pause places (push-to-talk takes only the owner's own question); Auto-pause becomes "Quiet hours"
+  (the times "Quiet at night" uses).
+- **Live camera memory and "tell me when you see…":** iOS doesn't let apps film in the background, and
+  there is no USB camera API for apps. Reply: "iPhone apps can't film in the background, so there is
+  no live camera. Tap the camera button to take a photo, then ask about it." "What am I looking at?"
+  (or "what is this?", "watch live") with the camera closed opens the camera instead of asking the
+  model; the next send takes the photo. The iPhone system prompt says the same, so the model doesn't
+  guess (it once talked about "Android phones").
+- **Routines:** an iPhone app can't wake itself at a time or on an event to run the model. Reply:
+  "Routines aren't possible on iPhone…"; the Routines settings row is hidden. Reminders still arrive (local
+  notifications).
+- **Quick Settings tile, home-screen widget, default assistant:** Android features; iOS equivalents
+  (widget extension, Siri/App Intents) need a native target — later, if asked for. Not listed in
+  Phone features on iPhone (nor USB camera, heat protection or the two-mic split).
+- **Notifications, messages, calls, alarms, timers, media, phone controls, screen time, Google
+  (Gmail, Tasks, Drive):** iOS gives apps no access to other apps' notifications, texts, call log,
+  alarms or system switches; Google sign-in isn't set up for iOS. Shown as "Not possible on iPhone"
+  (Google ones: "Not on iPhone yet: Google sign-in isn't set up for iPhone").
+- **Natural voice (Pocket TTS):** not ported (ONNX Runtime iOS build not added); the iPhone's own voice
+  reads answers.
+- **GPU/NPU for the model:** the LiteRT-LM xcframework used (v0.19.1) is CPU only for the Swift API;
+  the iPhone downloads only the generic model (3.0 GB vs 3.5 GB on Android).
+- **Background audio mode** (`UIBackgroundModes: audio`) removed: the iPhone app answers only while
+  open, and Apple rejects background modes an app doesn't need.
+- **China mainland:** not offered (App Store availability). Generative AI apps there need a CAC
+  Security Assessment and an AIGC filing through a local entity, which a free open-source app can't do.
+- **Android wording (26 Nov polish):** every text that differs by platform lives in
+  `src/engine/platform-text.ts` (Face ID / passcode, App Store, "Save to Photos" instead of
+  Pictures/Sidekick folders, location only "while Sidekick is open"); `__tests__/ios-wording-test.tsx`
+  renders the settings screens as an iPhone and fails on Android-only words. Replies no longer say
+  "needs Android": they say what the iPhone can't do and what to do instead. Left Android-only:
+  "Understand other languages around me" (Listen only; Apple Speech hears the question), conversation
+  notes, "Read new messages aloud", the AI chip section (CPU only), video / stills / conversation
+  audio keep periods. The privacy policy and changelog cover both phones and are unchanged.
+- **Download after the app is killed:** the background download continues while the app is
+  suspended, but if the user force-quits Sidekick it restarts on the next open (no resume data kept).
+
+## Voices and transcription bench (26 Nov; details in docs/BENCH.md)
+
+- Built: lines are cut where the voice changes (pauses ≥ 0.25 s, 2 s blocks in non-stop speech,
+  cut when similarity < 0.4); reply-expected name cues wait for the reply; three more intro cues.
+- Rejected: same-voice threshold 0.6 (from 0.55). Slightly better in clean audio (named 45% → 50%)
+  but worse with room echo; kept 0.55.
+- Rejected: cutting at short pauses without word timing (each part transcribed alone). Splits people
+  as well, but words on cut parts got much worse (WER 7% → 18.5% in babble at 10 dB).
+- Left: similar voices merging across conversations, misheard unusual names, overlapping speech in
+  one line, and loud babble (5 dB and below) where words and voices both fall apart.
+- Built (descriptions): short pieces that sound alike (≥ 0.5) add up to a new person once they
+  total 2.5 s, so people who only say short things get a voice and a role instead of "Someone".
+  The voice bench now scores names and descriptions together.
+- Rejected: 0.55 or 0.6 for "sound alike" when adding up short pieces (fewer people found, more
+  "Someone"); kept 0.5.

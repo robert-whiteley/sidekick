@@ -7,6 +7,7 @@ import { applySpeechModel, speechModelsReady } from './language';
 import { MODEL_FILES, OPTIONAL_SPEECH_FILES } from './models';
 import { modelsDir } from './paths';
 import { askLocationPermission, pushPauseRules } from './places';
+import { IPHONE } from './platform-text';
 import { SYSTEM_PROMPT } from './prompts';
 import { getSettings } from './settings';
 import { listenPlan } from './listen-mode';
@@ -64,6 +65,11 @@ export function configureListening() {
 export async function askMicPermission(): Promise<boolean> {
   const mic = await Camera.requestMicrophonePermissionsAsync();
   if (!mic.granted) return false;
+  // iPhone: push-to-talk uses Apple's on-device speech recognizer, which has its own permission.
+  if (Platform.OS === 'ios') {
+    await SidekickNative.speechRequestAccess?.().catch(() => false);
+    return true;
+  }
   if (Platform.OS === 'android' && Platform.Version >= 33) {
     await PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS);
   }
@@ -74,6 +80,8 @@ export async function askMicPermission(): Promise<boolean> {
 
 /** Starts background listening. Must be called from a visible screen (Android rule). */
 export async function startListening(): Promise<string | null> {
+  // iOS doesn't let apps keep the microphone on in the background (ADR 0006).
+  if (Platform.OS === 'ios') return IPHONE.listen;
   if (!speechReady()) return 'Speech models are not downloaded yet.';
   if (!(await askMicPermission())) return 'Microphone permission is needed to listen.';
   configureListening();
