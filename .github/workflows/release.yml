@@ -1,0 +1,54 @@
+name: Release
+# Builds in the EAS cloud and uploads to the stores, so releases work from any session (cloud or
+# laptop): `gh workflow run release.yml -f platform=all -f track=alpha`.
+# Production ("store") only after the owner says go.
+on:
+  workflow_dispatch:
+    inputs:
+      platform:
+        description: android, ios or all
+        type: choice
+        options: [all, android, ios]
+        default: all
+      track:
+        description: Play track (iOS always goes to TestFlight)
+        type: choice
+        options: [alpha, internal, beta, store]
+        default: alpha
+permissions:
+  contents: read
+concurrency: release
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - uses: expo/expo-github-action@5273c2136bd09c2a341fe3340d3e767ce5a13015 # 9.0.2
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+      - run: npm ci
+      - name: Play upload key
+        if: inputs.platform != 'ios'
+        env:
+          KEY: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
+        run: |
+          [ -n "$KEY" ] || { echo "GOOGLE_SERVICE_ACCOUNT_JSON secret missing (docs/RELEASE.md)"; exit 1; }
+          printf '%s' "$KEY" > google-service-account.json
+      - name: Build
+        run: eas build --platform ${{ inputs.platform }} --profile production --non-interactive --wait
+      - name: Upload to Play
+        if: inputs.platform != 'ios'
+        run: >-
+          eas submit --platform android --latest --non-interactive
+          --profile ${{ inputs.track == 'internal' && 'production' || (inputs.track == 'beta' && 'open' || (inputs.track == 'store' && 'store' || 'closed')) }}
+      - name: Upload to TestFlight
+        if: inputs.platform != 'android'
+        run: eas submit --platform ios --latest --non-interactive --profile production
+      - if: always()
+        run: rm -f google-service-account.json

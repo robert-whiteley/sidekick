@@ -90,3 +90,28 @@ third-party content). An empty extra draft submission sits in App Store Connect;
 - **Saving to the gallery** now runs without READ_MEDIA permissions (blocked for Play's photo policy). Check Save in the moment player on the phone.
 - **CALL_PHONE** is now declared. Check "call Sam" on the phone.
 - **Background playback** of saved clips is off (no mediaPlayback service). Clips stop if the app is left.
+
+## Releasing from any session (cloud or laptop)
+
+Future sessions run in the cloud, which has no local key files and no phone. Everything that ships
+goes through GitHub Actions instead, so it works the same from the cloud or the laptop:
+
+- **Store builds and uploads:** `gh workflow run release.yml -f platform=all -f track=alpha`
+  (`.github/workflows/release.yml`): EAS builds Android and iOS, uploads the AAB to Play (track
+  `alpha` = closed test; `internal`, `beta`, `store` = production only after the owner's go) and the
+  iOS build to TestFlight. Watch with `gh run watch`.
+- **Quick fixes (OTA):** every merge to `main` publishes an EAS update to the `preview` channel (CI).
+  Promote with `eas update:republish --channel production` (needs `EXPO_TOKEN`; run it through a
+  workflow from the cloud).
+- **Secrets (GitHub → Settings → Secrets → Actions):** `EXPO_TOKEN` (set) and
+  `GOOGLE_SERVICE_ACCOUNT_JSON` (the Play upload key, the same one Pocket Animals uses; the owner adds
+  it once with
+  `gh secret set GOOGLE_SERVICE_ACCOUNT_JSON -R robert-whiteley/sidekick < ~/pocket_animals/frontend/google-service-account.json`).
+  iOS signing and the App Store Connect upload key live on EAS (set up with `eas credentials -p ios`,
+  26 Nov), so nothing for iOS is needed in GitHub.
+- **Play release status:** Play only accepts draft releases until the app's first review passes;
+  `eas.json` uses `releaseStatus: draft`, so after each upload roll the draft out in Play Console
+  (Closed testing → Edit release → Start rollout). Once the app is approved, switch `closed` to
+  `completed` so uploads reach testers without a click.
+- **Phone testing** needs the laptop (adb over Wi-Fi to the Pixel 5; `scripts/phone.sh`). The cloud
+  can build and ship but can't test on a phone.
