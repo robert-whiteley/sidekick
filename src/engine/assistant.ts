@@ -62,6 +62,7 @@ import { repeatLabel } from '@/memory/repeat-logic';
 import { personPromptContext } from '@/memory/people';
 import { queueOnline } from '@/engine/online-queue';
 import { askWithLookup, type WebSource } from '@/web/lookup';
+import { webLinkWanted } from '@/web/lookup-logic';
 import { answerLocation } from './location';
 import { feedbackRule, resolveTimeWithModel, routeWithTools, type RouteOutcome } from './tools';
 import { forgetRanges } from '@/memory/time-range';
@@ -96,6 +97,11 @@ export type AnswerResult = {
   media?: { momentAt: number; kind: 'video' | 'photo' | 'audio'; path?: string }[];
   /** Offline search hand-off: show the browser link with these words (opened only on tap). */
   browserQuery?: string;
+  /**
+   * Show the "Search the web in your browser" link: online lookup is off and the question needs
+   * the web (news, latest, an explicit search), or a lookup ran and found nothing.
+   */
+  webLink?: boolean;
   /** It needed the internet and there was none: kept for later (online-queue.ts). */
   waitingOnline?: boolean;
 };
@@ -550,6 +556,10 @@ export async function answer(
     ttftMs: stats.ttftMs,
     web,
     webQuery,
+    webLink:
+      !looked.offline &&
+      !image &&
+      (getSettings().webLookup ? !!webQuery && !web.length : webLinkWanted(question)),
     waitingOnline: (looked.offline && !offRecord) || undefined,
     media: recall?.media
       ? [{ momentAt: recall.media.at, kind: recall.media.kind, path: recall.media.path }]
