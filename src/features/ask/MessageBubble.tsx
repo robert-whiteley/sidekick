@@ -2,7 +2,7 @@ import * as Clipboard from 'expo-clipboard';
 import { memo } from 'react';
 import { Share, StyleSheet, View } from 'react-native';
 
-import { AppText, radius, showDialog, space, Tappable } from '@/ui';
+import { AppText, Markdown, radius, showDialog, space, Tappable } from '@/ui';
 
 import type { ChatMessage } from './chat-logic';
 import { Icon } from './Icon';
@@ -10,12 +10,28 @@ import { MediaMoment } from './MediaMoment';
 import type { ChatTheme } from './theme';
 import { WebSearchLink, WebSources } from './WebLookupUi';
 
-/** Long-press a message: copy or share it. */
-export function messageActions(text: string) {
-  showDialog('Message', undefined, [
-    { text: 'Copy', onPress: () => void Clipboard.setStringAsync(text) },
-    { text: 'Share', onPress: () => void Share.share({ message: text }) },
-    { text: 'Cancel', style: 'cancel' },
+/** What a long-press can ask the chat to do with a message. */
+export type MessageAction = 'edit' | 'retry' | 'read';
+
+/**
+ * Long-press a message: copy or share it; an answer can be read aloud. On the last exchange,
+ * your question can be edited and the answer tried again (chat-logic.ts lastExchange).
+ */
+export function messageActions(
+  m: ChatMessage,
+  redo: boolean,
+  onAction?: (m: ChatMessage, action: MessageAction) => void,
+) {
+  const user = m.role === 'user';
+  const act = (a: MessageAction) => () => onAction?.(m, a);
+  showDialog(user ? 'Your question' : 'Answer', undefined, [
+    ...(redo && onAction
+      ? [{ text: user ? 'Edit' : 'Try again', onPress: act(user ? 'edit' : 'retry') }]
+      : []),
+    ...(!user && onAction ? [{ text: 'Read aloud', onPress: act('read') }] : []),
+    { text: 'Copy', onPress: () => void Clipboard.setStringAsync(m.text) },
+    { text: 'Share', onPress: () => void Share.share({ message: m.text }) },
+    { text: 'Cancel', style: 'cancel' as const },
   ]);
 }
 
@@ -28,12 +44,18 @@ export const MessageBubble = memo(function MessageBubble({
   theme,
   speaking,
   onMute,
+  redo = false,
+  onAction,
 }: {
   m: ChatMessage;
   theme: ChatTheme;
   /** This answer is being read out: show a mute button. */
   speaking?: boolean;
   onMute?: () => void;
+  /** Part of the last exchange: Edit (question) / Try again (answer) on long-press. */
+  redo?: boolean;
+  /** Stable (memo): Edit, Try again or Read aloud chosen on this message. */
+  onAction?: (m: ChatMessage, action: MessageAction) => void;
 }) {
   const user = m.role === 'user';
   const text = m.text || (m.pending ? '…' : '');
@@ -46,13 +68,24 @@ export const MessageBubble = memo(function MessageBubble({
         <Tappable
           feedback="none"
           hitSlop={0}
-          onLongPress={() => m.text && messageActions(m.text)}
-          accessibilityHint="Long-press to copy or share"
+          onLongPress={() => m.text && !m.pending && messageActions(m, redo, onAction)}
+          accessibilityHint={
+            redo
+              ? user
+                ? 'Long-press to edit, copy or share'
+                : 'Long-press to try again, read aloud, copy or share'
+              : 'Long-press to copy or share'
+          }
           style={user ? [styles.user, { backgroundColor: theme.userBubble }] : styles.assistant}
         >
-          <AppText variant="chat" style={{ color: user ? theme.userText : theme.text }}>
-            {text}
-          </AppText>
+          {user ? (
+            <AppText variant="chat" style={{ color: theme.userText }}>
+              {text}
+            </AppText>
+          ) : (
+            // Typed answers may have lists, steps, bold or a small table (prompts.ts).
+            <Markdown text={text} color={theme.text} />
+          )}
         </Tappable>
       ) : null}
       {!user && m.web?.length ? <WebSources sources={m.web} /> : null}

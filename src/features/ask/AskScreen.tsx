@@ -22,6 +22,7 @@ import {
   radius,
   space,
   Tappable,
+  TextButton,
   useScheme,
 } from '@/ui';
 
@@ -29,6 +30,7 @@ import SidekickNative from '../../../modules/sidekick-native';
 import {
   answer as answerQuestion,
   DEFAULT_PHOTO_QUESTION,
+  forgetLastExchange,
   leaveOffTheRecord,
 } from '@/engine/assistant';
 import {
@@ -113,11 +115,14 @@ import { loadChatHistory } from './chat-history';
 import {
   type ChatMedia,
   type ChatMessage,
+  type Exchange,
   isMicTap,
+  lastExchange,
   mediaForAnswer,
   partialStatus,
   patchMessage,
   shouldSpeak,
+  withoutExchange,
   withoutOffRecord,
 } from './chat-logic';
 import { ChatHeader } from './ChatHeader';
@@ -126,7 +131,7 @@ import { Composer } from './Composer';
 
 import { LiveConversation } from './LiveConversation';
 import { DraftCard } from './DraftCard';
-import { MessageBubble } from './MessageBubble';
+import { type MessageAction, MessageBubble } from './MessageBubble';
 import { NoticeItem, useNotices } from './NoticeLines';
 import { ScreenGrabBar } from './ScreenGrabBar';
 import { DARK, LIGHT } from './theme';
@@ -175,6 +180,17 @@ export function AskScreen({
   const [useCamera, setUseCamera] = useState(false);
   const [question, setQuestion] = useState('');
   const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const messagesRef = useRef(messages);
+  useEffect(() => {
+    messagesRef.current = messages;
+  }, [messages]);
+  /** Edit: the last exchange whose question is back in the box; sending replaces it. */
+  const [editing, setEditingState] = useState<Exchange | null>(null);
+  const editingRef = useRef<Exchange | null>(null);
+  const setEditing = (x: Exchange | null) => {
+    editingRef.current = x;
+    setEditingState(x);
+  };
   const [status, setStatus] = useState('');
   const [phase, setPhase] = useState<Phase>('loading');
   const [listening, setListening] = useState(isListening());
@@ -689,13 +705,19 @@ export function AskScreen({
     if (ok) setAttachment(null);
   };
 
-  const ask = async (spoken?: string, followUp = false, offRecordNow = offRecordRef.current) => {
+  const ask = async (
+    spoken?: string,
+    followUp = false,
+    offRecordNow = offRecordRef.current,
+    /** Try again: this text, replacing the last exchange (the composer is left as it is). */
+    again?: { text: string; replace: Exchange },
+  ) => {
     // A screenshot from the assist key is for questions asked soon after, not ones much later.
     const att = attachmentRef.current;
     const grab = !att && screen && Date.now() - screen.at < SCREEN_TTL_MS ? screen : null;
     if (screen && !grab) setScreen(null);
     const q =
-      (spoken ?? question).trim() ||
+      (again?.text ?? spoken ?? question).trim() ||
       (att ? 'Summarise this.' : '') ||
       (grab
         ? grab.shared
@@ -710,6 +732,14 @@ export function AskScreen({
       return;
     }
     if (!q || busyRef.current) return;
+    // Edit (the typed question sent from the box) or Try again: replaces the last exchange, if
+    // it still is the last one. Anything else asked meanwhile ends the edit.
+    const target = again?.replace ?? (spoken === undefined ? editingRef.current : null);
+    const replace =
+      target && !offRecordNow && lastExchange(messagesRef.current)?.reply.id === target.reply.id
+        ? target
+        : null;
+    if (editingRef.current) setEditing(null);
     // iPhone: no live camera to look through (ADR 0006). "What am I looking at?" with the camera
     // closed opens it instead of asking the model blind; the next send takes the photo.
     if (onIphone() && !grab && !cameraOn && wantsCameraNow(q)) {
@@ -738,7 +768,14 @@ export function AskScreen({
     const at = Date.now();
     const userId = `u${at}`;
     const replyId = `a${at}`;
-    setQuestion('');
+    if (!again) setQuestion('');
+    if (replace) {
+      // Out of the model's chat, the saved chat and memory before it is asked again.
+      await forgetLastExchange(replace.reply.text, replace.reply.momentId).catch((e) =>
+        console.log(`[chat] forgetting the last exchange failed: ${String(e)}`),
+      );
+      setMessages((m) => withoutExchange(m, replace));
+    }
     const routine = routineRef.current;
     routineRef.current = null;
     setMessages((m) => [
@@ -802,6 +839,7 @@ export function AskScreen({
         },
         onFound: (media: ChatMedia[]) => setMessages((m) => patchMessage(m, replyId, { media })),
         routine: !!routine,
+        voiceAnswer: speak,
       } as Parameters<typeof answerQuestion>[3];
       holdLiveCamera(true);
       const onAnswerText = (full: string) => {
@@ -856,8 +894,10 @@ export function AskScreen({
           media: mediaForAnswer(r as typeof r & { media?: ChatMedia[] }),
           draftId: r.draftId,
           textResult: att?.kind === 'selection' || undefined,
+          momentId: r.momentId,
         }),
       );
+      if (r.momentId != null) setMessages((m) => patchMessage(m, userId, { momentId: r.momentId }));
       if (!speak) conversation.current.answered(Date.now());
       setStatus('');
       const src = r.sources.length ? ` · ${r.sources.length} memories` : '';
@@ -878,7 +918,37 @@ export function AskScreen({
       if (next) setTimeout(() => askRef.current(next.q, next.followUp), 0);
     }
   };
+  // Long-press on a message: Edit, Try again (last exchange only) or Read aloud.
+  const onMessageAction = (m: ChatMessage, action: MessageAction) => {
+    if (busyRef.current) return;
+    if (action === 'read') {
+      speaker.current?.stop();
+      const sp = new StreamingSpeaker(true);
+      speaker.current = sp;
+      // Android says when the voice is done (onVoiceIdle clears the mute button).
+      setSpeakingId(Platform.OS === 'android' ? m.id : null);
+      sp.finish(m.text);
+      return;
+    }
+    const x = lastExchange(messagesRef.current);
+    if (!x || (x.question.id !== m.id && x.reply.id !== m.id)) return;
+    if (action === 'edit') {
+      setQuestion(x.question.text);
+      setEditing(x);
+      return;
+    }
+    const spokenText = x.question.spoken ? x.question.text : undefined;
+    void ask(spokenText, false, offRecordRef.current, { text: x.question.text, replace: x });
+  };
+  const actionRef = useRef(onMessageAction);
+  const messageAction = useCallback(
+    (m: ChatMessage, a: MessageAction) => actionRef.current(m, a),
+    [],
+  );
+  const redoable = useMemo(() => (busy ? null : lastExchange(messages)), [busy, messages]);
+
   useEffect(() => {
+    actionRef.current = onMessageAction;
     askRef.current = (q: string, followUp?: boolean) => void ask(q, followUp);
     routineAskRef.current = (q: string) => ask(q);
     holdEndRef.current = () => void holdEnd();
@@ -1026,6 +1096,8 @@ export function AskScreen({
                     theme={theme}
                     speaking={speakingId === it.m.id}
                     onMute={speakingId === it.m.id ? mute : undefined}
+                    redo={redoable?.question.id === it.m.id || redoable?.reply.id === it.m.id}
+                    onAction={messageAction}
                   />
                   {it.m.draftId ? <DraftCard id={it.m.draftId} theme={theme} /> : null}
                   {it.m.textResult && !it.m.pending && it.m.text ? (
@@ -1111,6 +1183,21 @@ export function AskScreen({
             </View>
           ) : null}
 
+          {editing ? (
+            <View style={styles.editing}>
+              <AppText variant="bodySmall" style={[styles.flex, { color: theme.faint }]}>
+                Editing your last question: sending replaces it and its answer.
+              </AppText>
+              <TextButton
+                title="Cancel"
+                onPress={() => {
+                  setEditing(null);
+                  setQuestion('');
+                }}
+              />
+            </View>
+          ) : null}
+
           <Composer
             theme={theme}
             value={question}
@@ -1148,6 +1235,12 @@ const styles = StyleSheet.create({
     gap: space.lg,
   },
   empty: { textAlign: 'center', marginTop: space.xxxl },
+  editing: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: space.sm,
+    paddingHorizontal: space.lg,
+  },
   status: { textAlign: 'center' },
   // Shrinks (not overflows) when the keyboard takes space, so the composer stays above it.
   cameraBox: {

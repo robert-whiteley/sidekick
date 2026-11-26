@@ -29,6 +29,16 @@ export type Settings = {
    */
   consent: ConsentChoice;
   speakAnswers: boolean;
+  /**
+   * "How Sidekick answers": the user's own short instructions (at most 300 characters, e.g.
+   * "keep answers short, call me Rob, metric units"), added to the chat's system prompt.
+   */
+  answerStyle: string;
+  /**
+   * Suggest facts about health, religion or beliefs, sexuality, politics or money (yours or other
+   * people's). Off by default: the model leaves them out of its fact suggestions.
+   */
+  suggestSensitiveFacts: boolean;
   /** Save photos taken for questions into memory. */
   rememberPhotos: boolean;
   /** Delete memories older than this many days (0 = keep forever). */
@@ -147,6 +157,8 @@ export const DEFAULTS: Settings = {
   recordConversations: true,
   consent: 'auto',
   speakAnswers: true,
+  answerStyle: '',
+  suggestSensitiveFacts: false,
   rememberPhotos: true,
   retentionDays: 0,
   quietHours: false,

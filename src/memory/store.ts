@@ -686,9 +686,13 @@ export async function suggestFacts(texts: string[]) {
 }
 
 /** Saves a photo question: the original image is kept so detail questions can re-read it. */
-export async function rememberPhotoQuestion(tmpPhoto: string, question: string, answer: string) {
+export async function rememberPhotoQuestion(
+  tmpPhoto: string,
+  question: string,
+  answer: string,
+): Promise<number | undefined> {
   // Phone storage full: not remembered (the answer was still given).
-  if (!mayGrowMemory()) return;
+  if (!mayGrowMemory()) return undefined;
   const db = await getDb();
   const at = Date.now();
   let photoPath: string | null = null;
@@ -701,6 +705,7 @@ export async function rememberPhotoQuestion(tmpPhoto: string, question: string, 
     ['photo', at, `Q: ${question}\nA: ${answer}`, photoPath],
   );
   await tagPlace(r.insertId!, here());
+  return r.insertId!;
 }
 
 /**
@@ -810,7 +815,8 @@ export async function savePhotoDescription(momentId: number, description: string
   ]);
 }
 
-export async function rememberExchange(question: string, answer: string) {
+/** Saves a question and its answer; returns the moment's id (Edit / Try again remove it). */
+export async function rememberExchange(question: string, answer: string): Promise<number> {
   const db = await getDb();
   const r = await db.execute('INSERT INTO moments (kind, at, text) VALUES (?, ?, ?)', [
     'answer',
@@ -818,6 +824,7 @@ export async function rememberExchange(question: string, answer: string) {
     `Q: ${question}\nA: ${answer}`,
   ]);
   await tagPlace(r.insertId!, here());
+  return r.insertId!;
 }
 
 export async function saveFact(text: string, status: 'saved' | 'suggested' = 'saved') {
@@ -1245,6 +1252,8 @@ export async function exportEverything(): Promise<string> {
       people,
       facts,
       followups,
+      // Settings > Assistant: the user's own words.
+      howSidekickAnswers: getSettings().answerStyle,
     },
     null,
     2,

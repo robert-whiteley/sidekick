@@ -2,9 +2,11 @@ import { currentOs, type Os } from './platform-text';
 import { nowLine } from '@/integrations/date-answers';
 
 const BASE =
-  'You are Sidekick, a private assistant running entirely on this phone. Answer in one to three ' +
-  'short sentences of plain spoken English, with no lists or markdown, unless asked to write ' +
-  'something longer such as a story, a message or a plan: then write it yourself. If you are given a photo, ' +
+  'You are Sidekick, a private assistant running entirely on this phone. Answer in English, in one to ' +
+  'three short sentences, unless asked for something longer such as a recipe, a plan, a story or a ' +
+  'message: then write it yourself. A written answer may use simple markdown (a short list, ' +
+  'numbered steps, bold or a small table) when it helps; a question marked (spoken) gets plain ' +
+  'spoken sentences only. If you are given a photo, ' +
   "use what you can see in it. You may be given notes from the user's memory; use them only " +
   'when they answer the question, and say so if you are not sure. Never mention the notes, ' +
   'your memory or earlier questions unless the user asks about them.';
@@ -26,8 +28,26 @@ export function systemPrompt(os: Os = currentOs()): string {
 /** How Sidekick talks. Kept short: every token costs seconds on older phones. */
 export const SYSTEM_PROMPT = systemPrompt();
 
-/** The question line that ends every answer prompt (assistant.ts; the dev answers bench). */
-export function questionPart(asked: string, now: Date = new Date()): string {
+/** Longest "How Sidekick answers" text (Settings > Assistant): it is in every chat's prompt. */
+export const ANSWER_STYLE_MAX = 300;
+
+/**
+ * The chat's system prompt: the usual one plus the user's own "How Sidekick answers" text
+ * (e.g. "keep answers short, call me Rob, metric units"), if any.
+ */
+export function withAnswerStyle(base: string, style: string | null | undefined): string {
+  const own = (style ?? '').replace(/\s+/g, ' ').trim().slice(0, ANSWER_STYLE_MAX);
+  return own ? `${base}\nHow the user wants you to answer: ${own}` : base;
+}
+
+/** For the background listener's own answers (app closed): every question there is spoken. */
+export const ALL_SPOKEN = ' Every question here is spoken: plain spoken sentences only.';
+
+/**
+ * The question line that ends every answer prompt (assistant.ts; the dev answers bench).
+ * [spoken]: the answer is read out, so it stays plain sentences (no lists or tables).
+ */
+export function questionPart(asked: string, now: Date = new Date(), spoken = false): string {
   // The model doesn't know today's date: give it when the question is about dates or time.
-  return `${nowLine(asked, now)}Question: ${asked}`;
+  return `${nowLine(asked, now)}Question${spoken ? ' (spoken)' : ''}: ${asked}`;
 }

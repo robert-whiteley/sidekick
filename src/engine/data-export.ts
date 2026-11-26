@@ -5,6 +5,7 @@ import SidekickNative from '../../modules/sidekick-native';
 import { closeDb } from '@/memory/db';
 import { deleteEverything, exportEverything } from '@/memory/store';
 import { forgetConversation } from './assistant';
+import { updateSettings } from './settings';
 import { dataDir, modelsDir } from './paths';
 import { mediaDirs } from './storage-monitor';
 
@@ -89,6 +90,8 @@ export async function deleteAllData(): Promise<void> {
     // Not listening.
   }
   forgetConversation();
+  // "How Sidekick answers" goes too (settings are wiped below; this covers every path).
+  updateSettings({ answerStyle: '' });
   await SidekickNative.llmUnload().catch(() => {});
   await SidekickNative.embedUnload().catch(() => {});
   if (Platform.OS === 'ios') {

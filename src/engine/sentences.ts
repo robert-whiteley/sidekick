@@ -18,9 +18,21 @@ export function takeSentences(buffer: string): { done: string[]; rest: string } 
   return { done, rest: buffer.slice(last) };
 }
 
-/** Removes markdown symbols that a speech engine would read out loud. */
+/**
+ * Removes markdown a speech engine would read out loud: emphasis and code marks, headings, list
+ * bullets, links, and table pipes (a row is read as "a, b"; the |---| line is dropped).
+ */
 export function forSpeech(text: string): string {
   return text
+    .replace(/^\s*\|?(\s*:?-{2,}:?\s*\|)+\s*:?-*:?\s*$/gm, '')
+    .replace(/^\s*\|(.*?)\|?\s*$/gm, (_, row: string) =>
+      row
+        .split('|')
+        .map((c) => c.trim())
+        .filter(Boolean)
+        .join(', '),
+    )
+    .replace(/^\s*[-*+\u2022]\s+/gm, '')
     .replace(/[*_`#>]+/g, '')
     .replace(/\[(.*?)\]\(.*?\)/g, '$1')
     .replace(/\s+/g, ' ')

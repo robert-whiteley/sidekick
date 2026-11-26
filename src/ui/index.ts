@@ -7,6 +7,7 @@ export { Icon, type IconName } from './Icon';
 export { IconButton } from './IconButton';
 export { Card, Divider, Page, Paragraph, Section, TextField } from './Layout';
 export { ListRow } from './ListRow';
+export { Markdown } from './Markdown';
 export { OptionItem } from './OptionItem';
 export { Sheet } from './Sheet';
 export { Toggle } from './Toggle';

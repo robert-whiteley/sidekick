@@ -5,15 +5,43 @@
 
 export const MAX_FACT_LINES = 10;
 
-export function factPrompt(lines: string[]): string {
+/** The kinds of fact never suggested unless the user allows them (Settings > Memory). */
+export const SENSITIVE_TOPICS = 'health, religion or beliefs, sexuality, politics or money';
+
+/** [sensitiveOk]: Settings > Memory "Suggest private topics" (off by default). */
+export function factPrompt(lines: string[], sensitiveOk = false): string {
   return (
     'Below are things I said out loud. List only lasting personal facts about me or people close ' +
     'to me that I would want remembered later (codes, numbers, birthdays, names, preferences, ' +
     'plans with a date). Write each as a short sentence starting with "My" or a name, one per ' +
-    'line, no numbering. Do not guess or add anything I did not say. If there are none, write ' +
-    'exactly NONE.\n\n' +
+    'line, no numbering. Do not guess or add anything I did not say. ' +
+    (sensitiveOk ? '' : `Leave out anything about ${SENSITIVE_TOPICS}. `) +
+    'If there are none, write exactly NONE.\n\n' +
     lines.map((l) => `- ${l}`).join('\n')
   );
+}
+
+/**
+ * Things other people said about themselves, picked as possible facts for their page: the model
+ * says which touch a private topic, so those are never suggested (unless the user allows them).
+ */
+export function sensitiveCheckPrompt(quotes: string[]): string {
+  return (
+    `Which of these lines are about someone's ${SENSITIVE_TOPICS}? Reply with their numbers ` +
+    'separated by commas, or NONE.\n\n' +
+    quotes.map((q, i) => `${i + 1}. ${q}`).join('\n')
+  );
+}
+
+/**
+ * The model's reply → the 0-based indexes it marked private. Null when the reply is neither
+ * numbers nor NONE: then every line is treated as private (better to lose a suggestion).
+ */
+export function parseSensitive(reply: string, count: number): Set<number> | null {
+  const t = reply.trim();
+  if (/^\W*none\b/i.test(t)) return new Set();
+  const nums = (t.match(/\d+/g) ?? []).map(Number).filter((n) => n >= 1 && n <= count);
+  return nums.length ? new Set(nums.map((n) => n - 1)) : null;
 }
 
 const STOP = new Set(

@@ -8,7 +8,7 @@ import { MODEL_FILES, OPTIONAL_SPEECH_FILES } from './models';
 import { modelsDir } from './paths';
 import { askLocationPermission, pushPauseRules } from './places';
 import { IPHONE } from './platform-text';
-import { SYSTEM_PROMPT } from './prompts';
+import { ALL_SPOKEN, SYSTEM_PROMPT, withAnswerStyle } from './prompts';
 import { getSettings } from './settings';
 import { listenPlan } from './listen-mode';
 import { DEFAULT_WAKE_PHRASE, parseSentencepiece, wakeKeywordLines } from './wake-word';
@@ -43,6 +43,14 @@ export function wakeLine(phrase: string): { line: string; phrase: string } {
   };
 }
 
+/** The background service answers with the same instructions as the app (all spoken there). */
+export function pushAssistantPrompt() {
+  SidekickNative.kvSet(
+    'assistant.system',
+    withAnswerStyle(SYSTEM_PROMPT + ALL_SPOKEN, getSettings().answerStyle),
+  );
+}
+
 /**
  * Pushes settings to the native listener. While this JS runtime is alive (app open or in the
  * background) it answers questions, with memory; the service answers alone only if the app was closed.
@@ -52,8 +60,7 @@ export function configureListening() {
   const { line, phrase } = wakeLine(s.wakePhrase);
   // The speech-to-text build first (English, or 25 languages when that setting is on).
   applySpeechModel();
-  // The background service answers with the same instructions as the app.
-  SidekickNative.kvSet('assistant.system', SYSTEM_PROMPT);
+  pushAssistantPrompt();
   const plan = listenPlan(s);
   SidekickNative.listenConfigure(line, phrase, plan.recordAmbient, true);
   // Older native builds don't have it; the journal is still off for ambient speech then.

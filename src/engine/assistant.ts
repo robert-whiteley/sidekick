@@ -28,15 +28,16 @@ import {
   SUMMARY_MAX_TOKENS,
   SUMMARY_SYSTEM,
 } from './conversation';
-import { getSettings } from './settings';
+import { getSettings, onSettingsChange } from './settings';
 import { clearChatState, loadChatState, saveChatState } from '@/memory/chat-state';
 import { IPHONE, onIphone, platformText } from './platform-text';
-import { questionPart, SYSTEM_PROMPT } from './prompts';
+import { questionPart, SYSTEM_PROMPT, withAnswerStyle } from './prompts';
 import { keptFile } from '@/memory/media-files';
 import { speechClipFor } from './speech-clip';
 import type { Moment } from '@/memory/store';
 import { MEMORY_LIMIT, memoryContext, pickFacts } from './prompt-budget';
 import {
+  deleteMoment,
   rememberExchange,
   rememberPhotoQuestion,
   saveFact,
@@ -108,6 +109,8 @@ export type AnswerResult = {
   webLink?: boolean;
   /** It needed the internet and there was none: kept for later (online-queue.ts). */
   waitingOnline?: boolean;
+  /** The saved exchange (a model answer in the main chat): Edit / Try again can take it back. */
+  momentId?: number;
 };
 
 /**
@@ -135,16 +138,30 @@ function chatBudget(): number {
   }
 }
 
+/** The chat's instructions: the usual ones plus the user's "How Sidekick answers" text. */
+export const answerSystem = () => withAnswerStyle(SYSTEM_PROMPT, getSettings().answerStyle);
+
 /** The one continuous conversation (loaded from the phone on first use). */
 export function conversation(): Conversation {
   if (!chat) {
     chat = new Conversation(loadChatState(), chatBudget());
-    prepareChat(chatSystem(SYSTEM_PROMPT, chat.state));
+    prepareChat(chatSystem(answerSystem(), chat.state));
   }
   return chat;
 }
 
-setChatSystemSource(() => chatSystem(SYSTEM_PROMPT, conversation().state));
+setChatSystemSource(() => chatSystem(answerSystem(), conversation().state));
+
+// New "How Sidekick answers" text: the model's chat starts again with it (from the summary and
+// the last turns, so nothing said is lost).
+let styleNow = getSettings().answerStyle;
+onSettingsChange((st) => {
+  if (st.answerStyle === styleNow) return;
+  styleNow = st.answerStyle;
+  if (!chat) return;
+  chat.restart();
+  prepareChat(chatSystem(answerSystem(), chat.state));
+});
 
 /** The running summary and recent turns (for a "what we talked about" view). */
 export const chatState = () => conversation().state;
@@ -167,7 +184,7 @@ export function compactChat(reason: CompactReason) {
       save: saveChatState,
       prepare: prepareChat,
     },
-    SYSTEM_PROMPT,
+    answerSystem(),
   );
 }
 
@@ -188,8 +205,22 @@ export function leaveOffTheRecord() {
 export function forgetConversation() {
   conversation().reset();
   clearChatState();
-  prepareChat(SYSTEM_PROMPT);
+  prepareChat(answerSystem());
   lastQuestion = undefined;
+}
+
+/**
+ * Edit / Try again on the last exchange: it is taken back before the question is asked again,
+ * so the one continuous chat stays consistent. Its turn leaves the conversation (the model's
+ * chat starts fresh from the summary and the turns left), and its saved memory is deleted.
+ */
+export async function forgetLastExchange(answerText: string, momentId?: number): Promise<void> {
+  const c = conversation();
+  c.dropLast(answerText);
+  saveChatState(c.state);
+  prepareChat(chatSystem(answerSystem(), c.state));
+  lastQuestion = c.state.turns.at(-1)?.q;
+  if (momentId != null) await deleteMoment(momentId);
 }
 
 export async function answer(
@@ -216,6 +247,8 @@ export async function answer(
     forceLookup?: boolean;
     /** Dev answers bench: a routed action is reported, never done (no draft, timer or reminder). */
     dryActions?: boolean;
+    /** The answer will be read out: plain sentences, no lists or tables. */
+    voiceAnswer?: boolean;
   },
 ): Promise<AnswerResult> {
   onText = trackAnswer(onText); // "repeat that"
@@ -528,7 +561,7 @@ export async function answer(
   const idleBefore = conv.compactReason(Date.now()) === 'idle';
   // The model's chat continues; a fresh one (first question, after a restart or a compaction)
   // starts from the running summary and the last turns.
-  const system = chatSystem(SYSTEM_PROMPT, conv.state);
+  const system = chatSystem(answerSystem(), conv.state);
   let keep = offRecord ? offRecordStarted : conv.keepHistory();
   let promptChars = 0;
   const recent = conv.idleFor(Date.now()) < IDLE_COMPACT_MS;
@@ -537,7 +570,7 @@ export async function answer(
     question,
     !!image,
     (webPart) =>
-      `${agenda}${person}${webPart}${notes}${seenText}${recallPart}${questionPart(fitQuestion(recall?.modelQuestion ?? withClipboard(question) ?? question))}`,
+      `${agenda}${person}${webPart}${notes}${seenText}${recallPart}${questionPart(fitQuestion(recall?.modelQuestion ?? withClipboard(question) ?? question), new Date(), !!opts?.voiceAnswer)}`,
     async (prompt, t, o) => {
       // Would overflow the model's chat (compaction kept being interrupted): start fresh from
       // the summary and the last turns.
@@ -596,14 +629,19 @@ export async function answer(
   lastQuestion = question;
 
   // Off the record: nothing is kept, and the main conversation never hears of it.
+  let momentId: number | undefined;
   if (!offRecord) {
     conv.record(question, text, promptChars, Date.now());
     saveChatState(conv.state);
     const reason = idleBefore ? 'idle' : conv.compactReason(Date.now(), question);
     if (reason) compactChat(reason);
     scheduleIdleCompaction();
-    if (photoNow) await rememberPhotoQuestion(photoNow, question, text).catch(() => {});
-    else await rememberExchange(question, text).catch(() => {});
+    momentId =
+      (await (
+        photoNow
+          ? rememberPhotoQuestion(photoNow, question, text)
+          : rememberExchange(question, text)
+      ).catch(() => undefined)) ?? undefined;
   }
 
   return {
@@ -619,6 +657,7 @@ export async function answer(
       !image &&
       (getSettings().webLookup ? !!webQuery && !web.length : webLinkWanted(question)),
     waitingOnline: (looked.offline && !offRecord) || undefined,
+    momentId,
     media: recall?.media
       ? [{ momentAt: recall.media.at, kind: recall.media.kind, path: recall.media.path }]
       : speechClipFor(question, sources),
