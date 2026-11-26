@@ -1,6 +1,6 @@
 // Fixes found with the voice bench (bench/voice): name cues and the speaker choice.
 import { addresseeOf, findNameCues, replySettled } from '../src/memory/names';
-import { chooseSpeaker, VOICE_RULES } from '../src/memory/voices';
+import { chooseSpeaker, VOICE_RULES, voiceFromPending } from '../src/memory/voices';
 
 const names = (t: string) => findNameCues(t).map((c) => `${c.who}:${c.name}${c.strong ? '!' : ''}`);
 const u = (at: number, speakerId: number | null, isOwner = false) => ({ at, speakerId, isOwner });
@@ -71,5 +71,37 @@ describe('chooseSpeaker (store.ts assignSpeaker)', () => {
   it('rules can be changed (bench sweeps)', () => {
     const strict = { ...VOICE_RULES, sameVoice: 0.999 };
     expect(chooseSpeaker([0.1, 0.9, 0], false, 3000, false, [sam], strict).kind).toBe('new');
+  });
+});
+
+describe('voiceFromPending: short turns add up to a new person', () => {
+  const owner = { id: 1, centroid: [1, 0, 0], count: 5, isOwner: true };
+  const clip = (at: number, voice: number[], durationMs: number) => ({
+    at,
+    voice,
+    momentId: at,
+    durationMs,
+  });
+  it('a waiter who only says short things becomes a person once the clips add up', () => {
+    const waiting = [clip(1000, [0, 0.1, 1], 1400)];
+    const r = voiceFromPending([0, 0, 1], 1600, waiting, [owner], 5000);
+    expect(r?.group).toEqual(waiting);
+    expect(r?.centroid[2]).toBeCloseTo(1);
+  });
+  it('not while they are still too short together', () => {
+    expect(voiceFromPending([0, 0, 1], 900, [clip(1000, [0, 0, 1], 900)], [owner], 5000)).toBe(
+      null,
+    );
+  });
+  it('only clips that sound alike, and only recent ones', () => {
+    const other = clip(1000, [0, 1, 0], 2000);
+    expect(voiceFromPending([0, 0, 1], 1500, [other], [owner], 5000)).toBe(null);
+    const old = clip(1000, [0, 0, 1], 2000);
+    expect(voiceFromPending([0, 0, 1], 1500, [old], [owner], 1000 + 61_000)).toBe(null);
+  });
+  it('not when together they sound like someone already known', () => {
+    const sam = { id: 2, centroid: [0, 0.3, 1], count: 5, isOwner: false };
+    const near = [clip(1000, [0, 0.2, 1], 1500)];
+    expect(voiceFromPending([0, 0, 1], 1500, near, [sam], 5000)).toBe(null);
   });
 });

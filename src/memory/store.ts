@@ -39,6 +39,7 @@ import {
   cosine,
   ownerCentroid,
   type PendingClip,
+  voiceFromPending,
   type Speaker,
 } from './voices';
 import { applyAutoName, assignLabel, collectPersonInfo, type KeptLine } from './people';
@@ -131,7 +132,10 @@ async function assignSpeaker(
     `[voice] ${owner ? 'owner clip' : 'clip'} sims: ${all.map((x) => `${x.id}${x.isOwner ? '*' : ''}=${cosine(voice, x.centroid).toFixed(2)}`).join(' ')}`,
   );
   const choice = chooseSpeaker(voice, owner, durationMs, trusted, all);
-  if (choice.kind === 'none') return { speaker: null, owner: choice.owner };
+  if (choice.kind === 'none') {
+    if (choice.owner) return { speaker: null, owner: true };
+    return { speaker: await newVoiceFromShortClips(voice, durationMs, all), owner: false };
+  }
   if (choice.kind === 'join') {
     const s = choice.speaker;
     if (!choice.learn) return { speaker: s, owner: false };
@@ -176,6 +180,43 @@ async function claimWaitingClips(joined: Speaker, all: Speaker[]) {
     liveTranscript.relabel(c.at, joined.id);
   }
   console.log(`[voice] ${claimed.length} earlier short line(s) now voice ${joined.id}`);
+}
+
+/**
+ * A short unmatched clip that sounds like waiting ones: together they start a new person, and the
+ * earlier "Someone" lines become theirs. Null when they don't add up yet.
+ */
+async function newVoiceFromShortClips(
+  voice: number[],
+  durationMs: number | undefined,
+  all: Speaker[],
+): Promise<Speaker | null> {
+  const found = voiceFromPending(voice, durationMs, pendingClips, all, Date.now());
+  if (!found) return null;
+  const db = await getDb();
+  const r = await db.execute('INSERT INTO speakers (is_owner, centroid, count) VALUES (0, ?, ?)', [
+    JSON.stringify(found.centroid),
+    found.group.length + 1,
+  ]);
+  const s: Speaker = {
+    id: r.insertId!,
+    centroid: found.centroid,
+    count: found.group.length + 1,
+    isOwner: false,
+  };
+  await assignLabel(s.id);
+  pendingClips = pendingClips.filter((p) => !found.group.includes(p));
+  for (const c of found.group) {
+    if (c.momentId != null)
+      await db.execute('UPDATE moments SET speaker_id = ? WHERE id = ? AND speaker_id IS NULL', [
+        s.id,
+        c.momentId,
+      ]);
+    liveTranscript.relabel(c.at, s.id);
+  }
+  console.log(`[voice] ${found.group.length + 1} short lines together are a new voice ${s.id}`);
+  await claimWaitingClips(s, [...all, s]);
+  return s;
 }
 
 /** A push-to-talk clip is always the owner: use it to learn their voice. */
@@ -245,7 +286,8 @@ async function ingestJournalNow(): Promise<number> {
       if (!keepOtherSpeech({ consentMode, speakerConsented: consented })) {
         // Not kept: nor is their voice recording.
         if (e.audioPath) SidekickNative.deleteFile(e.audioPath);
-        if (!s && e.voice) pendingClips.push({ at: e.at, voice: e.voice, momentId: null });
+        if (!s && e.voice)
+          pendingClips.push({ at: e.at, voice: e.voice, momentId: null, durationMs: e.durationMs });
         liveTranscript.put({
           at: e.at,
           text: e.text,
@@ -262,7 +304,12 @@ async function ingestJournalNow(): Promise<number> {
     );
     await tagPlace(ins.insertId!, entryPlace(e));
     if (!s && !isOwner && e.voice)
-      pendingClips.push({ at: e.at, voice: e.voice, momentId: ins.insertId! });
+      pendingClips.push({
+        at: e.at,
+        voice: e.voice,
+        momentId: ins.insertId!,
+        durationMs: e.durationMs,
+      });
     kept.push({ id: ins.insertId!, at: e.at, speakerId: s?.id ?? null, isOwner, text: e.text });
     liveTranscript.put({ at: e.at, text: e.text, speakerId: s?.id ?? null, isOwner, saved: true });
     added++;

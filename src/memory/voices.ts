@@ -163,7 +163,13 @@ export function chooseSpeaker(
 }
 
 /** A short clip nobody matched yet; re-checked when a new voice appears. */
-export type PendingClip = { at: number; voice: number[]; momentId: number | null };
+export type PendingClip = {
+  at: number;
+  voice: number[];
+  momentId: number | null;
+  /** Clip length, so short clips can add up to a new voice (voiceFromPending). */
+  durationMs?: number;
+};
 /** How long an unattributed short clip waits for its voice to become known. */
 export const PENDING_CLIP_MS = 60_000;
 
@@ -186,4 +192,39 @@ export function claimPending(
     else waiting.push(p);
   }
   return { claimed, waiting };
+}
+
+/**
+ * Similarity between two short clips for them to count as one new voice. Short clips are noisier
+ * than a centroid, so this is a little under SAME_VOICE (tuned on the voice bench).
+ */
+export const GROUP_SIM = 0.5;
+
+/**
+ * A new person from short clips: when an unmatched clip sounds like waiting ones (each at least
+ * [GROUP_SIM] alike) and together they are as long as one clip that may start a person
+ * (NEW_VOICE_MIN_MS), they start that person. People who speak only in short turns ("Ready to
+ * order?") would otherwise stay "Someone" for ever, and get no description. Returns the waiting
+ * clips that join and the new voice's centroid, or null.
+ */
+export function voiceFromPending(
+  voice: number[],
+  durationMs: number | undefined,
+  pending: PendingClip[],
+  speakers: Speaker[],
+  now: number,
+  rules = VOICE_RULES,
+  groupSim = GROUP_SIM,
+): { group: PendingClip[]; centroid: number[] } | null {
+  const group = pending.filter(
+    (p) => now - p.at <= PENDING_CLIP_MS && cosine(voice, p.voice) >= groupSim,
+  );
+  if (!group.length) return null;
+  const total = (durationMs ?? 0) + group.reduce((n, p) => n + (p.durationMs ?? 0), 0);
+  if (total < rules.newVoiceMinMs) return null;
+  const all = [voice, ...group.map((p) => p.voice)];
+  const centroid = voice.map((_, i) => all.reduce((n, v) => n + v[i], 0) / all.length);
+  // Together they may sound like someone already known: then it isn't a new person.
+  if (matchSpeaker(centroid, speakers, rules)) return null;
+  return { group, centroid };
 }

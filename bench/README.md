@@ -6,11 +6,19 @@ the app. Results are in [docs/BENCH.md](../docs/BENCH.md).
 ## Voices and transcription (`voice/`)
 
 Measures who-is-speaking (no enrolment), recognising people again later, names from introductions,
-keeping the owner's voice as "You", and transcription accuracy, in quiet rooms and in noise.
+descriptions of people with no name ("Waiter", "Bus driver"), keeping the owner's voice as "You",
+and transcription accuracy, in quiet rooms and in noise.
+
+**Every voice bench must score both names and descriptions** (SPEC item 3): a person counts as
+shown right when the voice that is mainly them shows their name or their role. `score.mjs` prints
+this as `shown` (everyone) and `roles` (people who are never named). Each person in
+`dialogues.py` has a `role`; add one to every new person, and keep some people unnamed. Offline,
+only the role phrases (`roleFromLines`) run; the model's reading runs on the phone, so check
+descriptions there too.
 
 | File           | What it does                                                                                               |
 | -------------- | ---------------------------------------------------------------------------------------------------------- |
-| `dialogues.py` | Eight made-up scenes (2–4 people), each with a first and a later conversation, plus the owner's questions. |
+| `dialogues.py` | Eleven made-up scenes (1–4 people, three never named), each with a first and a later conversation.         |
 | `gen.py`       | Synthesises them with TTS voices, mixes in noise (babble, pink, street at 20/10/5/0 dB) and room echo.     |
 | `pipeline.py`  | Runs the app's speech pipeline (Silero VAD, Parakeet, CAM++) on each conversation, like `MicLoop.kt` does. |
 | `score.mjs`    | Replays the lines through the app's voice and name logic (`src/memory`) and scores it.                     |
