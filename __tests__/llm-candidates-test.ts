@@ -11,7 +11,7 @@ describe('tensorGeneration', () => {
 
 describe('llmCandidates', () => {
   test('Tensor G6 tries the Tensor build first, then GPU, then CPU', () => {
-    expect(llmCandidates('Google Tensor G6', '/m/')).toEqual([
+    expect(llmCandidates('Google Tensor G6', '/m/', undefined, false)).toEqual([
       { modelPath: '/m/gemma-4-E2B-it_Google_Tensor_G6.litertlm', backend: 'tensor' },
       { modelPath: '/m/gemma-4-E2B-it.litertlm', backend: 'gpu' },
       { modelPath: '/m/gemma-4-E2B-it.litertlm', backend: 'cpu' },
@@ -19,11 +19,16 @@ describe('llmCandidates', () => {
   });
 
   test('other chips go GPU then CPU', () => {
-    expect(llmCandidates('QTI SM7250', '/m').map((c) => c.backend)).toEqual(['gpu', 'cpu']);
+    expect(llmCandidates('QTI SM7250', '/m', undefined, false).map((c) => c.backend)).toEqual([
+      'gpu',
+      'cpu',
+    ]);
   });
 
   test('older Tensor without a published build skips the Tensor path', () => {
-    expect(llmCandidates('Google Tensor G4', '/m').map((c) => c.backend)).toEqual(['gpu', 'cpu']);
+    expect(llmCandidates('Google Tensor G4', '/m', undefined, false).map((c) => c.backend)).toEqual(
+      ['gpu', 'cpu'],
+    );
   });
 });
 

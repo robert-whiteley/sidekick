@@ -49,7 +49,16 @@ export default function ConnectionsSettings() {
             <NavRow
               key={i.id}
               label={i.name}
-              hint={a.available ? i.description : a.why}
+              hint={
+                !a.available
+                  ? a.why
+                  : a.only
+                    ? `On iPhone: ${i.switches
+                        .filter((s) => a.only!.includes(s.id))
+                        .map((s) => s.label.replace(/ \(.*\)$/, '').toLowerCase())
+                        .join(', ')}`
+                    : i.description
+              }
               href={{ pathname: '/settings/connections/[id]', params: { id: i.id } }}
             />
           );

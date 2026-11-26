@@ -126,7 +126,43 @@ Google's rule for new personal accounts: **12+ testers opted in for 14 days in a
 
 Until Google approves, only listed test users can use the Google features; the rest of the app works for everyone.
 
-## 10. Later
+## 10. iPhone (App Store)
+
+App Store Connect: https://appstoreconnect.apple.com → Apps → **Sidekick – On-device AI**. Every answer
+to paste is in `docs/store/app-store.md`. Nothing here costs money (the Apple Developer membership is
+already paid).
+
+Done:
+
+- [x] App record created: Apple ID `6838426860`, bundle ID `app.ondevice.sidekick`, version 1.0.
+- [x] EAS has the iOS distribution certificate, provisioning profile and App Store Connect API key,
+      so Claude builds and uploads without you (`eas.json` submit `ascAppId` 6838426860).
+- [x] The iPhone app itself: built from the same code; what it can't do on iPhone is hidden or
+      explained in the app (`docs/store/app-store.md` lists it).
+
+Your steps (after Claude says the first build is in TestFlight):
+
+- [ ] **TestFlight**: install the TestFlight app on the iPhone → App Store Connect → TestFlight →
+      Internal Testing → add yourself → open the invite on the iPhone → **Install**. First launch
+      downloads the AI model (about 3 GB, use Wi-Fi). Tell Claude what works and what doesn't.
+- [ ] **Screenshots**: on the iPhone, open screens with test data only and press side button + volume
+      up (3 to 10). Copy them to the PC (e.g. into Downloads), tell Claude the folder; Claude runs
+      `node scripts/iphone-screenshots.mjs <folder>` and gives you the files (1284 × 2778). Drag them
+      into **6.5" Display** under version 1.0.
+- [ ] **Version 1.0 texts**: promotional text, description, keywords, support URL, copyright
+      (from `docs/store/app-store.md`) → Save. Build: **Add build** → pick the TestFlight build.
+- [ ] **App Information**: subtitle, category **Productivity**, content rights **No**.
+- [ ] **Age Rating**: answer None/No to everything → override to **18+** (why: in the store doc).
+- [ ] **App Privacy**: privacy policy URL → "Do you collect data?" **No** → **Publish** (label
+      "Data Not Collected").
+- [ ] **App Review Information**: sign-in **No**, your name and phone, email `info@sashy.ai`, notes
+      from the store doc.
+- [ ] **Pricing and Availability**: Free; all countries **except China mainland**; untick Mac and
+      Vision Pro.
+- [ ] When the TestFlight build works on your iPhone: **Add for Review** → **Submit**. Review usually
+      takes a day or two; Apple may ask questions by email or in App Store Connect.
+
+## 11. Later
 
 - [ ] At ~800 monthly users (Play Console → Statistics): tell Claude, to switch quick fixes off by
       default or self-host them (`docs/RELEASE.md` D). Free up to 1,000 monthly users.

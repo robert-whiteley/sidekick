@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Platform } from 'react-native';
 
 import { configureListening, wakeLine } from '@/engine/listen';
 import { currentRegion } from '@/engine/region';
@@ -68,20 +69,25 @@ export function ListeningSection({
     <Section title={title}>
       {show('assistant') && (
         <>
-          <TextField
-            label="Wake word"
-            value={phrase}
-            onChangeText={setPhrase}
-            onSubmitEditing={saveWake}
-            placeholder="Hey Sidekick"
-            autoCapitalize="words"
-          />
-          <Button title="Save wake word" onPress={saveWake} />
-          {msg ? (
-            <AppText variant="bodySmall" tone="muted">
-              {msg}
-            </AppText>
-          ) : null}
+          {/* iPhone: no wake word (no background listening, ADR 0006); hold the mic instead. */}
+          {Platform.OS !== 'ios' && (
+            <>
+              <TextField
+                label="Wake word"
+                value={phrase}
+                onChangeText={setPhrase}
+                onSubmitEditing={saveWake}
+                placeholder="Hey Sidekick"
+                autoCapitalize="words"
+              />
+              <Button title="Save wake word" onPress={saveWake} />
+              {msg ? (
+                <AppText variant="bodySmall" tone="muted">
+                  {msg}
+                </AppText>
+              ) : null}
+            </>
+          )}
           <Row
             label="Speak answers"
             value={s.speakAnswers}

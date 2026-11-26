@@ -160,7 +160,18 @@ export function phoneFeatures(p: DeviceProfile): PhoneFeature[] {
   const notOnPlay = 'Not possible: Google Play doesn’t allow apps to do this';
   return [
     { id: 'chat', name: 'Ask by typing or voice', available: true },
-    { id: 'camera', name: 'Live camera memory', available: true },
+    {
+      id: 'listen',
+      name: 'Listen in the background for your wake word',
+      available: !ios,
+      why: notIphone('apps can’t keep the microphone on in the background; hold the mic to ask'),
+    },
+    {
+      id: 'camera',
+      name: 'Live camera memory',
+      available: !ios,
+      why: notIphone('apps can’t film in the background; take a photo to ask about it'),
+    },
     {
       id: 'usbCamera',
       name: 'USB camera (e.g. a worn camera)',
@@ -176,8 +187,10 @@ export function phoneFeatures(p: DeviceProfile): PhoneFeature[] {
     {
       id: 'pocketVoice',
       name: 'Natural voice',
-      available: p.ramMb === 0 || p.ramMb >= 3500,
-      why: 'Not enough memory on this phone; the system voice is used',
+      available: !ios && (p.ramMb === 0 || p.ramMb >= 3500),
+      why: ios
+        ? 'Not built for iPhone yet; the iPhone’s own voice reads answers'
+        : 'Not enough memory on this phone; the system voice is used',
     },
     {
       id: 'heat',

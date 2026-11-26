@@ -1,4 +1,6 @@
+import { Directory, File } from 'expo-file-system';
 import { getNetworkStateAsync, NetworkStateType } from 'expo-network';
+import { Platform } from 'react-native';
 
 import SidekickNative from '../../modules/sidekick-native';
 import { batteryState } from './battery';
@@ -64,6 +66,7 @@ export async function downloadFile(
   cancelled: () => boolean = () => false,
 ): Promise<void> {
   if (isDownloaded(f)) return;
+  if (Platform.OS === 'ios') return downloadFileIos(f, onProgress, wifiOnly, cancelled);
   const dest = modelPath(f);
   const id = SidekickNative.downloadStart(f.url, dest, `Sidekick: ${f.name}`, wifiOnly);
   let status: 'done' | 'failed';
@@ -110,6 +113,93 @@ export async function downloadFile(
   if (f.unpackedCheck) {
     onProgress('Unpacking…', 1);
     await SidekickNative.extractTarBz2(dest, modelsDir());
+  }
+}
+
+/** iPhone: may the transfer run on this network right now? (Wi-Fi-only waits for Wi-Fi.) */
+export function mayDownloadOn(net: { wifi: boolean; online: boolean }, wifiOnly: boolean): boolean {
+  return net.online && (!wifiOnly || net.wifi);
+}
+
+function fileUri(path: string): string {
+  return path.startsWith('file://') ? path : `file://${path}`;
+}
+
+const sleep = (ms: number) => new Promise<'tick'>((r) => setTimeout(() => r('tick'), ms));
+
+/**
+ * iPhone: downloads [f] with iOS's background transfer (expo-file-system), so it carries on while
+ * Sidekick is in the background. Wi-Fi-only pauses it off Wi-Fi and resumes on Wi-Fi. The file
+ * lands as "<name>.part" and is only moved into place once its SHA-256 matches (downloadFinish).
+ */
+async function downloadFileIos(
+  f: ModelFile,
+  onProgress: (text: string, fraction: number, waiting?: boolean) => void,
+  wifiOnly: boolean,
+  cancelled: () => boolean,
+): Promise<void> {
+  const dest = modelPath(f);
+  new Directory(fileUri(modelsDir())).create({ intermediates: true, idempotent: true });
+  const part = new File(fileUri(`${dest}.part`));
+  for (let attempt = 0; ; attempt++) {
+    if (part.exists) part.delete();
+    let bytes = 0;
+    let total = f.bytes;
+    const report = (waiting: boolean) =>
+      onProgress(formatProgress(bytes, total), Math.min(1, bytes / total), waiting);
+    const task = File.createDownloadTask(f.url, part, {
+      sessionType: 'background',
+      onProgress: (p) => {
+        bytes = p.bytesWritten;
+        if (p.totalBytes > 0) total = p.totalBytes;
+        report(false);
+      },
+    });
+    let started = false;
+    let paused = false;
+    let result: Promise<File | null> | null = null;
+    try {
+      for (;;) {
+        if (cancelled()) {
+          task.cancel();
+          throw new DownloadCancelled();
+        }
+        if (!mayDownloadOn(await connection(), wifiOnly)) {
+          if (started && !paused) {
+            await task.pauseAsync();
+            paused = true;
+            result = null;
+          }
+          report(true);
+          await sleep(2000);
+          continue;
+        }
+        if (!started) {
+          started = true;
+          result = task.downloadAsync();
+        } else if (paused || !result) {
+          paused = false;
+          result = task.resumeAsync();
+        }
+        const r = await Promise.race([result, sleep(2000)]);
+        if (r === 'tick') continue;
+        if (r) break;
+        // Null: the transfer paused itself; resume it on the next pass.
+        paused = true;
+        result = null;
+      }
+      break;
+    } catch (e) {
+      if (e instanceof DownloadCancelled) throw e;
+      console.log(`[download] ${f.name}: attempt ${attempt + 1} failed: ${String(e)}`);
+      if (afterSystemDownload('failed', attempt) === 'fail')
+        throw new Error(`${f.name} could not be downloaded; please try again`);
+      await sleep(3000);
+    }
+  }
+  onProgress('Checking file…', 1);
+  if (!(await SidekickNative.downloadFinish(dest, f.sha256))) {
+    throw new Error(`${f.name} was corrupt and has been deleted; please try again`);
   }
 }
 

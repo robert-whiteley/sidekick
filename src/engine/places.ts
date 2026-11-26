@@ -43,6 +43,14 @@ setPlaceRegion(currentRegion);
 
 /** Optional: asks for location so memories get place names. Everything works without it. */
 export async function askLocationPermission(): Promise<boolean> {
+  if (Platform.OS === 'ios') {
+    // "While Using the App" only: the iPhone records places while Sidekick is open.
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { iosAskLocation } = require('../../modules/sidekick-native/src/ios-location') as {
+      iosAskLocation(): Promise<boolean>;
+    };
+    return iosAskLocation();
+  }
   if (Platform.OS !== 'android') return false;
   if (SidekickNative.hasLocationPermission()) return true;
   const r = await PermissionsAndroid.requestMultiple([

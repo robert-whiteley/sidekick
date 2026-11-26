@@ -229,6 +229,19 @@ export function startOfDay(t: number): number {
   return d.getTime();
 }
 
+/** iPhone: the period to ask Motion & Fitness for (today so far, or all of yesterday). */
+export function stepWindow(day: 'today' | 'yesterday', now: number): { start: Date; end: Date } {
+  const midnight = startOfDay(now);
+  if (day === 'today') return { start: new Date(midnight), end: new Date(now) };
+  return { start: new Date(startOfDay(midnight - 1)), end: new Date(midnight) };
+}
+
+/** "1,234 steps today." */
+export function stepsSentence(steps: number, day: 'today' | 'yesterday'): string {
+  const n = Math.max(0, Math.round(steps));
+  return `${n.toLocaleString()} step${n === 1 ? '' : 's'} ${day}.`;
+}
+
 const NEAR_MIDNIGHT_MS = 30 * 60_000;
 
 /**

@@ -38,40 +38,43 @@ Every model and library shipped with or downloaded by Sidekick, with its licence
 
 ## Libraries
 
-| Component                                                                                                                     | Licence                                                                 |
-| ----------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
-| Expo, React Native, React                                                                                                     | MIT                                                                     |
-| LiteRT-LM (Google AI Edge)                                                                                                    | Apache-2.0                                                              |
-| sherpa-onnx                                                                                                                   | Apache-2.0                                                              |
-| ONNX Runtime C API headers (vendored in the native module, for photo OCR)                                                     | MIT                                                                     |
-| @op-engineering/op-sqlite                                                                                                     | MIT                                                                     |
-| SQLCipher (community edition)                                                                                                 | BSD-3-Clause                                                            |
-| sqlite-vec                                                                                                                    | MIT / Apache-2.0                                                        |
-| OpenSSL (used by SQLCipher)                                                                                                   | Apache-2.0                                                              |
-| Apache Commons Compress                                                                                                       | Apache-2.0                                                              |
-| AndroidX Core                                                                                                                 | Apache-2.0                                                              |
-| AndroidX WorkManager (work-runtime: queued online jobs and network routines with the app closed)                              | Apache-2.0                                                              |
-| AndroidX CameraX (camera-core, camera-camera2, camera-lifecycle: live camera memory)                                          | Apache-2.0                                                              |
-| Material Symbols "mic" icon (Quick Settings tile)                                                                             | Apache-2.0                                                              |
-| expo-symbols, expo-clipboard (chat icons, copy)                                                                               | MIT                                                                     |
-| Material Symbols font via @expo-google-fonts/material-symbols (chat icons)                                                    | Apache-2.0 / MIT                                                        |
-| expo-camera, expo-speech, expo-secure-store, expo-crypto, expo-sharing, expo-battery                                          | MIT                                                                     |
-| expo-notifications, expo-calendar (follow-ups)                                                                                | MIT                                                                     |
-| expo-network (online lookup: connection state)                                                                                | MIT                                                                     |
-| expo-video, expo-media-library (moment player: play, save to a folder)                                                        | MIT                                                                     |
-| expo-asset, expo-font (required by expo-audio and expo-symbols)                                                               | MIT                                                                     |
-| expo-audio (playing saved speech clips)                                                                                       | MIT                                                                     |
-| expo-haptics (tick on send, cancel, listen)                                                                                   | MIT                                                                     |
-| expo-local-authentication (app lock: fingerprint, face or PIN)                                                                | MIT                                                                     |
-| expo-application (app version on About and What's new)                                                                        | MIT                                                                     |
-| expo-contacts, expo-file-system, expo-calendar (data sources, phone actions)                                                  | MIT                                                                     |
-| ZXing core 3.5.3 (QR codes and barcodes, read on the phone)                                                                   | Apache-2.0                                                              |
-| UVCAndroid (USB cameras; Java parts from saki4510t/UVCCamera)                                                                 | Apache-2.0                                                              |
-| libuvc (inside UVCAndroid)                                                                                                    | BSD-3-Clause                                                            |
-| libusb (inside UVCAndroid, separate libusb1.0.so; source: github.com/shiyinghan/UVCAndroid, libuvccamera/src/main/jni/libusb) | LGPL-2.1                                                                |
-| libjpeg-turbo (inside UVCAndroid)                                                                                             | IJG / BSD-3-Clause / zlib                                               |
-| libyuv (inside UVCAndroid)                                                                                                    | BSD-3-Clause                                                            |
-| RapidJSON (inside UVCAndroid, headers)                                                                                        | MIT                                                                     |
-| Google Play services Auth (play-services-auth 22.0.0: Gmail sign-in, gmail.send only)                                         | Android Software Development Kit License (free, commercial use allowed) |
+| Component                                                                                                                        | Licence                                                                 |
+| -------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
+| Expo, React Native, React                                                                                                        | MIT                                                                     |
+| LiteRT-LM (Google AI Edge; on iPhone its Swift API and the prebuilt CLiteRTLM xcframework v0.19.1)                               | Apache-2.0                                                              |
+| sherpa-onnx                                                                                                                      | Apache-2.0                                                              |
+| ONNX Runtime C API headers (vendored in the native module, for photo OCR)                                                        | MIT                                                                     |
+| @op-engineering/op-sqlite                                                                                                        | MIT                                                                     |
+| SQLCipher (community edition)                                                                                                    | BSD-3-Clause                                                            |
+| sqlite-vec                                                                                                                       | MIT / Apache-2.0                                                        |
+| OpenSSL (used by SQLCipher)                                                                                                      | Apache-2.0                                                              |
+| Apache Commons Compress                                                                                                          | Apache-2.0                                                              |
+| AndroidX Core                                                                                                                    | Apache-2.0                                                              |
+| AndroidX WorkManager (work-runtime: queued online jobs and network routines with the app closed)                                 | Apache-2.0                                                              |
+| AndroidX CameraX (camera-core, camera-camera2, camera-lifecycle: live camera memory)                                             | Apache-2.0                                                              |
+| Material Symbols "mic" icon (Quick Settings tile)                                                                                | Apache-2.0                                                              |
+| expo-symbols, expo-clipboard (chat icons, copy)                                                                                  | MIT                                                                     |
+| Material Symbols font via @expo-google-fonts/material-symbols (chat icons)                                                       | Apache-2.0 / MIT                                                        |
+| expo-camera, expo-speech, expo-secure-store, expo-crypto, expo-sharing, expo-battery                                             | MIT                                                                     |
+| expo-notifications, expo-calendar (follow-ups)                                                                                   | MIT                                                                     |
+| expo-network (online lookup: connection state)                                                                                   | MIT                                                                     |
+| expo-video, expo-media-library (moment player: play, save to a folder)                                                           | MIT                                                                     |
+| expo-asset, expo-font (required by expo-audio and expo-symbols)                                                                  | MIT                                                                     |
+| expo-audio (playing saved speech clips)                                                                                          | MIT                                                                     |
+| expo-haptics (tick on send, cancel, listen)                                                                                      | MIT                                                                     |
+| expo-local-authentication (app lock: fingerprint, face or PIN)                                                                   | MIT                                                                     |
+| expo-application (app version on About and What's new)                                                                           | MIT                                                                     |
+| expo-contacts, expo-file-system, expo-calendar (data sources, phone actions)                                                     | MIT                                                                     |
+| expo-location (iPhone only: place names, while using the app)                                                                    | MIT                                                                     |
+| expo-sensors (iPhone only: step count from Core Motion)                                                                          | MIT                                                                     |
+| Apple Vision, Speech, PDFKit and Core Location (iPhone system frameworks: text in photos, codes, speech to text, PDFs, location) | Apple SDK licence (part of iOS)                                         |
+| ZXing core 3.5.3 (QR codes and barcodes, read on the phone)                                                                      | Apache-2.0                                                              |
+| UVCAndroid (USB cameras; Java parts from saki4510t/UVCCamera)                                                                    | Apache-2.0                                                              |
+| libuvc (inside UVCAndroid)                                                                                                       | BSD-3-Clause                                                            |
+| libusb (inside UVCAndroid, separate libusb1.0.so; source: github.com/shiyinghan/UVCAndroid, libuvccamera/src/main/jni/libusb)    | LGPL-2.1                                                                |
+| libjpeg-turbo (inside UVCAndroid)                                                                                                | IJG / BSD-3-Clause / zlib                                               |
+| libyuv (inside UVCAndroid)                                                                                                       | BSD-3-Clause                                                            |
+| RapidJSON (inside UVCAndroid, headers)                                                                                           | MIT                                                                     |
+| Google Play services Auth (play-services-auth 22.0.0: Gmail sign-in, gmail.send only)                                            | Android Software Development Kit License (free, commercial use allowed) |
 
 This list is updated whenever a dependency is added.

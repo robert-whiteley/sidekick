@@ -1,6 +1,6 @@
-# Releasing Sidekick on Google Play
+# Releasing Sidekick on Google Play (and the App Store)
 
-One app, `app.ondevice.sidekick`, on Google Play only (plus small over-the-air quick fixes via EAS Update while the user base is small; see D). EAS builds the app bundle in the cloud, and `eas submit` uploads it. fastlane (`fastlane/`) pushes listing text and changelogs and moves releases between tracks. `scripts/release.sh` runs it all. It is a **dry run unless `--real`** is given.
+One app, `app.ondevice.sidekick`, on Google Play (the iPhone version: section E; plus small over-the-air quick fixes via EAS Update while the user base is small; see D). EAS builds the app bundle in the cloud, and `eas submit` uploads it. fastlane (`fastlane/`) pushes listing text and changelogs and moves releases between tracks. `scripts/release.sh` runs it all. It is a **dry run unless `--real`** is given.
 
 Nothing here costs money. EAS free plan: up to 15 Android cloud builds (expo.dev/pricing, checked 25 Nov 2026; queued, low priority) and EAS Update for up to 1,000 monthly active users (no overage on the free plan: above the limit updates stop being served). When builds run out, build locally (`cd android && ./gradlew bundleRelease`) and upload the `.aab` with fastlane: free at any size. Play is already paid (one-off). OAuth sensitive-scope verification is free.
 
@@ -50,6 +50,28 @@ Nothing here costs money. EAS free plan: up to 15 Android cloud builds (expo.dev
 6. Listing text changes: edit `fastlane/metadata/android/en-GB/*.txt`, run `node scripts/check-store-text.mjs`, then `scripts/release.sh metadata --real`. Add `--images` once the images exist.
 
 Rules: never publish to production without the owner's go-ahead. Never pay. Never commit `google-service-account.json`, keystores or `.env`. fastlane needs Ruby and `bundle install` once (`Gemfile`).
+
+## E. iPhone (App Store)
+
+The same app for iPhone, bundle ID `app.ondevice.sidekick`, App Store Connect Apple ID `6838426860`
+(`eas.json` → `submit.production.ios.ascAppId`). The App Store Connect record (name "Sidekick –
+On-device AI", version 1.0) exists, and EAS holds the iOS distribution certificate, provisioning
+profile and App Store Connect API key, so build and upload run without prompts. No Mac is needed.
+Listing texts and form answers: `docs/store/app-store.md`; owner clicks: `docs/RELEASE-OWNER-STEPS.md`
+section 10.
+
+- Build: `npx eas-cli build -p ios --profile production` (cloud; EAS free plan, low-priority queue).
+  The build number goes up by itself (`autoIncrement`, remote version source).
+- Upload to TestFlight: `npx eas-cli submit -p ios --profile production --latest`. TestFlight
+  processing takes 10–30 minutes; then the owner installs it.
+- Quick fixes: `scripts/release.sh update` publishes to both platforms; an update reaches an iPhone
+  build only if its runtime version (native fingerprint) matches.
+- Native side: `modules/sidekick-native/ios/` (Swift). `pod install` on the EAS machine downloads the
+  LiteRT-LM xcframework (pinned SHA-256) into `modules/sidekick-native/ios/vendor/` and bundles the place list (both gitignored).
+  `ios/` is generated (prebuild); never commit it.
+- Not in China mainland (Pricing and Availability); see ADR 0006.
+- iPhone screenshots: `node scripts/iphone-screenshots.mjs <folder>` turns iPhone 13 mini screenshots
+  into the 6.5" size (1284 × 2778 JPEG).
 
 ## D. Quick fixes (EAS Update)
 
