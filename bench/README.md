@@ -46,3 +46,45 @@ TTS needs sherpa-onnx 1.12.x: 2.x dropped the espeak frontend the voices use.
 
 The models the pipeline runs (Silero VAD, Parakeet TDT, CAM++, sherpa-onnx 2.0.2) are the app's
 own, listed in `THIRD_PARTY_NOTICES.md`.
+
+## Answers and routing (`bench/answers/cases.ts`)
+
+143 fixed prompts with the expected route (tool or rule, and key arguments) and, where checkable,
+words the answer must or must not contain. Categories: general knowledge, arithmetic, dates,
+units, short reasoning, every tool and command, near-misses that must not trigger a tool,
+refusals (messaging "me") and multi-step requests.
+
+- **Offline (the rules and the router's tool choice), any PC:**
+  `BENCH_OUT=/tmp/answers.json npx jest __tests__/answers-bench-test.ts` — every case through the
+  same rule order as the app (`src/engine/route-trace-logic.ts`), scored by
+  `src/engine/answers-bench-logic.ts`. Scores: `pass` (right rule and arguments), `model` (the
+  router gets a sensible tool list; the model decides on the phone), `router_risk` (a plain
+  question would wait ~5 s or more for the router), `fail`.
+- **On the phone (the model's answers and tool picks, with timings):** a dev or bench build,
+  Speed test screen → "Answers bench", or by adb (needs the flag file below):
+  `adb shell am start -a android.intent.action.VIEW -d "sidekick://bench?run=answers"`.
+  One `[answers] {json}` line per case in logcat (`adb logcat -s ReactNativeJS`), then
+  `[answers] summary`. The router only picks a tool; nothing is run, sent or saved.
+
+## Memory recall (`bench/recall/generate.ts`)
+
+About 5 weeks of invented memories (conversation notes, notes, photo captions) around 37 facts,
+plus filler up to any size, and 50 questions with the expected answer words.
+
+- Load: "Recall: load 100" on the Speed test screen, or
+  `sidekick://bench?run=recall-load&size=1000`. Rows are marked `bench:` and get real embeddings
+  (the first 1,000 filler rows; larger sets reuse those vectors).
+- Ask: "Recall: ask" / `run=recall` — search rank and time for each question, then the full answer
+  (off the record, actions dry). `run=recall-search` times search only.
+- Remove: "Recall: remove" / `run=recall-clear` deletes every `bench:` row. Counts of the owner's
+  own memories are logged before and after (`[recall] counts …`), never their content.
+
+### adb deep links
+
+Deep links run only when the file `bench-links` exists in the app's external files folder
+(`/sdcard/Android/data/app.ondevice.sidekick/files/bench-links`), which only adb or the app can
+create. Delete it afterwards.
+
+### Bench-only tools (answers and recall)
+
+None beyond the app, jest and adb. No extra dependencies.
