@@ -128,9 +128,11 @@ jobs:
         run: |
           meta=$(find build/Build/Products -path '*Sidekick.app/Metadata.appintents' -type d | head -1)
           test -n "$meta" || { echo "no Metadata.appintents in the app"; exit 1; }
-          for name in AskSidekickIntent VoiceQuestionIntent LookIntent SidekickShortcuts; do
+          for name in AskSidekickIntent VoiceQuestionIntent LookIntent; do
             grep -rq "$name" "$meta" || { echo "$name missing from $meta"; exit 1; }
           done
+          # The shortcuts provider is stored under a mangled Swift name, so check its phrases' key.
+          grep -rq autoShortcut "$meta" || { echo "no App Shortcuts in $meta"; ls -R "$meta"; exit 1; }
           echo "found in $meta"
 
   # Every merge to main ships the JS as an over-the-air update to the "preview" channel (my phone).
