@@ -41,6 +41,28 @@ $W/venv/bin/python wer.py $W/data clean babble10
 
 TTS needs sherpa-onnx 1.12.x: 2.x dropped the espeak frontend the voices use.
 
+## Limits, robustness and battery (`limits/`)
+
+Drives the installed app on a phone over adb with made-up questions, and logs time per answer,
+app memory (PSS), app CPU time, battery level and temperature. Every tap and every typed key first
+checks that Sidekick is the app in front; the script stops otherwise.
+
+| File            | What it does                                                                       |
+| --------------- | ---------------------------------------------------------------------------------- |
+| `lib.sh`        | Shared helpers: adb reconnect, screen reading, foreground guard, PSS, CPU, battery |
+| `chat-run.sh`   | Types each line of a questions file into the chat and logs each turn               |
+| `long-chat.txt` | 56 made-up chat turns (a trip to a fictional town, facts to recall later)          |
+| `long-input.sh` | One typed question of N characters                                                 |
+| `mode-power.sh` | Power and CPU for one mode (app closed, Listen, Live camera, both) over N minutes  |
+| `ui.sh`         | Prints what is on the phone's screen                                               |
+
+```bash
+export ADB=/path/to/adb OUT=/tmp/sk-limits
+bash bench/limits/chat-run.sh bench/limits/long-chat.txt 2
+bash bench/limits/long-input.sh 12000
+bash bench/limits/mode-power.sh listen 25
+```
+
 ### Bench-only tools and data (not in the app)
 
 | Tool / data                               | Licence                              | Use                            |

@@ -73,4 +73,10 @@ export type PlannedAction =
   /** Show a card and wait for Send. */
   | { kind: 'draft'; draft: Draft }
   /** Already done (alarm set, music paused) or an answer (what's playing): say this. */
-  | { kind: 'reply'; text: string; readBackId?: string };
+  | {
+      kind: 'reply';
+      text: string;
+      readBackId?: string;
+      /** Offline: search words for the "Search the web in your browser" link, opened on tap. */
+      browserQuery?: string;
+    };

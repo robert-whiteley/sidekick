@@ -382,6 +382,28 @@ export function upcomingBirthdays(
 
 // --- Links for other apps (formats from each app's own documentation) ---
 
+/**
+ * Where a search goes: the named app when installed, else the browser. With Sidekick Offline
+ * (online lookup off, or no internet) a browser search is never opened by itself: the reply
+ * offers "Search the web in your browser" and nothing leaves the phone until the user taps it.
+ * Apps the user names (YouTube, Maps…) still open, like message hand-offs do offline (ADR 6).
+ */
+export function searchHandOff(
+  app: SearchApp,
+  installed: (pkg: string) => boolean,
+  online: boolean,
+): 'app' | 'browser' | 'tap' {
+  const pkg = APP_PACKAGES[app];
+  if (pkg && installed(pkg)) return 'app';
+  return online ? 'browser' : 'tap';
+}
+
+/** The reply when an offline browser search waits for a tap. */
+export function offlineSearchLine(app: SearchApp, query: string): string {
+  const where = app === 'web' || app === 'google' ? 'the web' : APP_NAMES[app];
+  return `Sidekick is offline, so I didn't open your browser. Tap below to search ${where} for ${query}.`;
+}
+
 export const APP_PACKAGES: Record<SearchApp | RideApp, string> = {
   youtube: 'com.google.android.youtube',
   spotify: 'com.spotify.music',

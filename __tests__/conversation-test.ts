@@ -2,13 +2,17 @@ import {
   chatSystem,
   compact,
   Conversation,
+  fitQuestion,
   FOLLOW_UP_MS,
   historyBudgetTokens,
+  MAX_QUESTION_CHARS,
   IDLE_COMPACT_MS,
+  isContextFull,
   isNaturalEnd,
   KEEP_VERBATIM,
   parseSummary,
   summaryPrompt,
+  SUMMARY_INPUT_CHARS,
   type CompactDeps,
 } from '../src/engine/conversation';
 import { parseChatState } from '../src/memory/chat-state';
@@ -189,4 +193,67 @@ test('reset forgets everything', () => {
   c.reset();
   expect(c.state).toEqual({ summary: '', turns: [] });
   expect(c.keepHistory()).toBe(false);
+});
+
+test('a chat that would overflow the model restarts from the summary instead', () => {
+  const c = new Conversation(undefined, 2500);
+  expect(c.fitOrRestart(100_000)).toBe(false); // a fresh chat has nothing to drop
+  c.started(800);
+  // Compaction kept being interrupted: the chat grew past the budget.
+  for (let i = 0; i < 8; i++) turn(c, `q${i}`, i, 1500);
+  expect(c.usedTokens()).toBeGreaterThan(2500);
+  expect(c.fitOrRestart(400)).toBe(true);
+  expect(c.keepHistory()).toBe(false);
+  // The turns stay for the summary and the next fresh chat's last exchanges.
+  expect(c.state.turns).toHaveLength(8);
+});
+
+test('a small chat keeps going', () => {
+  const c = new Conversation(undefined, 2500);
+  c.started(800);
+  turn(c, 'a', 1, 400);
+  expect(c.fitOrRestart(400)).toBe(false);
+  expect(c.keepHistory()).toBe(true);
+});
+
+test('the summary pass reads only the newest older turns when there are many', () => {
+  const many = Array.from({ length: 200 }, (_, i) => ({
+    q: `question ${i} ${'x'.repeat(80)}`,
+    a: `answer ${i}`,
+    at: i,
+  }));
+  const p = summaryPrompt('', many);
+  expect(p.length).toBeLessThan(SUMMARY_INPUT_CHARS + 500);
+  expect(p).toContain('question 199');
+  expect(p).not.toContain('question 0 ');
+  // One huge turn is cut, not dropped.
+  expect(summaryPrompt('', [{ q: 'y'.repeat(20_000), a: 'ok', at: 0 }]).length).toBeLessThan(
+    SUMMARY_INPUT_CHARS + 500,
+  );
+});
+
+test('the model saying its chat is full is recognised', () => {
+  expect(
+    isContextFull(new Error('Max number of tokens reached, the context window is full.')),
+  ).toBe(true);
+  expect(
+    isContextFull(
+      'Input token ids are too long. Exceeding the maximum number of tokens allowed: 4096',
+    ),
+  ).toBe(true);
+  expect(isContextFull(new Error('Status Code: 13. Message: Task failed with state: 7'))).toBe(
+    true,
+  );
+  expect(isContextFull(new Error('Task failed with state: 8'))).toBe(false);
+  expect(isContextFull(new Error('Model not loaded'))).toBe(false);
+});
+
+test('a paste too long for the model keeps its start and end', () => {
+  expect(fitQuestion('short')).toBe('short');
+  const long = `BEGIN ${'word '.repeat(5000)} FINISH`;
+  const f = fitQuestion(long);
+  expect(f.length).toBeLessThan(MAX_QUESTION_CHARS + 100);
+  expect(f.startsWith('BEGIN')).toBe(true);
+  expect(f.endsWith('FINISH')).toBe(true);
+  expect(f).toContain('characters left out');
 });

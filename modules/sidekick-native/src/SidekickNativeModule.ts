@@ -140,6 +140,13 @@ declare class SidekickNativeModule extends NativeModule<SidekickNativeModuleEven
   phoneLocale?(): string;
   /** Everything heard since the last call (JSON lines), cleared on read. */
   journalDrain(): string[];
+  /**
+   * Android: up to 500 lines heard since the last ack, kept on the phone until [journalAck] (a kill
+   * while saving hands them out again; replayed > 0: some may be saved already).
+   */
+  journalTake?(): { lines: string[]; replayed: number };
+  /** Android: the last [journalTake] is saved. */
+  journalAck?(): void;
   /** Android: Sidekick holds the phone's assistant role. */
   assistantIsDefault(): boolean;
   /** Android: opens the system "Digital assistant app" settings. */

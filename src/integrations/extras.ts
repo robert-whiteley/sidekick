@@ -4,11 +4,13 @@
  * apps. Each has its own switch (registry.ts: Phone info, Other apps, Contacts → Birthdays).
  * Permissions are asked the first time a feature is used.
  */
+import { getNetworkStateAsync } from 'expo-network';
 import { PermissionsAndroid, Platform } from 'react-native';
 
 import { showDialog } from '@/ui/Dialog';
 
 import { batteryState } from '@/engine/battery';
+import { getSettings } from '@/engine/settings';
 import {
   addSample,
   APP_NAMES,
@@ -19,10 +21,12 @@ import {
   duration,
   type Extra,
   gigabytes,
+  offlineSearchLine,
   parseExtra,
   RANGE_WORDS,
   rangeStart,
   type RideApp,
+  searchHandOff,
   searchLink,
   type StepSample,
   stepsSentence,
@@ -36,6 +40,13 @@ import { integrationsNative } from './native';
 import { matchApp } from './phone-controls-logic';
 import { isOn } from './prefs';
 import type { PlannedAction } from './types';
+
+/** What the Ask screen's Online/Offline button shows: lookup on and the internet reachable. */
+async function sidekickOnline(): Promise<boolean> {
+  if (!getSettings().webLookup) return false;
+  const net = await getNetworkStateAsync().catch(() => null);
+  return !!net && net.isConnected !== false && net.isInternetReachable !== false;
+}
 
 type Native = NonNullable<ReturnType<typeof integrationsNative>>;
 
@@ -106,17 +117,22 @@ export async function runExtra(e: Extra, now = new Date()): Promise<PlannedActio
       return reply(await birthdaysLine(e.name, e.within, now));
     case 'ride':
       if (!isOn('appLinks', 'rides')) return off('Rides', 'Other apps');
-      return reply(ride(n, e.app, e.destination));
+      return reply(ride(n, e.app, e.destination, await sidekickOnline()));
     case 'search': {
       if (!isOn('appLinks', 'search')) return off('Searching in other apps', 'Other apps');
       if (!n?.openLink) return reply(NOT_HERE);
       const link = searchLink(e.app, e.query, locale());
       const pkg = APP_PACKAGES[e.app];
       const name = APP_NAMES[e.app];
-      if (pkg && n.isInstalled(pkg) && n.openLink(link.app, pkg))
+      const online = await sidekickOnline();
+      const how = searchHandOff(e.app, (p) => n.isInstalled(p), online);
+      if (how === 'app' && n.openLink(link.app, pkg))
         return reply(
           e.app === 'waze' ? `Opening Waze to ${e.query}.` : `Searching ${name} for ${e.query}.`,
         );
+      // Offline: a browser search waits for the user's tap on the link under the reply.
+      if (!online)
+        return { kind: 'reply', text: offlineSearchLine(e.app, e.query), browserQuery: e.query };
       if (n.openLink(link.web, ''))
         return reply(
           pkg
@@ -389,13 +405,20 @@ async function birthdaysLine(
 
 const RIDES: RideApp[] = ['uber', 'bolt', 'lyft', 'freenow'];
 
-function ride(n: Native | null, app: RideApp | null, destination: string | null): string {
+function ride(
+  n: Native | null,
+  app: RideApp | null,
+  destination: string | null,
+  online: boolean,
+): string {
   if (!n?.openLink || !n.openApp) return NOT_HERE;
   const pick = app ?? RIDES.find((a) => n.isInstalled(APP_PACKAGES[a])) ?? null;
   if (!pick) return 'No ride app (Uber, Bolt, Lyft, FREENOW) is installed.';
   const pkg = APP_PACKAGES[pick];
   const name = APP_NAMES[pick];
   if (!n.isInstalled(pkg)) {
+    // Offline, the browser isn't opened by itself (as for searches).
+    if (pick === 'uber' && !online) return 'Uber isn’t installed, and Sidekick is offline.';
     if (pick === 'uber' && n.openLink(uberLink(destination), ''))
       return 'Uber isn’t installed, so I opened Uber in your browser.';
     return `${name} isn’t installed.`;

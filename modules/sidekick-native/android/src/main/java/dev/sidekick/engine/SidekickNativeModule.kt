@@ -466,6 +466,11 @@ class SidekickNativeModule : Module() {
     }
 
     Function("journalDrain") { Journal.drain(context) }
+    Function("journalTake") {
+      val t = Journal.take(context)
+      mapOf("lines" to t.lines, "replayed" to t.replayed)
+    }
+    Function("journalAck") { Journal.ack(context) }
 
     // Live camera memory (engine/camera/LiveCapture.kt), run by the listening service.
     Function("cameraStart") { cfg: Map<String, Any?>? ->

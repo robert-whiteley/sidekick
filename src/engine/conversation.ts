@@ -28,6 +28,46 @@ export function historyBudgetTokens(totalRamMb: number): number {
 
 export const tokensOf = (chars: number) => Math.ceil(chars / CHARS_PER_TOKEN);
 
+/**
+ * The model's chat may never grow past this (LiteRT-LM's default window on Gemma 4 E2B is 4096
+ * tokens; past it every later question fails with "context window is full"). Compaction normally
+ * keeps the chat far below, but its summary runs in the background and a question stops it, so in a
+ * quick back-and-forth it can keep losing: then the next question starts a fresh chat from the
+ * running summary and the last turns instead.
+ */
+export const HARD_LIMIT_TOKENS = 3400;
+/** Room kept for the answer itself. */
+export const ANSWER_RESERVE_TOKENS = 450;
+/** The summary pass reads at most this much of the older turns (newest kept); older ones are in memory. */
+export const SUMMARY_INPUT_CHARS = 6000;
+
+/**
+ * Longest question text the model is given (about 2,300 tokens): with the instructions and memory
+ * notes, more would not fit in its 4,096-token window and the question would fail outright. A longer
+ * paste keeps its start and end, with a note of what was left out.
+ */
+export const MAX_QUESTION_CHARS = 9000;
+
+export function fitQuestion(q: string): string {
+  if (q.length <= MAX_QUESTION_CHARS) return q;
+  const head = Math.floor(MAX_QUESTION_CHARS * 0.7);
+  const tail = MAX_QUESTION_CHARS - head;
+  const cut = q.length - head - tail;
+  return `${q.slice(0, head)}\n[… ${cut} characters left out: too long to read at once …]\n${q.slice(-tail)}`;
+}
+
+/**
+ * The model said its chat is full (or the prompt too long for it). LiteRT-LM 0.19 often reports
+ * a full chat only as "Task failed with state: 7" (DependentTaskFailed: the prefill before the
+ * answer failed) or state 5 (MaxNumTokensReached), seen on the Pixel 5 after ~2900 chat tokens.
+ */
+export function isContextFull(e: unknown): boolean {
+  const m = e instanceof Error ? e.message : String(e);
+  return /context window|maximum number of tokens|token ids are too long|task failed with state: [57]\b/i.test(
+    m,
+  );
+}
+
 /** One question and answer, as shown in the chat (not the memory notes sent with it). */
 export type Turn = { q: string; a: string; at: number };
 
@@ -77,7 +117,16 @@ export const SUMMARY_SYSTEM =
 export const SUMMARY_MAX_TOKENS = 200;
 
 export function summaryPrompt(previous: string, turns: Turn[]): string {
-  const lines = turns.map((t) => `User: ${t.q}\nAssistant: ${t.a}`).join('\n');
+  const all = turns.map((t) => `User: ${t.q}\nAssistant: ${t.a}`);
+  // Newest first until the cap: a long backlog must not overflow the summary pass itself.
+  const kept: string[] = [];
+  let size = 0;
+  for (let i = all.length - 1; i >= 0; i--) {
+    if (kept.length && size + all[i].length > SUMMARY_INPUT_CHARS) break;
+    kept.unshift(all[i].slice(-SUMMARY_INPUT_CHARS));
+    size += all[i].length;
+  }
+  const lines = kept.join('\n');
   return `${previous ? `Summary so far: ${previous}\n\n` : ''}New part of the conversation:\n${lines}\n\nUpdated summary:`;
 }
 
@@ -147,6 +196,18 @@ export class Conversation {
 
   usedTokens(): number {
     return this.used;
+  }
+
+  /**
+   * A question of [promptChars] wouldn't fit in the model's chat: start a fresh one (from the
+   * summary and the last turns) instead of continuing. True if it restarted.
+   */
+  fitOrRestart(promptChars: number): boolean {
+    if (this.fresh) return false;
+    if (this.used + tokensOf(promptChars) + ANSWER_RESERVE_TOKENS <= HARD_LIMIT_TOKENS)
+      return false;
+    this.restart();
+    return true;
   }
 
   /** Why the older turns should be summarised now, if they should. [lastQuestion]: just answered. */
