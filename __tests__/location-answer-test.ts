@@ -110,7 +110,11 @@ it('where did I park', async () => {
 });
 
 it('where was I at a time without data', async () => {
-  expect((await answerLocation('where was I at 3am?', { now }))?.text).toMatch(/I don't know/);
+  const r = await answerLocation('where was I at 3am?', { now });
+  expect(r?.text).toMatch(/I don't know/);
+  // Marked empty: the memory notes get a chance to answer first (assistant.ts).
+  expect(r?.empty).toBe(true);
+  expect((await answerLocation('where am I?', { now }))?.empty).toBeUndefined();
 });
 
 it('weather needs online lookup', async () => {

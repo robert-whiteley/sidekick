@@ -156,6 +156,8 @@ export type LocationAnswer = {
   web?: WebSource[];
   /** Kept until the internet works (online-queue.ts); a back-online run tries again later. */
   waitingOnline?: boolean;
+  /** Nothing recorded for this question: memory notes may still answer it (assistant.ts). */
+  empty?: boolean;
 };
 
 const OFF = 'Location memory is off. Turn it on in Settings → Privacy → Location.';
@@ -181,10 +183,10 @@ export async function answerLocation(
   const q = parseLocationQuestion(question, now);
   if (!q) return null;
 
-  const perm = await needPermission();
-  if (perm) return { text: perm };
   const history = q.kind !== 'whereNow';
-  if (history && getSettings().locationMemory === false) return { text: OFF };
+  const perm = await needPermission();
+  if (perm) return { text: perm, empty: history };
+  if (history && getSettings().locationMemory === false) return { text: OFF, empty: true };
 
   switch (q.kind) {
     case 'whereNow': {
@@ -232,7 +234,7 @@ export async function answerLocation(
     case 'parked': {
       const fixes = await fixesBetween(now.getTime() - 3 * DAY, now.getTime() + 1);
       const spot = parkedSpot(fixes);
-      if (!spot) return { text: platformText('parkingUnknown') };
+      if (!spot) return { text: platformText('parkingUnknown'), empty: true };
       const w = await where(spot, true);
       const me = await fixNow();
       const when = whenText(spot.at, now);
@@ -248,7 +250,7 @@ export async function answerLocation(
     case 'whereAt': {
       const fixes = await fixesBetween(q.at - DAY / 24, q.at + DAY / 24);
       const f = fixAt(fixes, q.at);
-      if (!f) return { text: notRecorded() };
+      if (!f) return { text: notRecorded(), empty: true };
       return { text: `${cap(q.label)} you were ${await where(f, false)}.` };
     }
     case 'lastAt': {
@@ -292,7 +294,8 @@ export async function answerLocation(
       };
       const to = Math.min(range.to, now.getTime());
       const visits = visitsFrom(await fixesBetween(range.from, to));
-      if (!visits.length) return { text: `I don't have any places for ${range.label}.` };
+      if (!visits.length)
+        return { text: `I don't have any places for ${range.label}.`, empty: true };
       const stays: { w: string; from: number; to: number }[] = [];
       for (const v of visits) {
         const w = (await where(v, false)).replace(/^(at|in|near) /, '');

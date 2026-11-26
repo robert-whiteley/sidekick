@@ -150,7 +150,8 @@ export function parseExtra(question: string): Extra | null {
       if (!/^(my|your)$/i.test(m[2]))
         return { type: 'birthday', name: m[2].trim(), within: 'next' };
     if (
-      /^(whose|who('s| has| has a)?|any|are there any|is there a|what) .*birthdays?\b/i.test(q) ||
+      /^(whose|who('s| has| has a)?|any|are there any|is there a) .*birthdays?\b/i.test(q) ||
+      /^what (birthdays|birthdays? (are|is) (coming|next|soon))\b/i.test(q) ||
       /\bbirthdays? (coming up|this week|this month|next)\b/i.test(q) ||
       /^(upcoming |next )birthdays?$/i.test(q)
     )

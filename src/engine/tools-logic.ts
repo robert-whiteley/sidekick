@@ -383,7 +383,7 @@ const norm = (q: string) =>
     .trim()} `;
 
 const QUESTION_START =
-  /^((at|in|on|for|by|from|to|of) (what|which|whom|how)|what|who|whom|whose|where|when|why|how|is|are|am|do|does|did|was|were|which|can i|could i|should|would|will|have|has|had)\b/;
+  /^((at|in|on|for|by|from|to|of|until|till|since) (what|which|whom|how|when)|what|who|whom|whose|where|when|why|how|is|are|am|do|does|did|was|were|which|can i|could i|should|would|will|have|has|had)\b/;
 
 /**
  * The part of [q] that is asked: the last sentence, without a leading "if …," ("Tom is taller
@@ -428,6 +428,16 @@ const REMARK =
 const SCIENCE =
   /\b(celsius|fahrenheit|kelvin|boil|boils|boiling|freeze|freezes|freezing point|melt|melts|oven|bake|body|fever|absolute zero)\b/;
 
+/** "What did I buy Kofi for his birthday?": a memory, not the contacts' birthdays. */
+const GIFT =
+  /\b(buy|bought|get|got|give|gave|make|made|send|sent) .*\bfor (his|her|their|your|my|the) birthday\b/;
+
+/** "How much does the plumber charge?": a price, not the battery. */
+const PRICE = /\b(how much|what) (do|does|did|will|would)\b.*\bcharge\b/;
+
+/** "Where did I leave my umbrella?": a lost thing, not the forecast. */
+const LOST_THING = /\b(where|left|leave|lost|find|found)\b.*\b(umbrella|coat)\b/;
+
 /** Sending or calling "me": there's no one to send to; the model answers instead. */
 const SELF_SEND =
   /\b(text|message|msg|whatsapp|e-?mail|mail|call|ring|phone|send|ping) (me|myself|us)\b(?! (back|later|when|if|at|in|on|tomorrow|tonight))/;
@@ -457,7 +467,9 @@ export function relevantTools(
   const hits = usable.filter(
     (t) =>
       t.words.test(s) &&
-      !(t.name === 'weather' && SCIENCE.test(s)) &&
+      !(t.name === 'weather' && (SCIENCE.test(s) || LOST_THING.test(s))) &&
+      !(t.name === 'phone_info' && PRICE.test(s)) &&
+      !(t.name === 'birthdays' && GIFT.test(s)) &&
       // A question asks for an answer: "what language do people speak", "how many minutes in
       // 3 hours" mustn't offer speech speed or timers. Requests ("can you…") aren't questions.
       !(question && t.kind === 'action') &&

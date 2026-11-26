@@ -270,7 +270,10 @@ export async function answer(
   const isRoutine = !photoNow && !opts?.routine && !offRecord && routineFirst(question, new Date());
   const loc =
     photoNow || isRoutine ? null : await answerLocation(question, { offRecord }).catch(() => null);
-  if (loc) {
+  // Nothing in location history ("where did I park?", "where was I on Tuesday?"): the notes may
+  // still say ("parked on level 4"), so memory answers; the reason is given if it has nothing.
+  const noPlace = loc?.empty ? loc.text : null;
+  if (loc && !noPlace) {
     onText(loc.text);
     return {
       text: loc.text,
@@ -377,7 +380,7 @@ export async function answer(
 
   // No rule knew it: the model may pick a tool (any phrasing; tools-logic.ts). Plain questions
   // skip this and go straight to the answer below.
-  if (!photoNow && !opts?.routed) {
+  if (!photoNow && !opts?.routed && !noPlace) {
     const outcome = await routeWithTools(question, {
       routine: opts?.routine,
       offRecord,
@@ -406,6 +409,8 @@ export async function answer(
   } catch (e) {
     console.log(`[assistant] memory unavailable: ${String(e)}`);
   }
+
+  if (noPlace && !sources.length) return done(noPlace);
 
   let image = photoNow;
   if (!image && asksAboutSomethingSeen(question)) {

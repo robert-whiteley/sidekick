@@ -3,6 +3,7 @@
  * jokes / poems / tips / remarks go straight to the model, nothing is sent to "me", and clear
  * camera, timer, reminder and routine phrasings are caught by rules (no 5 s router call).
  */
+import { recallQuestions } from '../bench/recall/generate';
 import { parseVoiceCommand } from '@/engine/quick-commands-logic';
 import { routineFirst, traceRules } from '@/engine/route-trace-logic';
 import { looksImperative, looksQuestion, relevantTools } from '@/engine/tools-logic';
@@ -105,5 +106,24 @@ describe('rules that skip the router', () => {
     expect(traceRules('Every Monday at 8 tell me the weather', NOW).stage).toBe('routine');
     expect(traceRules("What's the weather tomorrow?", NOW).stage).toBe('weather');
     expect(routineFirst('Remind me every day at 9 to water the plants', NOW)).toBe(false);
+  });
+});
+
+describe('memory questions reach memory', () => {
+  it('every recall-bench question goes to memory search, a recap or location history', () => {
+    for (const r of recallQuestions(NOW)) {
+      const t = traceRules(r.q, NOW);
+      const ok =
+        ['answer', 'recap', 'location'].includes(t.stage) ||
+        (t.stage === 'router' && (t.tools ?? []).every((n) => n === 'memory_search'));
+      expect([r.id, t.stage, t.tools ?? [], ok]).toEqual([r.id, t.stage, t.tools ?? [], true]);
+    }
+  });
+  it('lost things, prices and "until when" are not weather, battery or actions', () => {
+    expect(names('Where did I leave my umbrella?')).not.toContain('weather');
+    expect(names('do I need an umbrella in Leeds tomorrow')[0]).toBe('weather');
+    expect(names("How much does Wen's plumber charge?")).not.toContain('phone_info');
+    expect(names('how much charge is left on my phone')).toContain('phone_info');
+    expect(names('Until when is the boiler under warranty?')).toEqual([]);
   });
 });
