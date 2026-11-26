@@ -1,15 +1,22 @@
 /**
- * Answers worked out in code, not by the model: sums, unit conversions and the time in another
- * city. Exact and instant (a small model gets arithmetic wrong). Pure; tested in
+ * Answers worked out in code, not by the model: sums, unit conversions, the time in another
+ * city, and dates (date-answers.ts). Exact and instant (a small model gets arithmetic wrong). Pure; tested in
  * __tests__/quick-answers-test.ts.
  */
+
+import { dateAnswer } from './date-answers';
 
 const LEAD =
   /^(?:hey |ok |okay )?(?:sidekick,? )?(?:please )?(?:(?:can|could) you (?:tell me |work out )?)?(?:what(?:'s| is| are)|whats|calculate|compute|work out|how much is|tell me)?\s*/i;
 const TAIL = /[\s,]*(?:please|thanks)?[?.!\s]*$/i;
 
 export function quickAnswer(question: string, now: Date = new Date()): string | null {
-  return timeIn(question, now) ?? convertUnits(question) ?? calculate(question);
+  return (
+    timeIn(question, now) ??
+    dateAnswer(question, now) ??
+    convertUnits(question) ??
+    calculate(question)
+  );
 }
 
 // --- Numbers ---

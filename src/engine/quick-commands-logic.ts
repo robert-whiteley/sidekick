@@ -161,6 +161,47 @@ export function parseVoiceCommand(question: string): VoiceCommand | null {
   )
     return { type: 'scan' };
 
+  const cam = cameraChange(q);
+  if (cam) return { type: 'cameraSetting', change: cam };
+
+  return null;
+}
+
+const UP = /^(?:raise|increase|up|boost|turn up|bump up|use (?:a )?higher|higher)$/;
+const DOWN = /^(?:lower|reduce|decrease|drop|cut|turn down|use (?:a )?lower)$/;
+
+/** Plain camera-setting requests ("lower the frame rate", "use the front camera"); others go to the router. */
+function cameraChange(q: string): CameraChange | null {
+  const s = q.replace(/\b(the |my |live )+/g, '').replace(/\s+/g, ' ');
+  let m: RegExpExecArray | null;
+  const FRAMES =
+    '(?:camera )?(?:frame ?rate|fps|frames?(?: per second| a second)?)(?: on camera| for camera)?';
+  if ((m = new RegExp(`^(\\w+(?: \\w+){0,2}) ${FRAMES}$`).exec(s))) {
+    if (UP.test(m[1])) return { frames: 'more' };
+    if (DOWN.test(m[1])) return { frames: 'fewer' };
+  }
+  if (
+    (m =
+      /^(?:(?:use|take|grab|capture|shoot|record) )?(more|fewer|less) (?:camera )?(?:frames|pictures|photos|images)(?: per second| a second| each second)?$/.exec(
+        s,
+      ))
+  )
+    return { frames: m[1] === 'more' ? 'more' : 'fewer' };
+  if (
+    (m =
+      /^(?:switch|change|flip|swap|go|turn)?(?: ?to)? ?(?:use )?(front|selfie|back|rear|main) (?:facing )?camera$/.exec(
+        s,
+      ))
+  )
+    return { lens: m[1] === 'front' || m[1] === 'selfie' ? 'front' : 'back' };
+  if (/^(?:flip|swap|switch|turn) (?:camera|cameras|lens)(?: around| over)?$/.test(s))
+    return { lens: 'flip' };
+  const DETAIL =
+    '(?:camera )?(?:resolution|detail|image detail|image quality|picture quality)(?: on camera| for camera)?';
+  if ((m = new RegExp(`^(\\w+(?: \\w+){0,2}) ${DETAIL}$`).exec(s))) {
+    if (UP.test(m[1])) return { detail: 'higher' };
+    if (DOWN.test(m[1])) return { detail: 'lower' };
+  }
   return null;
 }
 

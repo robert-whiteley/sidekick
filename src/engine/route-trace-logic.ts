@@ -57,6 +57,16 @@ const MOVE =
   /^(?:please )?(?:move|reschedule|push|change|shift) (?:my |the )?(.+?) (?:to|until|till) (.+?)[.!?]*$/i;
 
 /** The first rule of `answer()` that takes [q] (typed, no photo, not off the record). */
+/**
+ * A routine whose action is a weather or location question ("every Monday at 8 tell me the
+ * weather"): set up as a routine, not answered now. False for reminders ("remind me every…").
+ */
+export function routineFirst(q: string, now: Date): boolean {
+  const p = parseRoutine(q, now);
+  if (!p?.ok || parseReminderRequest(q, now)) return false;
+  return !(p.when.type === 'once' && parseIntent(p.action, now));
+}
+
 export function traceRules(
   q: string,
   now: Date,
@@ -65,9 +75,10 @@ export function traceRules(
   const contacts = opts.contacts ?? [];
   const cmd = parseVoiceCommand(q);
   if (cmd) return { stage: 'command', detail: cmd };
-  const weather = parseWeatherQuestion(q);
+  const isRoutine = !opts.routine && !opts.offRecord && routineFirst(q, now);
+  const weather = isRoutine ? null : parseWeatherQuestion(q);
   if (weather) return { stage: 'weather', detail: weather };
-  const loc = parseLocationQuestion(q, now);
+  const loc = isRoutine ? null : parseLocationQuestion(q, now);
   if (loc) return { stage: 'location', detail: loc };
   const rem = REMEMBER.exec(q.trim());
   if (rem && !q.trim().endsWith('?')) return { stage: 'remember', detail: rem[2] };

@@ -433,10 +433,20 @@ export function parseReminderRequest(
   q: string,
   now: Date,
 ): Pick<Followup, 'kind' | 'title' | 'dueAt' | 'allDay' | 'whenText' | 'repeat'> | null {
-  const m =
-    /^(?:hey )?(?:sidekick,? )?(?:please )?(?:(?:can|could|will) you )?remind me (.+?)[.!?]*$/i.exec(
-      q.trim(),
+  const lead = /^(?:hey )?(?:sidekick,? )?(?:please )?(?:(?:can|could|will) you )?/i;
+  const asked = q.trim().replace(lead, '');
+  // "Don't let me forget to …" is "remind me to …"; "add bread to my to-do list" is a to-do.
+  const list =
+    /^(?:add|put|stick|pop) (.+?) (?:to|on|onto) (?:my |the )?(?:to-?do|todo|task|tasks|shopping) list[.!?]*$/i.exec(
+      asked,
     );
+  if (list) {
+    const title = cleanTitle(list[1].trim());
+    return title ? { kind: 'todo', title, dueAt: null, allDay: false, whenText: '' } : null;
+  }
+  const m = /^remind me (.+?)[.!?]*$/i.exec(
+    asked.replace(/^(?:don'?t|do not) (?:let me|you let me) forget (to|about)\b/i, 'remind me $1'),
+  );
   if (!m) return null;
   let rest = m[1].replace(/\s+/g, ' ');
   // "Every Monday at 9", "every day": the rule, then the first time as a one-off would be.

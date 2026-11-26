@@ -5,6 +5,7 @@ import { postCodeCards, scanCodes } from './codes';
 import { codePromptLine } from './codes-logic';
 import { answerRecap } from './recap';
 import { recallContext } from '@/memory/recall';
+import { routineFirst } from './route-trace-logic';
 import { postRoutineCard, routineRequest } from './routines-store';
 import SidekickNative from '../../modules/sidekick-native';
 import {
@@ -265,7 +266,10 @@ export async function answer(
   };
   // Where am I / was I / did I park, "call this place the gym", the weather (location.ts).
   // Before "remember …" so "remember this place as …" names a place instead of saving a fact.
-  const loc = photoNow ? null : await answerLocation(question, { offRecord }).catch(() => null);
+  // Not for a routine about them ("every Monday at 8 tell me the weather"): that's set up below.
+  const isRoutine = !photoNow && !opts?.routine && !offRecord && routineFirst(question, new Date());
+  const loc =
+    photoNow || isRoutine ? null : await answerLocation(question, { offRecord }).catch(() => null);
   if (loc) {
     onText(loc.text);
     return {
