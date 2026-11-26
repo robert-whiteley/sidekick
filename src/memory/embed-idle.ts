@@ -3,7 +3,11 @@ import { batteryState, chargerFallingBehind } from '@/engine/battery';
 import { getSettings } from '@/engine/settings';
 import { LOW_RAM_MB, photoWorkAllowed, shouldEmbedNow } from './embed-policy';
 import { captionMode } from './photo-text';
+import { scheduleReclaim } from './reclaim';
 import { countPendingEmbeds, embedPending } from './store';
+
+/** Once per run, when idle: space left by deletes and re-embedding in earlier runs. */
+let reclaimChecked = false;
 
 let pendingSince: number | null = null;
 
@@ -20,6 +24,10 @@ export async function embedWhenIdle(
   const pending = await countPendingEmbeds();
   if (!pending) {
     pendingSince = null;
+    if (!reclaimChecked) {
+      reclaimChecked = true;
+      scheduleReclaim(0);
+    }
     return 0;
   }
   pendingSince ??= now;

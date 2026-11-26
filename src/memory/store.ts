@@ -1,3 +1,4 @@
+import { reclaimSpace, scheduleReclaim } from './reclaim';
 import { oneRunAtATime } from './one-run';
 import { isStaleSuggestion, isTemplate } from './fact-extraction';
 import SidekickNative, { type JournalEntry } from '../../modules/sidekick-native';
@@ -1170,6 +1171,7 @@ async function deleteMoments(where: string, params: (number | string)[]) {
     );
   }
   await db.execute(`DELETE FROM moments WHERE ${where}`, params);
+  scheduleReclaim();
 }
 
 export const deleteMoment = (id: number) => deleteMoments('id = ?', [id]);
@@ -1202,6 +1204,7 @@ export async function deleteEverything() {
   await db.execute('DELETE FROM followups');
   await db.execute('DELETE FROM contacts');
   liveTranscript.clear();
+  await reclaimSpace({ force: true });
 }
 
 /** Applies the retention setting. */
