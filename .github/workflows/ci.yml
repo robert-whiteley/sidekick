@@ -26,10 +26,37 @@ jobs:
       - run: npm test -- --ci
       - run: npx expo-doctor
 
+  # Which native builds this change needs: JavaScript-only changes skip both (they ship as an
+  # over-the-air update and can't break the native build).
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      android: ${{ steps.f.outputs.android }}
+      ios: ${{ steps.f.outputs.ios }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - id: f
+        env:
+          BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          shared='^(app\.json|package\.json|package-lock\.json|eas\.json|\.fingerprintignore|plugins/|modules/sidekick-native/expo-module\.config\.json|\.github/workflows/ci\.yml)'
+          if [ -n "$BASE" ] && git cat-file -e "$BASE^{commit}" 2>/dev/null; then
+            files=$(git diff --name-only "$BASE" HEAD)
+          else
+            files='app.json' # unknown base (new branch, force push): build both
+          fi
+          echo "$files"
+          has() { echo "$files" | grep -qE "$1" && echo true || echo false; }
+          echo "android=$(has "$shared|^modules/sidekick-native/android/")" >> "$GITHUB_OUTPUT"
+          echo "ios=$(has "$shared|^modules/sidekick-native/ios/|^app-intents/")" >> "$GITHUB_OUTPUT"
+
   android-build:
     timeout-minutes: 45
     runs-on: ubuntu-latest
-    needs: check
+    needs: [check, changes]
+    if: needs.changes.outputs.android == 'true'
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
@@ -52,6 +79,59 @@ jobs:
           name: sidekick-android-apk
           path: android/app/build/outputs/apk/release/app-release.apk
           retention-days: 14
+
+  # Compile check for the iPhone app (Swift in modules/sidekick-native/ios and app-intents/, the
+  # pods, App Intents metadata), like android-build, when native files change. Simulator build, no signing, Debug (no JS
+  # bundle). Free: standard GitHub-hosted runners cost nothing in public repositories
+  # (macos-26 is a standard arm64 runner; the -large / -xlarge labels would be billed).
+  ios-build:
+    timeout-minutes: 60
+    runs-on: macos-26
+    needs: changes
+    if: needs.changes.outputs.ios == 'true'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: npx expo prebuild --platform ios --no-install
+      # Pods and the LiteRT-LM xcframework (~96 MB download) by their inputs.
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ios/Pods
+            modules/sidekick-native/ios/vendor
+          key: ios-pods-${{ hashFiles('package-lock.json', 'app.json', 'modules/sidekick-native/ios/SidekickNative.podspec') }}
+          restore-keys: ios-pods-
+      # C/C++/Objective-C objects; saved every run so the next one starts warm.
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/Library/Caches/ccache
+          key: ios-ccache-${{ github.run_id }}
+          restore-keys: ios-ccache-
+      - run: brew install ccache
+      - run: pod install
+        working-directory: ios
+        env:
+          USE_CCACHE: '1'
+      - run: xcodebuild -version
+      - run: >-
+          xcodebuild build -quiet -workspace Sidekick.xcworkspace -scheme Sidekick
+          -configuration Debug -sdk iphonesimulator -destination 'generic/platform=iOS Simulator'
+          -derivedDataPath build ARCHS=arm64 ONLY_ACTIVE_ARCH=YES CODE_SIGNING_ALLOWED=NO
+        working-directory: ios
+      # The Siri / Shortcuts actions must reach Apple's metadata, or they silently don't appear.
+      - name: App Intents metadata has the Sidekick shortcuts
+        working-directory: ios
+        run: |
+          meta=$(find build/Build/Products -path '*Sidekick.app/Metadata.appintents' -type d | head -1)
+          test -n "$meta" || { echo "no Metadata.appintents in the app"; exit 1; }
+          for name in AskSidekickIntent VoiceQuestionIntent LookIntent SidekickShortcuts; do
+            grep -rq "$name" "$meta" || { echo "$name missing from $meta"; exit 1; }
+          done
+          echo "found in $meta"
 
   # Every merge to main ships the JS as an over-the-air update to the "preview" channel (my phone).
   # Promote to everyone later with: eas update:republish --channel production

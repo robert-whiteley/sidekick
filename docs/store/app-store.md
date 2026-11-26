@@ -43,6 +43,7 @@ PRIVATE BY DESIGN
 ASK ANYTHING
 • Hold the mic and speak, or type. Answers are spoken and shown in the chat.
 • "What am I looking at?" — take a photo and ask. Sidekick reads the text in photos too.
+• Ask from Siri, the Shortcuts app, the Action Button or Control Center: "Ask Sidekick" opens the app with your question.
 • Scan QR codes and barcodes from a photo.
 
 REMEMBERS FOR YOU
@@ -101,7 +102,7 @@ that aren't there, guideline 2.3.3).
 - Notes:
 
 ```
-Sidekick runs a small AI model on the device. On first launch it downloads the model (about 3 GB) from Hugging Face; please use Wi-Fi and allow a few minutes. After that it works offline. There is no account, server or analytics. Try: "What can you do?", take a photo with the camera button and ask "what am I looking at?", "remind me at 6pm to call Sam", "how many steps today?". Online lookup is off by default (Settings > Privacy).
+Sidekick runs a small AI model on the device. On first launch it downloads the model (about 3 GB) from Hugging Face; please use Wi-Fi and allow a few minutes. After that it works offline. There is no account, server or analytics. Try: "What can you do?", take a photo with the camera button and ask "what am I looking at?", "remind me at 6pm to call Sam", "how many steps today?", or "Hey Siri, ask Sidekick" (the app opens with the question). Online lookup is off by default (Settings > Privacy).
 ```
 
 ## Age rating (App Information → Age Rating → Edit)

@@ -7,10 +7,14 @@
  * session stores it under ASSIST_KEY in the app's own settings, and we read it from there.
  */
 
-/** listen: ask by voice; capture: Remember this; camera: live camera; listenmode: Listen on. */
-export type EntryKind = 'listen' | 'capture' | 'screen' | 'camera' | 'listenmode';
+/**
+ * listen: ask by voice; capture: Remember this; camera: live camera; listenmode: Listen on.
+ * From iPhone App Intents only (app-intents.ts, never from a link): ask: a typed or spoken
+ * question; look: "What am I looking at?".
+ */
+export type EntryKind = 'listen' | 'capture' | 'screen' | 'camera' | 'listenmode' | 'ask' | 'look';
 
-export type EntryRequest = { kind: EntryKind; nonce: string };
+export type EntryRequest = { kind: EntryKind; nonce: string; text?: string };
 
 export type ScreenGrab = {
   /** JPEG in the app's cache, or null when the screenshot was blocked (secure app, setting off). */
@@ -33,6 +37,7 @@ export const SHARED_QUESTION = "What's in this picture?";
 /** A grab older than this is stale (e.g. left over from an earlier launch). */
 export const SCREEN_MAX_AGE_MS = 2 * 60_000;
 
+/** Kinds a link may ask for. A question never travels in a link (any app can open one). */
 const KINDS: readonly EntryKind[] = ['listen', 'capture', 'screen', 'camera', 'listenmode'];
 
 type Params = Record<string, string | string[] | undefined>;

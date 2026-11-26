@@ -59,7 +59,7 @@ Notes, picked folders, calendar and notifications become ordinary moments (kinds
 
 ## Platform limits
 
-**iOS:** no background camera; no custom wake word in the background (use side button voice-app setting, Back Tap, Siri / App Intents, widget); background mic is allowed if started in the foreground (`audio` background mode, orange dot — App Review 2.5.4 / 2.5.14 need detailed review notes); no reading other apps' screens (share sheet, or a ReplayKit broadcast extension with a 50 MB cap); no notification / SMS / call-log access; no background GPU.
+**iOS:** no background camera; no custom wake word in the background (use side button voice-app setting, Back Tap, or the App Shortcuts in `app-intents/`: "Ask Sidekick", "Start voice question", "What am I looking at?" from Siri, Shortcuts, the Action Button or Control Center's Shortcut control; each opens the app, ADR 0006); background mic is allowed if started in the foreground (`audio` background mode, orange dot — App Review 2.5.4 / 2.5.14 need detailed review notes); no reading other apps' screens (share sheet, or a ReplayKit broadcast extension with a 50 MB cap); no notification / SMS / call-log access; no background GPU.
 
 **Android:** camera / microphone foreground services must start while the app is visible; a mic FGS cannot start from `BOOT_COMPLETED` (Android 15+); the default-assistant role (Assist API) is the legitimate screen-context route; MediaProjection needs consent each session; AccessibilityService only for sideload builds; `MANAGE_EXTERNAL_STORAGE` is not allowed on Play → use SAF; native libraries must support 16 KB pages (targetSdk 35+).
 
