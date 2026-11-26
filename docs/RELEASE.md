@@ -73,6 +73,12 @@ section 10.
 - iPhone screenshots: `node scripts/iphone-screenshots.mjs <folder>` turns iPhone 13 mini screenshots
   into the 6.5" size (1284 × 2778 JPEG).
 
+**Review submission** (attach the newest build and submit): `node scripts/asc-submit.mjs` with the team's
+App Store Connect API key. On the laptop: `ASC_ENV_FILE=~/pocket_animals/frontend/fastlane/.env` (the key
+Pocket Animals uses). From a cloud session this needs GitHub secrets `ASC_KEY_ID`, `ASC_ISSUER_ID` and
+`ASC_KEY_P8` added by the owner; until then submit from the laptop. Content rights are set on the app (no
+third-party content). An empty extra draft submission sits in App Store Connect; harmless.
+
 ## D. Quick fixes (EAS Update)
 
 - For JS/asset-only fixes: `scripts/release.sh update --notes notes.txt --real` (channel `production`; `--channel preview` for test builds). Native changes (Kotlin, new native packages, app.json plugins/permissions) need `ship`: the runtime version is the native fingerprint, so an update only reaches builds it is compatible with.
