@@ -101,7 +101,13 @@ import { IPHONE, onIphone } from '@/engine/platform-text';
 import { asksAboutWhatIsInView, wantsCameraNow } from '@/memory/search-logic';
 import { embedWhenIdle } from '@/memory/embed-idle';
 import { syncSourcesIfDue } from '@/memory/sources';
-import { capturePhoto, ingestJournal, learnOwnerVoice, syncOwnerVoice } from '@/memory/store';
+import {
+  capturePhoto,
+  forgetUnagreedVoices,
+  ingestJournal,
+  learnOwnerVoice,
+  syncOwnerVoice,
+} from '@/memory/store';
 import { loadChatHistory } from './chat-history';
 import {
   type ChatMedia,
@@ -357,6 +363,8 @@ export function AskScreen({
     configureListening();
     // Only the owner's voice (or the wake word) may interrupt an answer.
     void syncOwnerVoice().catch(() => {});
+    // Consent mode: no voiceprint is kept for people who never agreed (older builds kept one).
+    void forgetUnagreedVoices().catch(() => {});
     startFollowupNotifications();
     const subs = [
       SidekickNative.addListener('onWake', () => setStatus('Listening…')),

@@ -21,6 +21,7 @@ import {
   type Usage,
 } from './storage';
 import { pruneMissingMedia } from '@/memory/media-files';
+import { forgetSpaceLevel, spaceLevel, spaceStateMessage } from './storage-guard';
 
 /**
  * Measures the phone's storage, keeps a daily history, applies keep periods, frees space when
@@ -197,6 +198,10 @@ export function checkStorage(now = Date.now()): StorageReport {
   SidekickNative.kvSet(SAMPLES_KEY, JSON.stringify(hist));
   const after = diskSpace().free || free + cleaned;
   const fc = forecast(after, reserve, dailyRate(hist));
+  // What pauses while space is short (storage-guard.ts); re-read at once after a clean-up.
+  forgetSpaceLevel();
+  const short = total > 0 ? spaceStateMessage(spaceLevel(after, total, reserve), after) : null;
+  if (short) notices.post({ key: 'storage-short', kind: 'info', text: short, href: '/storage' });
   if (plan.forSpace.length > 0) {
     notices.post({
       key: 'storage-cleanup',
@@ -240,14 +245,21 @@ function keepLess(total: number) {
 }
 
 /** The camera recorder's own storage events, in plain words. */
-function onCameraStorage(e: { reason: 'reserve' | 'ok'; shortBytes: number; video: boolean }) {
+function onCameraStorage(e: {
+  reason: 'reserve' | 'full' | 'ok';
+  shortBytes: number;
+  video: boolean;
+}) {
   if (e.reason === 'ok') return;
   notices.post({
     key: 'camera-storage',
     kind: 'info',
-    text: e.video
-      ? 'Phone storage is low: video recording paused; the camera still remembers what it sees.'
-      : `Phone storage is low: cleared the oldest camera stills (${formatBytes(e.shortBytes)} more needed).`,
+    text:
+      e.reason === 'full'
+        ? 'Phone storage is full: the camera still sees, but no frames are saved until space is free.'
+        : e.video
+          ? 'Phone storage is low: video recording paused; the camera still remembers what it sees.'
+          : `Phone storage is low: cleared the oldest camera stills (${formatBytes(e.shortBytes)} more needed).`,
     href: '/storage',
   });
 }

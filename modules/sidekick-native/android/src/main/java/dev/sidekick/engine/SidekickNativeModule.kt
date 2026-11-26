@@ -45,10 +45,13 @@ class SidekickNativeModule : Module() {
   override fun definition() = ModuleDefinition {
     Name("SidekickNative")
 
-    Events("onLlmText", "onWake", "onTranscript", "onPartialTranscript", "onQuestion", "onListenError", "onBargeIn", "onVoiceIdle", "onUsbCamera", "onAudioDevices", "onMediaButton", "onCamera")
+    Events("onLlmText", "onWake", "onTranscript", "onPartialTranscript", "onQuestion", "onListenError", "onBargeIn", "onVoiceIdle", "onUsbCamera", "onAudioDevices", "onMediaButton", "onCamera", "onMemoryPressure")
 
     OnCreate {
       MicLoop.listener = { name, body -> sendEvent(name, body) }
+      // Android's low-memory signals free the big models (they reload on demand); JS drops caches.
+      appContext.reactContext?.let { MemoryWatch.install(it) }
+      MemoryWatch.listener = { body -> sendEvent("onMemoryPressure", body) }
       Voice.onIdle = { sendEvent("onVoiceIdle", emptyMap<String, Any?>()) }
       dev.sidekick.engine.camera.LiveCapture.listener = { body -> sendEvent("onCamera", body) }
       // Inputs/outputs (engine/usb): USB camera plug/unplug, audio device changes, headset button.
@@ -483,7 +486,9 @@ class SidekickNativeModule : Module() {
       true
     }
     Function("cameraConfigure") { cfg: Map<String, Any?>? ->
-      dev.sidekick.engine.camera.LiveCapture.configure(dev.sidekick.engine.camera.CaptureConfig.from(cfg))
+      val c = dev.sidekick.engine.camera.CaptureConfig.from(cfg)
+      StorageGuard.reserveMb = c.reserveMb
+      dev.sidekick.engine.camera.LiveCapture.configure(c)
     }
     Function("cameraStop") { ListenService.stopCamera(context) }
     Function("cameraPause") { paused: Boolean -> ListenService.setCameraPaused(paused) }
@@ -565,6 +570,7 @@ class SidekickNativeModule : Module() {
 
     OnDestroy {
       MicLoop.listener = null
+      MemoryWatch.listener = null
       Voice.onIdle = null
       dev.sidekick.engine.usb.UsbCameras.listener = null
       dev.sidekick.engine.usb.AudioRoutes.listener = null

@@ -72,6 +72,7 @@ jest.mock('@/memory/store', () => ({
   ingestJournal: async () => 0,
   learnOwnerVoice: async () => {},
   syncOwnerVoice: async () => {},
+  forgetUnagreedVoices: async () => 0,
 }));
 jest.mock('@/features/ask/LiveConversation', () => ({ LiveConversation: () => null }));
 jest.mock('@/features/ask/WebLookupUi', () => ({

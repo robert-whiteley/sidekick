@@ -15,6 +15,7 @@ import { noteLlmLoaded, startModelUpdates } from '@/engine/model-updates';
 import { startQuickFixes } from '@/engine/quick-fixes';
 import { startWave2 } from '@/engine/wave2-start';
 import { startStorageMonitor } from '@/engine/storage-monitor';
+import { startMemoryPressure } from '@/engine/memory-pressure';
 import { FirstRun } from '@/features/onboarding/FirstRun';
 import { checkWhatsNew } from '@/content/whats-new-notice';
 import { startStepSampler } from '@/integrations/extras';
@@ -48,6 +49,7 @@ export default function HomeScreen() {
       startModelUpdates(),
       startQuickFixes(),
       startStorageMonitor(),
+      startMemoryPressure(),
       startIntegrations(),
       startStepSampler(),
       startRoutines(),

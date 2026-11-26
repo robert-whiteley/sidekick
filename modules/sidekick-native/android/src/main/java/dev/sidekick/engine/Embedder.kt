@@ -18,6 +18,10 @@ object Embedder {
   @Volatile private var engine: EmbeddingEngine? = null
   @Volatile private var path: String? = null
 
+  /** Whether the model is in memory now (MemoryWatch frees it under memory pressure). */
+  val isLoaded: Boolean
+    get() = engine != null
+
   @Synchronized
   fun embed(ctx: Context, modelPath: String, texts: List<String>, dims: Int): List<FloatArray> {
     val e = load(ctx, modelPath)

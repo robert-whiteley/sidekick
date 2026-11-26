@@ -23,3 +23,27 @@ export function keepOtherSpeech(opts: {
 }): boolean {
   return !opts.consentMode || opts.speakerConsented;
 }
+
+/**
+ * What happens to a line and its voice. A voice is stored only together with a line of theirs
+ * that is kept (SPEC 4: voices that have not consented are not stored); until then it lives in
+ * memory for the conversation (unsaved-voices.ts). [agrees]: this line is a yes within
+ * CONSENT_WINDOW_MS of the owner asking; it counts only when the line has a voice to attach it to.
+ */
+export function lineFate(o: {
+  consentMode: boolean;
+  isOwner: boolean;
+  hasVoice: boolean;
+  consented: boolean;
+  agrees: boolean;
+}): { keep: boolean; consentNow: boolean } {
+  if (o.isOwner) return { keep: true, consentNow: false };
+  const consentNow = o.hasVoice && !o.consented && o.agrees;
+  return {
+    keep: keepOtherSpeech({
+      consentMode: o.consentMode,
+      speakerConsented: o.consented || consentNow,
+    }),
+    consentNow,
+  };
+}

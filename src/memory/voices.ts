@@ -1,6 +1,13 @@
 /** Speaker clustering from voiceprints, with no enrolment. Pure functions; tested. */
 
-export type Speaker = { id: number; centroid: number[]; count: number; isOwner: boolean };
+export type Speaker = {
+  id: number;
+  centroid: number[];
+  count: number;
+  isOwner: boolean;
+  /** When this voice was last heard (ms), if known: voices of the conversation going on count more. */
+  lastAt?: number;
+};
 
 /**
  * Same-voice threshold for 3D-Speaker CAM++ cosine similarity. On LibriSpeech (20 speakers) 0.55
@@ -28,6 +35,20 @@ export const RELIABLE_VOICE_MS = 1500;
 export const SHORT_CLIP_SIM = 0.45;
 export const SHORT_CLIP_MARGIN = 0.1;
 
+/**
+ * Conversation context. A voice that has just started (a few clips, so a noisy centroid) scores
+ * lower against its own person's next lines than an older, well-learned voice that sounds alike,
+ * or than SAME_VOICE: one person's lines were split between a new voice and an older one (café
+ * test: the waiter's lines went to a voice from an earlier test at 0.55–0.76), or into two new
+ * voices. So a voice of at most RECENT_YOUNG clips, heard in the last RECENT_MS, is joined from
+ * RECENT_SIM and wins over an older voice unless that one scores RECENT_MARGIN more. Never the
+ * owner. Tuned on the voice bench (docs/BENCH.md): splits 62 → 39, no measure worse on average.
+ */
+export const RECENT_MS = 10 * 60_000;
+export const RECENT_SIM = 0.45;
+export const RECENT_MARGIN = 0.1;
+export const RECENT_YOUNG = 3;
+
 /** The thresholds above, together (the voice bench sweeps them). */
 export type VoiceRules = {
   sameVoice: number;
@@ -35,6 +56,14 @@ export type VoiceRules = {
   reliableMs: number;
   shortClipSim: number;
   shortClipMargin: number;
+  /** A voice heard this recently (ms) belongs to the conversation going on. */
+  recentMs: number;
+  /** Same-voice threshold for a young voice of the conversation going on (never the owner). */
+  recentSim: number;
+  /** That voice wins over an older one that scores at most this much more. */
+  recentMargin: number;
+  /** Clips a voice may have to count as young (still learning). */
+  recentYoung: number;
 };
 
 export const VOICE_RULES: VoiceRules = {
@@ -43,6 +72,10 @@ export const VOICE_RULES: VoiceRules = {
   reliableMs: RELIABLE_VOICE_MS,
   shortClipSim: SHORT_CLIP_SIM,
   shortClipMargin: SHORT_CLIP_MARGIN,
+  recentMs: RECENT_MS,
+  recentSim: RECENT_SIM,
+  recentMargin: RECENT_MARGIN,
+  recentYoung: RECENT_YOUNG,
 };
 
 /** Whether an unmatched clip is long enough to become a new person. */
@@ -61,21 +94,40 @@ export function cosine(a: number[], b: number[]): number {
   return na && nb ? dot / Math.sqrt(na * nb) : 0;
 }
 
-/** The known speaker this voice belongs to, or null for a new voice. */
+/** Whether [s] is a voice still being learned in the conversation going on at [now]. */
+const isNewHere = (s: Speaker, now: number | undefined, rules: VoiceRules) =>
+  !s.isOwner &&
+  s.count <= rules.recentYoung &&
+  now != null &&
+  s.lastAt != null &&
+  now - s.lastAt <= rules.recentMs;
+
+/**
+ * The known speaker this voice belongs to, or null for a new voice. [now] (ms) turns on
+ * conversation context: voices heard in the conversation going on are preferred (RECENT_MS).
+ */
 export function matchSpeaker(
   voice: number[],
   speakers: Speaker[],
   rules = VOICE_RULES,
+  now?: number,
 ): Speaker | null {
   let best: Speaker | null = null;
   let bestSim = rules.sameVoice;
+  let recent: Speaker | null = null;
+  let recentSim = -1;
   for (const s of speakers) {
     const sim = cosine(voice, s.centroid);
     if (sim >= bestSim) {
       best = s;
       bestSim = sim;
     }
+    if (isNewHere(s, now, rules) && sim >= rules.recentSim && sim > recentSim) {
+      recent = s;
+      recentSim = sim;
+    }
   }
+  if (recent && (!best || recentSim >= bestSim - rules.recentMargin)) return recent;
   return best;
 }
 
@@ -141,6 +193,8 @@ export function chooseSpeaker(
   trusted: boolean,
   all: Speaker[],
   rules = VOICE_RULES,
+  /** When the line was said (ms): turns on conversation context (see matchSpeaker). */
+  now?: number,
 ): SpeakerChoice {
   if (!voice) return { kind: 'none', owner: claimsOwner };
   const known = all.find((x) => x.isOwner) ?? null;
@@ -154,7 +208,7 @@ export function chooseSpeaker(
   }
   let owner = claimsOwner;
   if (owner && !trusted && !ownerClaimHolds(voice, known, rules)) owner = false;
-  const s = owner ? known : matchSpeaker(voice, all, rules);
+  const s = owner ? known : matchSpeaker(voice, all, rules, now);
   if (s) return { kind: 'join', speaker: s, owner: s.isOwner, learn: true };
   // Too short to start a person: join a clearly closest known voice, else wait for one.
   if (!owner && !canStartNewVoice(durationMs, rules))

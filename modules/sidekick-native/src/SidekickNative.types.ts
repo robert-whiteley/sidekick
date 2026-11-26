@@ -78,6 +78,8 @@ export type DeviceInfo = {
 export type SidekickNativeModuleEvents = {
   /** Live camera: started/stopped, slowed down (heat/battery/memory), storage short, camera lost. */
   onCamera: (event: CameraEvent) => void;
+  /** Android said memory is short: big models were freed natively (they reload on demand). */
+  onMemoryPressure: (event: { level: 'low' | 'critical'; freed: string[] }) => void;
   onLlmText: (event: { requestId: string; text: string }) => void;
   onWake: (event: Record<string, never>) => void;
   onTranscript: (event: { kind: 'speech' | 'question'; text: string; at: number }) => void;
@@ -246,7 +248,8 @@ export type CameraEvent =
       tempC: number | null;
       batteryPct: number;
     }
-  | { kind: 'storage'; reason: 'reserve' | 'ok'; shortBytes: number; video: boolean }
+  /** reserve: under the reserve (video paused, stills cleared); full: no frames stored at all. */
+  | { kind: 'storage'; reason: 'reserve' | 'full' | 'ok'; shortBytes: number; video: boolean }
   | { kind: 'lost'; reason: string; fallback?: 'phone' };
 
 /** A finished video file overlapping the asked window: play [path] from offsetMs for durationMs. */

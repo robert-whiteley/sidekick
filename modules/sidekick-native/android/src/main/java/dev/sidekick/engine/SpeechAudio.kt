@@ -55,6 +55,8 @@ object SpeechAudio {
   /** Encodes and saves the clip; returns its absolute path, or null if it couldn't be saved. */
   fun save(ctx: Context, audio: FloatArray, startMs: Long): String? {
     if (!enabled || audio.isEmpty() || Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return null
+    // Phone storage short: the words are kept, the recording isn't (StorageGuard).
+    if (StorageGuard.now(ctx) != StorageGuard.Level.OK) return null
     val file = File(ctx.filesDir, relPath(startMs)).apply { parentFile?.mkdirs() }
     return try {
       encode(toPcm16(audio), file)

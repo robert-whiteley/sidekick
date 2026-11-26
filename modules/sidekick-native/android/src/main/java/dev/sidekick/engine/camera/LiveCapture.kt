@@ -284,6 +284,12 @@ object LiveCapture {
     val bmp = frame.bitmap
     saveLive(ctx, bmp, frame.atMs, cfg.liveFrames)
     if (!dedupe.keep(lumaGrid(bmp), frame.atMs)) return
+    // Phone storage full: frames are still seen live (questions, watches) but none is stored.
+    val space = dev.sidekick.engine.StorageGuard.now(ctx)
+    if (space == dev.sidekick.engine.StorageGuard.Level.FULL) {
+      noteStorageFull()
+      return
+    }
     framesKept++
     if (framesKept == 1 || framesKept % 50 == 0) Log.i(TAG, "frames kept $framesKept of $framesSeen")
     val at = frame.atMs
@@ -293,7 +299,9 @@ object LiveCapture {
 
     var stillPath: String? = null
     val r = rates
-    if (cfg.ocrDetPath != null && cfg.ocrRecPath != null && cfg.ocrDictPath != null && r?.reason == null && at - lastOcrAt >= cfg.ocrEveryMs) {
+    // Under the reserve: no full-size stills (keyframes carry on).
+    val stillsAllowed = space == dev.sidekick.engine.StorageGuard.Level.OK
+    if (stillsAllowed && cfg.ocrDetPath != null && cfg.ocrRecPath != null && cfg.ocrDictPath != null && r?.reason == null && at - lastOcrAt >= cfg.ocrEveryMs) {
       lastOcrAt = at
       val text = runCatching { Ocr.hasText(cfg.ocrDetPath, cfg.ocrRecPath, cfg.ocrDictPath, bmp) }.getOrDefault(false)
       if (text) {
@@ -316,6 +324,17 @@ object LiveCapture {
       )
     File(pendingDir(ctx), "$at.json").writeText(entry.toString())
     scheduleEmbed(0)
+  }
+
+  @Volatile private var lastFullEventAt = 0L
+
+  /** Tells JS (at most hourly) that frames aren't stored for lack of space. */
+  private fun noteStorageFull() {
+    val now = System.currentTimeMillis()
+    if (now - lastFullEventAt < HourBuckets.HOUR_MS) return
+    lastFullEventAt = now
+    Log.i(TAG, "storage full: frames not stored")
+    emit(mapOf("kind" to "storage", "reason" to "full", "shortBytes" to 0L, "video" to false))
   }
 
   private fun saveLive(ctx: Context, bmp: Bitmap, at: Long, keep: Int) {

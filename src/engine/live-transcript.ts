@@ -51,6 +51,13 @@ export class LiveTranscript {
     this.listeners.forEach((l) => l(this.lines));
   }
 
+  /** Moves every line of one voice to another id (an unsaved voice that was just stored). */
+  respeak(fromId: number, toId: number) {
+    if (!this.lines.some((l) => l.speakerId === fromId)) return;
+    this.lines = this.lines.map((l) => (l.speakerId === fromId ? { ...l, speakerId: toId } : l));
+    this.listeners.forEach((l) => l(this.lines));
+  }
+
   /** Replaces a line's text (an English translation added under it). */
   retext(at: number, text: string) {
     const i = this.lines.findIndex((l) => l.at === at);
