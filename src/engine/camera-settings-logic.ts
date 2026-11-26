@@ -42,6 +42,32 @@ export function parseFrames(v: unknown): Pick<CameraChange, 'frames' | 'fps'> {
   return {};
 }
 
+/**
+ * The router's camera_setting arguments as a change. When they give nothing usable (the small
+ * model sometimes leaves them empty, e.g. "lower the frame rate" when already at the lowest), the
+ * question's own words are read instead, so the reply is "Already at the fewest frames" rather
+ * than the model saying it can't change settings.
+ */
+export function cameraChangeFor(args: Record<string, unknown>, question: string): CameraChange {
+  const pick = <T extends string>(v: unknown) =>
+    (typeof v === 'string' && v.trim() ? v.trim().toLowerCase() : undefined) as T | undefined;
+  const change: CameraChange = {
+    ...parseFrames(args.frames),
+    lens: pick<CameraChange['lens'] & string>(args.lens),
+    detail: pick<CameraChange['detail'] & string>(args.detail),
+  };
+  if (change.fps !== undefined || change.frames || change.lens || change.detail) return change;
+  const q = question.toLowerCase();
+  if (/\b(frames?|fps|frame rate)\b/.test(q)) {
+    const n = /(\d+(?:\.\d+)?)/.exec(q);
+    return n ? parseFrames(n[1]) : parseFrames(q);
+  }
+  if (/\b(front|selfie)\b/.test(q)) return { lens: 'front' };
+  if (/\b(back|rear)\b/.test(q)) return { lens: 'back' };
+  if (/\bflip\b/.test(q)) return { lens: 'flip' };
+  return {};
+}
+
 const DETAILS: ImageDetail[] = ['low', 'medium', 'high'];
 
 const rateWords = (fps: number) =>

@@ -1,4 +1,5 @@
 import {
+  cameraChangeFor,
   parseFrames,
   planCameraChange,
   type CameraState,
@@ -83,5 +84,33 @@ describe('the camera_setting tool', () => {
     expect(parseFrames(0.5)).toEqual({ fps: 0.5 });
     expect(parseFrames('sideways')).toEqual({});
     expect(parseFrames(undefined)).toEqual({});
+  });
+});
+
+describe('cameraChangeFor', () => {
+  it('uses the router arguments when they say something', () => {
+    expect(cameraChangeFor({ frames: 'more' }, 'more frames')).toEqual({ frames: 'more' });
+    expect(cameraChangeFor({ lens: 'front' }, 'switch to the front camera')).toMatchObject({
+      lens: 'front',
+    });
+  });
+  it('reads the question when the arguments are empty or unusable', () => {
+    expect(cameraChangeFor({}, 'lower the frame rate')).toEqual({ frames: 'fewer' });
+    expect(cameraChangeFor({ frames: '' }, 'set the frame rate to 2')).toEqual({ fps: 2 });
+    expect(cameraChangeFor({ frames: 'sideways' }, 'more frames please')).toEqual({
+      frames: 'more',
+    });
+    expect(cameraChangeFor({}, 'use the selfie camera')).toEqual({ lens: 'front' });
+    expect(cameraChangeFor({}, 'what is a camera')).toEqual({});
+  });
+  it('at the lowest rate, "lower" says so instead of falling through', () => {
+    const cur: CameraState = { fps: 0.5, imageDetail: 'low', lens: 'back' };
+    const plan = planCameraChange(
+      cur,
+      { fps: 0.5, imageDetail: 'low' },
+      cameraChangeFor({}, 'lower the frame rate'),
+      OPTIONS,
+    );
+    expect(plan?.reply).toBe('Already at the fewest frames, 1 frame every 2 seconds.');
   });
 });

@@ -41,4 +41,13 @@ class ServiceNoticeTest {
     assertFalse(CaptureLogicLock.shouldFilm(true, false))
     assertFalse(CaptureLogicLock.shouldFilm(false, true))
   }
+
+  @Test fun channelShowsOnLockScreenWithoutAlerting() {
+    // Default importance: Pixel hides low-importance ("silent") notifications on the lock screen.
+    assertEquals(3, ServiceNotice.CHANNEL_IMPORTANCE)
+    assertFalse(ServiceNotice.CHANNEL_SOUND)
+    assertFalse(ServiceNotice.CHANNEL_VIBRATE)
+    // A channel's importance can't be raised after creation: it needs a new id.
+    assertTrue(ServiceNotice.CHANNEL != ServiceNotice.OLD_CHANNEL)
+  }
 }
