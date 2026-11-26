@@ -85,7 +85,7 @@ export const FRAME_CAPTIONS_PER_CHARGE = 60;
 /** No captions this soon after the owner opened the app or asked something. */
 export const FRAME_CAPTION_QUIET_MS = 2 * 60_000;
 
-/** Phones with this much RAM keep the model and the embedder loaded together (AGENTS.md). */
+/** Phones with this much RAM keep the model and the embedder loaded together (docs/RULES.md). */
 export const BOTH_MODELS_RAM_MB = 5500;
 
 /**

@@ -1,4 +1,7 @@
-This is an Expo/React Native mobile application. Prioritize mobile-first patterns, performance, and cross-platform compatibility.
+# Project rules
+
+Reference only: nothing loads this into AI sessions. Search it when needed. Checkable rules are
+enforced by scripts (`scripts/check-privacy.sh` in pre-commit and CI).
 
 ## Expo has changed — do not trust your training data
 

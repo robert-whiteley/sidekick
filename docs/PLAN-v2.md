@@ -80,7 +80,7 @@ Integrations now (each with its own switches in Connections):
 - Automations and voice: every action is available by voice and in typed chat.
 
 Dev tooling (owner): auto-memory off for this repo; facts live in repo docs (this file,
-AGENTS.md, ADRs). Minimal hooks only (see AGENTS.md).
+docs/RULES.md, ADRs), searched when needed. No CLAUDE.md/AGENTS.md: a hook and CI block them.
 
 Owner steps needed later (not blocking the build):
 
