@@ -7,11 +7,12 @@ import {
   lockAfterLabel,
   lockAvailable,
 } from '@/engine/app-lock-logic';
+import { platformText } from '@/engine/platform-text';
 import { ChoiceRow, Row, Section } from './ui';
 import { useSettings } from './useSettings';
 import { AppText } from '@/ui';
 
-/** Settings → Privacy → App lock: fingerprint, face or the phone's PIN to open Sidekick. */
+/** Settings → Privacy → App lock: the phone's biometrics or PIN / passcode to open Sidekick. */
 export function AppLockSection() {
   const { s, set } = useSettings();
   const [level, setLevel] = useState<number | null>(null);
@@ -34,18 +35,14 @@ export function AppLockSection() {
     const r = await LocalAuthentication.authenticateAsync({ promptMessage: 'Turn on app lock' });
     if (r.success) set({ appLock: true });
     else if (r.error === 'not_enrolled' || r.error === 'passcode_not_set')
-      setNote('Set a screen lock on the phone first (Settings → Security).');
+      setNote(platformText('appLockSetUpFirst'));
   };
 
   return (
     <Section title="App lock">
       <Row
         label="Lock Sidekick"
-        hint={
-          can
-            ? 'Asks for your fingerprint, face or phone PIN to open Sidekick. Spoken answers while the screen is off still need the phone unlocked for anything personal.'
-            : 'Not possible on this phone: it has no screen lock. Set one in the phone’s Settings → Security first.'
-        }
+        hint={platformText(can ? 'appLockHint' : 'appLockUnavailable')}
         value={s.appLock}
         onChange={(v) => void toggle(v)}
       />

@@ -321,6 +321,11 @@ Owner steps needed later (not blocking the build):
       iOS can't do is hidden or explained (ADR 0006 "iPhone"). Left: first EAS iOS build (compile
       check of the Swift), TestFlight run on the iPhone 13 mini, App Store Connect forms and
       screenshots (owner, `docs/RELEASE-OWNER-STEPS.md` section 10). → ROADMAP Future
+- [x] iPhone wording (26 Nov, from the first TestFlight screenshots): no Android words on iPhone
+      (Face ID / passcode, Save to Photos, App Store, location while open); consent, Instructions
+      only and pause places hidden; "what am I looking at?" opens the camera; the iPhone prompt
+      says what the app can do. One place for these texts (`src/engine/platform-text.ts`) and a
+      test (`__tests__/ios-wording-test.tsx`). Built and tested in jest; not yet run on the iPhone.
 
 ## Storage estimates (to measure)
 

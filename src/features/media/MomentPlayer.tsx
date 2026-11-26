@@ -14,6 +14,7 @@ import {
   View,
 } from 'react-native';
 
+import { IPHONE, onIphone } from '@/engine/platform-text';
 import { framesNear, videoSegments } from '@/memory/frames';
 import {
   awayFromMoment,
@@ -439,7 +440,10 @@ function ZoomImage({ path, full, onTap }: { path: string; full: boolean; onTap: 
   );
 }
 
-/** Share, and Save to a suggested folder (one tap), or another folder the user types. */
+/**
+ * Share, and Save to a suggested folder (one tap), or another folder the user types. iPhone:
+ * "Save to Photos" (the photo library has no folders; Share → Save to Files covers Files).
+ */
 function SaveShare({
   file,
   kind,
@@ -453,11 +457,16 @@ function SaveShare({
   const [editing, setEditing] = useState(false);
   const [album, setAlbum] = useState(suggestion.album);
   const [status, setStatus] = useState<string | null>(null);
+  const iphone = onIphone();
   const save = async (name: string) => {
     setEditing(false);
     try {
       const p = await requestPermissionsAsync(true, [kind]);
       if (!p.granted) return setStatus('Saving needs access to your photos');
+      if (iphone) {
+        await Asset.create(uri(file));
+        return setStatus(IPHONE.savedToPhotos);
+      }
       const clean = cleanAlbum(name);
       try {
         await Album.create(clean, [uri(file)], false);
@@ -478,10 +487,14 @@ function SaveShare({
           onPress={() => void Sharing.shareAsync(uri(file)).catch(() => {})}
         />
         <TextButton
-          title={`Save to ${album === suggestion.album ? suggestion.label : album}`}
+          title={
+            iphone
+              ? IPHONE.saveToPhotos
+              : `Save to ${album === suggestion.album ? suggestion.label : album}`
+          }
           onPress={() => void save(album)}
         />
-        <TextButton title="Other folder" onPress={() => setEditing((x) => !x)} />
+        {iphone ? null : <TextButton title="Other folder" onPress={() => setEditing((x) => !x)} />}
       </View>
       {editing && (
         <TextField

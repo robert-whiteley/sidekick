@@ -187,10 +187,13 @@ export function helpText(on: {
     can.push(
       'tell you what the camera sees, and watch for something ("tell me when you see my bus")',
     );
+  else if (on.iphone) can.push('look at a photo you take with the camera button');
   else can.push('look at a photo ("what am I looking at?")');
   if (on.memory)
     can.push(
-      'find what you saw or heard earlier ("what did Sam say this morning?") and recap any time',
+      on.iphone
+        ? 'find what you told me or showed me earlier ("what was the wifi password on that sign?") and recap any time'
+        : 'find what you saw or heard earlier ("what did Sam say this morning?") and recap any time',
     );
   if (on.listening) can.push('keep live notes of conversations');
   if (on.calendar) can.push('read and add calendar events');

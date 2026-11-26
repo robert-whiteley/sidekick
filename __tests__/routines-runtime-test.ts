@@ -1,11 +1,11 @@
 import { Platform } from 'react-native';
 
 import { handleRoutineEvent, onPlace, setRoutineDeps, setRoutineUi } from '@/engine/routines';
+import { IPHONE } from '@/engine/platform-text';
 import {
   addRoutine,
   listRoutines,
   migrateBriefing,
-  ROUTINES_NEED_ANDROID,
   routineRequest,
   setEventsSource,
   setRoutinesStore,
@@ -181,7 +181,7 @@ test('on iPhone a routine is explained, not saved', () => {
   try {
     const before = listRoutines().length;
     expect(routineRequest('every day at 6pm give me a recap of my day')).toEqual({
-      text: ROUTINES_NEED_ANDROID,
+      text: IPHONE.routines,
     });
     expect(listRoutines().length).toBe(before);
   } finally {

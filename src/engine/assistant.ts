@@ -27,6 +27,7 @@ import {
 } from './conversation';
 import { getSettings } from './settings';
 import { clearChatState, loadChatState, saveChatState } from '@/memory/chat-state';
+import { IPHONE, onIphone, platformText } from './platform-text';
 import { SYSTEM_PROMPT } from './prompts';
 import { keptFile } from '@/memory/media-files';
 import { speechClipFor } from './speech-clip';
@@ -39,7 +40,7 @@ import {
   savedFacts,
   searchMemory,
 } from '@/memory/store';
-import { asksAboutSomethingSeen } from '@/memory/search-logic';
+import { asksAboutSomethingSeen, wantsCameraNow } from '@/memory/search-logic';
 import { ocrPromptLine } from '@/memory/photo-text';
 import { photoTextOrNull } from './photo-ocr';
 import { memoryStatus } from './progress';
@@ -213,6 +214,9 @@ export async function answer(
   // Speech speed, repeat, "what can you do?", listening/camera on/off, watches, scan (no model).
   const command = await runQuickCommand(question, photoNow).catch(() => null);
   if (command) return done(command);
+  // iPhone: no live camera (ADR 0006), so "what am I looking at?" needs a photo first; the
+  // model would only guess (or talk about other phones). The Ask screen opens the camera.
+  if (onIphone() && !photoNow && wantsCameraNow(question)) return done(IPHONE.takePhotoFirst);
   const offRecord = opts?.offTheRecord ?? getSettings().offTheRecord ?? false;
   if (!offRecord) offRecordStarted = false;
   // Time words the rules can't read ("over Christmas"): the model gives the span once, and
@@ -287,10 +291,7 @@ export async function answer(
   if (tr && (!photoNow || tr.fromView)) {
     let source = tr.text;
     if (tr.fromView) {
-      if (!photoNow)
-        return done(
-          'Point the camera at the text (or show it on screen and hold the home button), then say "translate this".',
-        );
+      if (!photoNow) return done(platformText('translateNeedsPhoto'));
       status('Reading the text…');
       source = (await photoTextOrNull(photoNow)) ?? '';
       if (!source.trim()) return done("I can't see any text to translate.");
