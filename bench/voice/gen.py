@@ -137,13 +137,15 @@ def main(out, models):
                           "turns": [(k, "me" if k == "me" else f"{sc['id']}/{k}", t) for k, t in sc[part]]})
     voices = {"me": OWNER["voice"]}
     names = {"me": OWNER["name"]}
+    roles = {"me": None}
     for sc in SCENES:
         for k, p in sc["people"].items():
             voices[f"{sc['id']}/{k}"] = p["voice"]
             names[f"{sc['id']}/{k}"] = p.get("name")
+            roles[f"{sc['id']}/{k}"] = p.get("role")
     all_lines = [t for c in convs for _, _, t in c["turns"]]
 
-    truth = {"people": {pid: {"name": names[pid], "voice": list(voices[pid])} for pid in voices}, "convs": []}
+    truth = {"people": {pid: {"name": names[pid], "role": roles[pid], "voice": list(voices[pid])} for pid in voices}, "convs": []}
     dry = {}
     for c in convs:
         pos = 0.8

@@ -251,11 +251,12 @@ const ROLE_CUES: [RegExp, string][] = [
     'bus driver',
   ],
   [
-    /\b(ready to order|would you like to order|take your order|can i get you|any drinks|something to drink|looking after your table|your table|for starters|your starters|dessert menu|enjoy your meal)\b/i,
+    /\b(ready to order|would you like to order|take your order|can i get you|any drinks|something to drink|looking after your table|your table|for starters|your starters|dessert menu|enjoy your meal|need a (few|couple of) (more )?minutes)\b/i,
     'waiter',
   ],
   [
-    /\b(do you need a bag|would you like a bag|next customer|card or cash|would you like (your|a) receipt)\b/i,
+    // Loose on purpose: speech-to-text drops words ("You need a bag?", "Card were cash").
+    /\b(need a bag|like a bag|next customer|card or cash|cash or card|(your|a) receipt|is that everything)\b/i,
     'shop assistant',
   ],
   [/\b(what seems to be the problem|any allergies to medication|take a deep breath)\b/i, 'doctor'],

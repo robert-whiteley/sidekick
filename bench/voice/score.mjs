@@ -3,14 +3,18 @@
 // live, with one speaker table kept across all conversations like the phone's. Prints who-said-it
 // and name metrics per condition.
 //
-//   node bench/voice/score.mjs DATA_DIR [--rules '{"sameVoice":0.5}'] [--no-defer] [--dump] [--json] COND...
+//   node bench/voice/score.mjs DATA_DIR [--rules '{"sameVoice":0.5}'] [--no-defer] [--no-group]
+//     [--group-sim 0.5] [--dump] [--json] COND...
+// --no-defer / --no-group: name cues settled at once / no new voices from short clips (as before).
 import { readFileSync } from 'node:fs';
 
 import {
   addToCentroid,
   chooseSpeaker,
   claimPending,
+  GROUP_SIM,
   VOICE_RULES,
+  voiceFromPending,
 } from '../../src/memory/voices.ts';
 // SK_NAMES: another copy of names.ts (e.g. the previous release's, for before/after numbers).
 const names = await import(process.env.SK_NAMES ?? '../../src/memory/names.ts');
@@ -28,6 +32,8 @@ while (args.length) {
   else if (a === '--json') asJson = true;
   else if (a === '--dump') opts.dump = true;
   else if (a === '--no-defer') opts.noDefer = true;
+  else if (a === '--no-group') opts.noGroup = true;
+  else if (a === '--group-sim') opts.groupSim = Number(args.shift());
   else conds.push(a);
 }
 const truth = JSON.parse(readFileSync(`${data}/truth.json`, 'utf8'));
@@ -42,6 +48,14 @@ export function replay(rows, rules, opts = {}) {
   const deferred = []; // name cues waiting for their reply (see store.ts)
   let nextId = 1;
   const byId = (id) => speakers.find((s) => s.id === id);
+  // What each voice is shown as at the end of each conversation (name or description).
+  const shown = {};
+  const snap = (conv) => {
+    shown[conv] = new Map(
+      speakers.map((x) => [x.id, { name: x.name, description: x.description }]),
+    );
+  };
+  let prevConv = null;
 
   const suggest = (id, name, weight = 1) => {
     const s = byId(id);
@@ -69,10 +83,47 @@ export function replay(rows, rules, opts = {}) {
   };
 
   for (const row of rows) {
+    if (prevConv && row.conv !== prevConv) snap(prevConv);
+    prevConv = row.conv;
     const at = convIndex.get(row.conv) * HOUR + Math.round(row.start * 1000);
     const choice = chooseSpeaker(row.voice, row.owner, row.durationMs, false, speakers, rules);
     let s = null;
     let isOwner = choice.owner;
+    const newSpeaker = (centroid, count) => {
+      const x = { id: nextId++, centroid, count, isOwner: false, name: null, suggested: null };
+      x.suggestedCount = 0;
+      x.description = null;
+      speakers.push(x);
+      return x;
+    };
+    const claim = (x) => {
+      const { claimed, waiting } = claimPending(pending, x, speakers, at, rules);
+      pending = waiting;
+      for (const c of claimed) {
+        const l = lines.find((y) => y.at === c.at);
+        if (l && l.speakerId == null) l.speakerId = x.id;
+      }
+    };
+    if (choice.kind === 'none' && !choice.owner && row.voice && !opts.noGroup) {
+      const found = voiceFromPending(
+        row.voice,
+        row.durationMs,
+        pending,
+        speakers,
+        at,
+        rules,
+        opts.groupSim ?? GROUP_SIM,
+      );
+      if (found) {
+        s = newSpeaker(found.centroid, found.group.length + 1);
+        pending = pending.filter((p) => !found.group.includes(p));
+        for (const c of found.group) {
+          const l = lines.find((y) => y.at === c.at);
+          if (l && l.speakerId == null) l.speakerId = s.id;
+        }
+        claim(s);
+      }
+    }
     if (choice.kind === 'join') {
       s = choice.speaker;
       if (choice.learn) {
@@ -81,28 +132,23 @@ export function replay(rows, rules, opts = {}) {
       }
       isOwner = s.isOwner;
     } else if (choice.kind === 'new') {
-      s = {
-        id: nextId++,
-        centroid: row.voice,
-        count: 1,
-        isOwner: choice.owner,
-        name: null,
-        suggested: null,
-        suggestedCount: 0,
-      };
-      speakers.push(s);
-      if (!s.isOwner) {
-        const { claimed, waiting } = claimPending(pending, s, speakers, at, rules);
-        pending = waiting;
-        for (const c of claimed) {
-          const l = lines.find((x) => x.at === c.at);
-          if (l && l.speakerId == null) l.speakerId = s.id;
-        }
-      }
+      s = newSpeaker(row.voice, 1);
+      s.isOwner = choice.owner;
+      if (!s.isOwner) claim(s);
     }
     const line = { at, speakerId: s?.id ?? null, isOwner, row };
-    if (!s && !isOwner && row.voice) pending.push({ at, voice: row.voice, momentId: null });
+    if (!s && !isOwner && row.voice)
+      pending.push({ at, voice: row.voice, momentId: null, durationMs: row.durationMs });
     lines.push(line);
+    // Descriptions (as name-inference.ts): the role each unnamed voice's own lines in this
+    // conversation show. The model's reading runs only on the phone, so it isn't scored here.
+    if (names.roleFromLines)
+      for (const x of speakers) {
+        if (x.isOwner || x.name) continue;
+        const own = lines.filter((l) => l.speakerId === x.id && l.row.conv === row.conv);
+        const role = own.length ? names.roleFromLines(own.map((l) => l.row.text)) : null;
+        if (role) x.description = role;
+      }
     const nearbyOf = (l) =>
       lines
         .filter((x) => x.speakerId != null && Math.abs(x.at - l.at) <= names.ADDRESS_WINDOW_MS)
@@ -126,7 +172,8 @@ export function replay(rows, rules, opts = {}) {
     }
   }
   for (const d of deferred) resolve(d.line, d.cue, []);
-  return { speakers, lines };
+  if (prevConv) snap(prevConv);
+  return { speakers, lines, shown };
 }
 
 const dur = (l) => l.row.end - l.row.start;
@@ -167,7 +214,7 @@ function bestMatch(weights) {
 }
 
 function score(rows) {
-  const { speakers, lines } = replay(rows, rules, opts);
+  const { speakers, lines, shown } = replay(rows, rules, opts);
   if (opts.dump)
     for (const l of lines) {
       const s = speakers.find((x) => x.id === l.speakerId);
@@ -217,6 +264,10 @@ function score(rows) {
   for (const l of talk) for (const [p, w] of spans(l)) if (gmap.get(label(l)) === p) gCorrect += w;
   // Per conversation (what the live transcript shows).
   let cCorrect = 0;
+  let shownN = 0;
+  let shownOk = 0;
+  let unnamedN = 0;
+  let unnamedOk = 0;
   const convs = [...new Set(talk.map((l) => l.row.conv))];
   for (const c of convs) {
     const m = new Map();
@@ -228,6 +279,26 @@ function score(rows) {
     const map = bestMatch(m);
     map.set('owner', 'me');
     for (const l of ls) for (const [p, w] of spans(l)) if (map.get(label(l)) === p) cCorrect += w;
+    // Shown right: the voice that is mainly this person shows their name or their role.
+    const tc = truth.convs.find((x) => x.id === c);
+    for (const p of new Set(tc.turns.map((t) => t.pid).filter((x) => x !== 'me'))) {
+      const real = truth.people[p];
+      const k = [...map.entries()].find(([, v]) => v === p)?.[0];
+      const now = k && k !== 'owner' ? shown[c]?.get(Number(k.slice(1))) : null;
+      const roleOk = (real.role ?? '')
+        .split('|')
+        .filter(Boolean)
+        .includes(now?.description ?? '');
+      const ok = sameName(now?.name, real.name) || roleOk;
+      shownN++;
+      if (ok) shownOk++;
+      if (!real.name) {
+        unnamedN++;
+        if (roleOk) unnamedOk++;
+        if (opts.dump)
+          console.log(`role ${c} ${p}: ${now ? (now.description ?? 'Person') : 'Someone'}`);
+      }
+    }
   }
   // Re-identification: in the later conversation, is a person's main voice their first one?
   const mainLabel = (pid, part) => {
@@ -301,6 +372,8 @@ function score(rows) {
     suggestedOnly: suggested / namedPeople.length,
     wrongNames,
     mixedLines: impure / allDur,
+    shownRight: shownN ? shownOk / shownN : 0,
+    rolesShown: unnamedN ? unnamedOk / unnamedN : 0,
     ownerKnown: !!owner,
   };
 }
@@ -317,7 +390,7 @@ if (asJson) console.log(JSON.stringify(out));
 else {
   const pct = (x) => `${Math.round(x * 100)}%`;
   console.log(
-    'cond      lines conv%  glob%  someone ownerR ownerF voices/ppl merges(x) splits reid  named sugg wrong mixed',
+    'cond      lines conv%  glob%  someone ownerR ownerF voices/ppl merges(x) splits reid  named sugg wrong mixed shown roles',
   );
   for (const [c, r] of Object.entries(out))
     console.log(
@@ -337,6 +410,8 @@ else {
         pct(r.suggestedOnly).padStart(4),
         String(r.wrongNames).padStart(5),
         pct(r.mixedLines).padStart(5),
+        pct(r.shownRight).padStart(5),
+        pct(r.rolesShown).padStart(5),
       ].join(' '),
     );
 }

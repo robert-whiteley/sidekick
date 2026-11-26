@@ -4,6 +4,9 @@ Each scene has the phone's owner ("me", always the same voice) and 1-4 other peo
 conversations: "a" (people introduce themselves or are introduced) and "b" (a later chat with the
 same people, after every other scene's first conversation). Voices: ("k", id) is a Kokoro v1.0
 voice (Apache-2.0), ("p", id) a Piper LibriTTS-R speaker (MIT model, CC BY 4.0 data).
+
+"role" is what each person is, as Sidekick should describe them while their name isn't known
+(alternatives split by "|"). People with no name must be shown by their role.
 """
 
 OWNER = {"name": "Me", "voice": ("k", 16)}  # am_michael
@@ -20,8 +23,8 @@ SCENES = [
     {
         "id": "bookclub",
         "people": {
-            "priya": {"name": "Priya", "voice": ("k", 2)},  # af_bella
-            "tomasz": {"name": "Tomasz", "voice": ("p", 120)},
+            "priya": {"name": "Priya", "role": "book club member", "voice": ("k", 2)},  # af_bella
+            "tomasz": {"name": "Tomasz", "role": "neighbour", "voice": ("p", 120)},
         },
         "a": [
             ("me", "Hello, come in, the others are already in the kitchen."),
@@ -53,9 +56,9 @@ SCENES = [
     {
         "id": "flat",
         "people": {
-            "ines": {"name": "Ines", "voice": ("k", 21)},  # bf_emma
-            "okello": {"name": "Okello", "voice": ("k", 14)},  # am_fenrir
-            "ruth": {"name": "Ruth", "voice": ("p", 300)},
+            "ines": {"name": "Ines", "role": "flatmate", "voice": ("k", 21)},  # bf_emma
+            "okello": {"name": "Okello", "role": "flatmate", "voice": ("k", 14)},  # am_fenrir
+            "ruth": {"name": "Ruth", "role": "flatmate", "voice": ("p", 300)},
         },
         "a": [
             ("ines", "Hiya, I'm Ines, I'm the new flatmate. I moved into the back room on Sunday."),
@@ -86,10 +89,10 @@ SCENES = [
         "id": "meeting",
         "people": {
             # bm_george and bm_daniel are the two most similar voices in the set (cosine 0.67).
-            "hal": {"name": "Hal", "voice": ("k", 26)},
-            "dev": {"name": "Dev", "voice": ("k", 24)},
-            "yara": {"name": "Yara", "voice": ("k", 9)},  # af_sarah
-            "lukas": {"name": "Lukas", "voice": ("p", 50)},
+            "hal": {"name": "Hal", "role": "colleague", "voice": ("k", 26)},
+            "dev": {"name": "Dev", "role": "colleague", "voice": ("k", 24)},
+            "yara": {"name": "Yara", "role": "colleague", "voice": ("k", 9)},  # af_sarah
+            "lukas": {"name": "Lukas", "role": "colleague", "voice": ("p", 50)},
         },
         "a": [
             ("hal", "Right, let's start. For anyone new, my name is Hal and I look after the warehouse team."),
@@ -121,8 +124,8 @@ SCENES = [
     {
         "id": "neighbours",
         "people": {
-            "mara": {"name": "Mara", "voice": ("k", 6)},  # af_nicole
-            "bram": {"name": "Bram", "voice": ("k", 13)},  # am_eric
+            "mara": {"name": "Mara", "role": "neighbour", "voice": ("k", 6)},  # af_nicole
+            "bram": {"name": "Bram", "role": "neighbour", "voice": ("k", 13)},  # am_eric
         },
         "a": [
             ("mara", "Excuse me, sorry to bother you. My name's Mara, we've just moved in next door."),
@@ -148,8 +151,8 @@ SCENES = [
     {
         "id": "cafe",
         "people": {
-            "zofia": {"name": "Zofia", "voice": ("k", 23)},  # bf_lily
-            "waiter": {"name": None, "role": "waiter", "voice": ("p", 700)},
+            "zofia": {"name": "Zofia", "role": "flatmate", "voice": ("k", 23)},  # bf_lily
+            "waiter": {"name": None, "role": "waiter|server", "voice": ("p", 700)},
         },
         "a": [
             ("zofia", "Hi, sorry, I'm Zofia, we spoke on the phone about the flat. Nice to meet you properly."),
@@ -177,9 +180,9 @@ SCENES = [
     {
         "id": "club",
         "people": {
-            "callum": {"name": "Callum", "voice": ("k", 15)},  # am_liam
-            "femi": {"name": "Femi", "voice": ("p", 900)},
-            "nadia": {"name": "Nadia", "voice": ("k", 5)},  # af_kore
+            "callum": {"name": "Callum", "role": "coach", "voice": ("k", 15)},  # am_liam
+            "femi": {"name": "Femi", "role": "player", "voice": ("p", 900)},
+            "nadia": {"name": "Nadia", "role": "player", "voice": ("k", 5)},  # af_kore
         },
         "a": [
             ("callum", "Okay everyone, gather round. I'm Callum, I'll be coaching the Tuesday group."),
@@ -208,9 +211,9 @@ SCENES = [
     {
         "id": "family",
         "people": {
-            "greta": {"name": "Greta", "voice": ("k", 20)},  # bf_alice
-            "rafi": {"name": "Rafi", "voice": ("k", 18)},  # am_puck
-            "elsie": {"name": "Elsie", "voice": ("p", 10)},
+            "greta": {"name": "Greta", "role": "family", "voice": ("k", 20)},  # bf_alice
+            "rafi": {"name": "Rafi", "role": "family", "voice": ("k", 18)},  # am_puck
+            "elsie": {"name": "Elsie", "role": "family", "voice": ("p", 10)},
         },
         "a": [
             ("greta", "Dinner's ready, everyone sit down before it gets cold."),
@@ -240,8 +243,8 @@ SCENES = [
         "id": "studio",
         "people": {
             # Two similar young female US voices.
-            "joss": {"name": "Joss", "voice": ("k", 4)},  # af_jessica
-            "wren": {"name": "Wren", "voice": ("k", 8)},  # af_river
+            "joss": {"name": "Joss", "role": "photographer", "voice": ("k", 4)},  # af_jessica
+            "wren": {"name": "Wren", "role": "photographer", "voice": ("k", 8)},  # af_river
         },
         "a": [
             ("joss", "Hey, I'm Joss, I'm the one who emailed about renting the studio on Saturdays."),
@@ -263,6 +266,78 @@ SCENES = [
             ("joss", "If that's alright with you, until the end of the month."),
             ("wren", "We'll leave the backdrop rolled up behind the door, if that's okay."),
             ("me", "Sure, just keep it away from the radiator."),
+        ],
+    },
+    {
+        "id": "bus",
+        "people": {
+            # Never named: should show as "Bus driver".
+            "driver": {"name": None, "role": "bus driver|driver", "voice": ("k", 27)},  # bm_lewis
+            "gwen": {"name": "Gwen", "role": "passenger", "voice": ("k", 22)},  # bf_isabella
+        },
+        "a": [
+            ("driver", "Morning. Tap your card on the reader, please."),
+            ("me", "Does this one go to the station?"),
+            ("driver", "It does, the station is the fourth stop. Mind the doors behind you."),
+            ("gwen", "Hello, I'm Gwen. Are you new on this route? I take it every day."),
+            ("me", "Nice to meet you, Gwen. I've just moved here, so yes, all new."),
+            ("gwen", "He always calls out the station, so you won't miss it."),
+            ("driver", "Next stop, Market Square. Market Square next."),
+            ("me", "Thanks. How long until the station from here?"),
+            ("driver", "About ten minutes if the lights are kind."),
+        ],
+        "b": [
+            ("driver", "Hello again. Single or return today?"),
+            ("me", "Just a single to the station, please."),
+            ("gwen", "Morning! Did you find your way around the new office?"),
+            ("me", "Mostly, I only got lost once on the first day."),
+            ("driver", "Mind the doors, please. Next stop, the library."),
+            ("gwen", "That's me getting off. See you tomorrow."),
+        ],
+    },
+    {
+        "id": "shop",
+        "people": {
+            "assistant": {"name": None, "role": "shop assistant|cashier|shopkeeper", "voice": ("p", 550)},
+        },
+        "a": [
+            ("assistant", "Hi there, did you find everything you were looking for?"),
+            ("me", "Yes thanks, just these batteries and the light bulbs."),
+            ("assistant", "That's eight pounds forty. Card or cash?"),
+            ("me", "Card, please."),
+            ("assistant", "Lovely. Do you need a bag for those?"),
+            ("me", "No, I'll just put them in my pocket."),
+            ("assistant", "Would you like your receipt?"),
+            ("me", "No thanks, have a good day."),
+        ],
+        "b": [
+            ("assistant", "Hello again. Is that everything for today?"),
+            ("me", "Yes, just the milk and the bread."),
+            ("assistant", "Would you like a bag for those? Card or cash?"),
+            ("me", "Card, and no bag, thanks."),
+            ("assistant", "There you go. Next customer, please."),
+        ],
+    },
+    {
+        "id": "surgery",
+        "people": {
+            "doctor": {"name": None, "role": "doctor|gp", "voice": ("k", 1)},  # af_alloy
+        },
+        "a": [
+            ("doctor", "Come in and have a seat. So, what seems to be the problem?"),
+            ("me", "I've had a sore shoulder for about three weeks now, mostly at night."),
+            ("doctor", "Can you lift your arm above your head for me? Slowly."),
+            ("me", "Up to about here, then it starts to hurt."),
+            ("doctor", "Any allergies to medication that I should know about?"),
+            ("me", "No, none that I know of."),
+            ("doctor", "I'll prescribe some anti-inflammatories and refer you to physio."),
+        ],
+        "b": [
+            ("doctor", "Good to see you again. How has the shoulder been since the physio?"),
+            ("me", "Much better, I can sleep through the night now."),
+            ("doctor", "Take a deep breath for me while I listen to your chest."),
+            ("me", "Is everything alright?"),
+            ("doctor", "Everything sounds fine. Keep up the exercises."),
         ],
     },
 ]
