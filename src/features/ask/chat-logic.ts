@@ -28,6 +28,10 @@ export type ChatMessage = {
   textResult?: boolean;
   /** The saved exchange this message belongs to (a model answer): Edit / Try again take it back. */
   momentId?: number;
+  /** A picture Sidekick drew: its description, for the Report button under it. */
+  picture?: { prompt: string };
+  /** A button under the answer that opens a screen in the app. */
+  link?: { label: string; href: string };
 };
 
 /** The chat's last question and its answer, when Edit / Try again may replace them. */
@@ -66,6 +70,7 @@ const QA = /^Q: ([\s\S]*?)\nA: ([\s\S]*)$/;
 export function exchangeToMessages(row: {
   id: number;
   at: number;
+  kind?: string;
   text: string;
   photoPath?: string | null;
 }): ChatMessage[] {
@@ -74,6 +79,21 @@ export function exchangeToMessages(row: {
   const media: ChatMedia[] | undefined = row.photoPath
     ? [{ momentAt: row.at, kind: 'photo', path: row.photoPath }]
     : undefined;
+  // A picture Sidekick drew sits under its answer; a photo the user sent, with the question.
+  if (row.kind === 'picture')
+    return [
+      { id: `h${row.id}q`, role: 'user', text: m[1], at: row.at, momentId: row.id },
+      {
+        id: `h${row.id}a`,
+        role: 'assistant',
+        text: m[2],
+        at: row.at,
+        // momentAt 0: a file of its own, so no camera frames from that time are shown with it.
+        media: row.photoPath ? [{ momentAt: 0, kind: 'photo', path: row.photoPath }] : undefined,
+        picture: { prompt: m[1] },
+        momentId: row.id,
+      },
+    ];
   return [
     { id: `h${row.id}q`, role: 'user', text: m[1], at: row.at, media, momentId: row.id },
     { id: `h${row.id}a`, role: 'assistant', text: m[2], at: row.at, momentId: row.id },
@@ -82,7 +102,7 @@ export function exchangeToMessages(row: {
 
 /** Saved rows come newest first; the chat reads oldest first. */
 export function historyToMessages(
-  rows: { id: number; at: number; text: string; photoPath?: string | null }[],
+  rows: { id: number; at: number; kind?: string; text: string; photoPath?: string | null }[],
 ): ChatMessage[] {
   return [...rows].sort((a, b) => a.at - b.at || a.id - b.id).flatMap(exchangeToMessages);
 }

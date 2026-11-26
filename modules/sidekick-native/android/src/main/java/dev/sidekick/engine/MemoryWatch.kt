@@ -59,6 +59,8 @@ object MemoryWatch : ComponentCallbacks2 {
     val plan = MemoryPressure.plan(free, llmLoaded = llm.isLoaded, embedderLoaded = Embedder.isLoaded)
     val freed = mutableListOf<String>()
     Ocr.unload()
+    PhotoEdit.unload()
+    if (ImageGen.unloadIfIdle(0)) freed += "picture model"
     if (plan.embedder) {
       Embedder.unload()
       freed += "embedder"

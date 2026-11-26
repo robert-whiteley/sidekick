@@ -9,16 +9,20 @@ import { catalogSystem, DECIDE_TOOLS, parseClassify, type Decision } from './dec
 
 /**
  * The decision for [question]. What is offered follows the app's state, never the words: "draft"
- * (send or cancel) only while a draft waits, "edit_photo" only with a photo. A lookup is offered even with online lookup off:
+ * (send or cancel) only while a draft waits, "edit_photo" only with a photo, "make_picture" only once
+ * the picture model is downloaded. A lookup is offered even with online lookup off:
  * then the answer is offline and the chat offers a web search in the browser instead.
  */
 export async function decideRequest(
   question: string,
-  opts: { draftOpen?: boolean; photo?: boolean } = {},
+  opts: { draftOpen?: boolean; photo?: boolean; pictures?: boolean } = {},
 ): Promise<{ decision: Decision; ms: number; reply: string }> {
   const t0 = Date.now();
   const tools = DECIDE_TOOLS.filter(
-    (t) => (t.name !== 'draft' || opts.draftOpen) && (t.name !== 'edit_photo' || opts.photo),
+    (t) =>
+      (t.name !== 'draft' || opts.draftOpen) &&
+      (t.name !== 'edit_photo' || opts.photo) &&
+      (t.name !== 'make_picture' || opts.pictures),
   );
   const { text } = await askLlm(`Request: ${question}`, null, () => {}, {
     system: catalogSystem(tools),

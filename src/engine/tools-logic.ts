@@ -54,7 +54,16 @@ const num = (min: number, max: number, required = false, desc?: string): ArgSpec
 });
 const when = (desc: string): ArgSpec => ({ type: 'datetime', desc });
 
-export const EDIT_OPS = ['rotate', 'flip', 'crop', 'grayscale', 'enhance', 'background'] as const;
+export const EDIT_OPS = [
+  'rotate',
+  'flip',
+  'crop',
+  'grayscale',
+  'enhance',
+  'background',
+  'erase',
+  'upscale',
+] as const;
 export type EditOp = (typeof EDIT_OPS)[number];
 
 /** Offered only while a photo comes with the request (decide.ts); the edit is photo-edit.ts. */
@@ -63,7 +72,8 @@ export const EDIT_TOOL: ToolSpec = {
   desc:
     'change the photo: rotate (degrees 90 = clockwise, -90, 180), flip (mirror), crop to a ' +
     'shape, grayscale (black and white), enhance (brighter, clearer colours), background ' +
-    '(remove, white, a colour, or blur)',
+    '(remove, white, a colour, or blur), erase (remove an object or person from the photo), ' +
+    'upscale (make it bigger and sharper)',
   kind: 'action',
   args: {
     op: { type: 'string', values: [...EDIT_OPS], required: true },
@@ -75,8 +85,21 @@ export const EDIT_TOOL: ToolSpec = {
   },
 };
 
+/**
+ * Offered only once the picture model is downloaded (decide.ts); drawn on the phone (picture.ts).
+ */
+export const PICTURE_TOOL: ToolSpec = {
+  name: 'make_picture',
+  desc: 'draw, paint or generate a new picture or image of something',
+  kind: 'info',
+  args: {
+    prompt: req('what to draw, in English, with style words (photo, cartoon, watercolour…)'),
+  },
+};
+
 export const TOOLS: ToolSpec[] = [
   EDIT_TOOL,
+  PICTURE_TOOL,
   {
     name: 'memory_search',
     desc: 'what I saw, heard, said, was told, or have in notes, calendar, contacts or files',
@@ -471,6 +494,7 @@ export const toolByName = (name: string) => TOOLS.find((t) => t.name === name);
  */
 export const NOT_IN_ROUTINES = new Set([
   'edit_photo',
+  'make_picture',
   'routine',
   'alarm',
   'timer',

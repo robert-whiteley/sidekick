@@ -165,6 +165,49 @@ export const PHOTO_SEG_FILE: ModelFile = {
   bytes: 4574861,
 };
 
+/**
+ * Erase an object: MI-GAN (MIT, Picsart AI Research), the authors' 28 MB ONNX pipeline (crops
+ * around the mask, fills, blends back), pinned to a commit. Downloaded on first use.
+ */
+export const ERASE_FILE: ModelFile = {
+  name: 'migan_pipeline_v2.onnx',
+  url: 'https://huggingface.co/andraniksargsyan/migan/resolve/406830d0fa60666da0071c342ad2fbc8f30c5c64/migan_pipeline_v2.onnx',
+  sha256: '6f1f3530a1a2324b19752018ce756088b07973cda8d7d890034ace5c8a48c40b',
+  bytes: 28079181,
+};
+
+/**
+ * Upscale 4x: Real-ESRGAN general x4v3 (BSD-3-Clause, Xintao Wang), an ONNX export pinned to a
+ * commit; its 101 weights were checked equal to the official release's (ADR 0006).
+ */
+export const UPSCALE_FILE: ModelFile = {
+  name: 'realesr-general-x4v3.onnx',
+  url: 'https://huggingface.co/CoderViking/realesr-general-x4v3-onnx/resolve/c6a971706797c7502945a2b4c4274fce4900d4ab/realesr-general-x4v3.onnx',
+  sha256: '1940a93ee08283a0a7286183186357b1688fe9fa8ede74604b424586aaddf112',
+  bytes: 4866417,
+};
+
+/**
+ * Making pictures (optional download, ADR 0006): SDXS-512 (IDKiro, from DreamShaper / Stable
+ * Diffusion 1.5; OpenRAIL licences whose use restrictions are in docs/picture-terms.md, which
+ * the user agrees to before downloading) as an 8-bit GGUF, and TAESD (MIT, madebyollin), the
+ * small image decoder. Both pinned to a commit. Must match ImageGen.kt (one step, 512 px).
+ */
+export const PICTURE_FILES = {
+  model: {
+    name: 'sdxs-512-tinySDdistilled_Q8_0.gguf',
+    url: 'https://huggingface.co/concedo/sdxs-512-tinySDdistilled-GGUF/resolve/3144d898d61492f8382ffcabec055733fc5b2a0e/sdxs-512-tinySDdistilled_Q8_0.gguf',
+    sha256: '409ab23582ee074c6b9d5395784fc0741b0599fb9d138686c69087c71678eb6a',
+    bytes: 682847200,
+  },
+  decoder: {
+    name: 'taesd.safetensors',
+    url: 'https://huggingface.co/madebyollin/taesd/resolve/614f76814bbe30edbe2e627ace1c2234c81a2c0e/diffusion_pytorch_model.safetensors',
+    sha256: 'db169d69145ec4ff064e49d99c95fa05d3eb04ee453de35824a6d0f325513549',
+    bytes: 9793292,
+  },
+} satisfies Record<string, ModelFile>;
+
 /** "1.2 / 2.6 GB (46%)" */
 export function formatProgress(bytes: number, total: number): string {
   const gb = (n: number) => (n / 1e9).toFixed(1);

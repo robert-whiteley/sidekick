@@ -55,7 +55,7 @@ export function TimelineSection(props: {
               ) : m.text ? (
                 <AppText numberOfLines={4}>{m.text}</AppText>
               ) : null}
-              {m.photoPath && (m.kind === 'frame' || m.kind === 'photo') ? (
+              {m.photoPath && (m.kind === 'frame' || m.kind === 'photo' || m.kind === 'picture') ? (
                 <Image
                   source={{ uri: `file://${m.photoPath}` }}
                   style={{ width: 160, height: 120, borderRadius: radius.sm, marginTop: space.sm }}

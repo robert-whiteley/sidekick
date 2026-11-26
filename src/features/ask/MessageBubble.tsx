@@ -1,4 +1,5 @@
 import * as Clipboard from 'expo-clipboard';
+import { router } from 'expo-router';
 import { memo } from 'react';
 import { Share, StyleSheet, View } from 'react-native';
 
@@ -7,6 +8,7 @@ import { AppText, Markdown, radius, showDialog, space, Tappable } from '@/ui';
 import type { ChatMessage } from './chat-logic';
 import { Icon } from './Icon';
 import { MediaMoment } from './MediaMoment';
+import { reportPicture } from './picture-report';
 import type { ChatTheme } from './theme';
 import { WebSearchLink, WebSources } from './WebLookupUi';
 
@@ -88,6 +90,30 @@ export const MessageBubble = memo(function MessageBubble({
           )}
         </Tappable>
       ) : null}
+      {!user && m.picture ? (
+        <Tappable
+          feedback="dim"
+          onPress={() => reportPicture(m.picture!.prompt)}
+          accessibilityRole="button"
+          accessibilityHint="Tell the developer this picture is harmful or wrong"
+        >
+          <AppText variant="bodySmall" style={{ color: theme.faint }}>
+            Report this picture
+          </AppText>
+        </Tappable>
+      ) : null}
+      {!user && !m.pending && m.link ? (
+        <Tappable
+          feedback="dim"
+          onPress={() => router.push(m.link!.href as never)}
+          style={[styles.linkButton, { borderColor: theme.border }]}
+          accessibilityRole="button"
+        >
+          <AppText variant="bodySmall" tone="primary">
+            {m.link.label}
+          </AppText>
+        </Tappable>
+      ) : null}
       {!user && m.web?.length ? <WebSources sources={m.web} /> : null}
       {!user && !m.pending && m.webAsk?.question ? (
         <WebSearchLink question={m.webAsk.question} query={m.webAsk.query} />
@@ -117,4 +143,10 @@ const styles = StyleSheet.create({
   },
   assistant: { maxWidth: '100%' },
   mute: { borderWidth: 1, borderRadius: radius.lg, padding: space.xs },
+  linkButton: {
+    borderWidth: 1,
+    borderRadius: radius.lg,
+    paddingHorizontal: space.md,
+    paddingVertical: space.xs,
+  },
 });

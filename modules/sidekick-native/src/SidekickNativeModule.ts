@@ -182,15 +182,31 @@ declare class SidekickNativeModule extends NativeModule<SidekickNativeModuleEven
   ocrUnload(): Promise<void>;
   /**
    * Android: a light edit of a photo into a new file (rotate, flip, crop, grayscale, enhance,
-   * background with the U²-Netp model at [segModelPath]). Undefined on iPhone (not built yet).
+   * background with the U²-Netp model at [segModelPath], erase with MI-GAN and upscale with
+   * Real-ESRGAN, whose model also comes in [segModelPath]). Undefined on iPhone (not built yet).
    */
   photoEdit?(
     photoPath: string,
     op: string,
-    args: Record<string, string | number>,
+    args: Record<string, string | number | number[][]>,
     segModelPath: string | null,
   ): Promise<{ path: string; width: number; height: number; ms: number; segMs: number }>;
   photoEditUnload?(): Promise<void>;
+  /** Android: whether this phone's CPU can make pictures (64-bit ARM with dot product, FP16). */
+  pictureSupported?(): boolean;
+  /**
+   * Android: one 512x512 picture from [prompt] (SDXS-512 at [modelPath], TAESD decoder), saved as
+   * a PNG in the app's files. Progress as onPicture events; rejects with "cancelled" after
+   * pictureStop. Undefined on iPhone (not yet).
+   */
+  pictureMake?(
+    modelPath: string,
+    taesdPath: string | null,
+    prompt: string,
+    seed: number,
+  ): Promise<{ path: string; width: number; height: number; ms: number }>;
+  pictureStop?(): void;
+  pictureUnload?(): Promise<boolean>;
   /** Android: whether this phone can read a PDF's embedded text (else every page needs OCR). */
   pdfCanReadText(): boolean;
   /** Android: a PDF's page count and page [index]'s embedded text (null if unreadable here). */

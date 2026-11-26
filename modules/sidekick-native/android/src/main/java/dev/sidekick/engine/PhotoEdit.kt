@@ -14,6 +14,8 @@ import kotlin.math.roundToInt
  * Light photo edits, all on the phone: turn, mirror, crop to a shape, black and white, auto
  * enhance, and background changes (remove, white, a colour, blur). The background is found by
  * U²-Netp (Apache-2.0, 4.6 MB ONNX, through [OrtShim]); everything else is plain bitmap code.
+ * Erase an object: MI-GAN (MIT, 28 MB ONNX) fills what the user brushed over. Upscale:
+ * Real-ESRGAN general x4v3 (BSD-3, 4.9 MB ONNX), tile by tile.
  * The original is never changed: each edit writes a new file in the app's `edits/` folder.
  * Which edit the user wants is decided by the chat model (src/engine/photo-edit-logic.ts).
  */
@@ -23,8 +25,15 @@ object PhotoEdit {
   private const val SEG_SIZE = 320
   private const val KEEP_MS = 2 * 86_400_000L
 
+  /** Upscale only small pictures (the app offers it up to this long edge); 4x stays ≤ 4096 px. */
+  const val UPSCALE_MAX_EDGE = 1024
+  private const val TILE = 128
+  private const val TILE_PAD = 10
+
   private var seg: Long = 0
   private var segPath: String? = null
+  private var aux: Long = 0
+  private var auxPath: String? = null
   private val lock = Any()
 
   data class Result(val path: String, val width: Int, val height: Int, val ms: Long, val segMs: Long)
@@ -37,7 +46,13 @@ object PhotoEdit {
     segModelPath: String?,
   ): Result {
     val t0 = SystemClock.elapsedRealtime()
-    val src = ModelImage.decodeUpright(photoPath, MAX_EDGE) ?: error("can't read the photo")
+    if (op == "upscale") {
+      // Big photos are sharp enough already; JS says so from this message.
+      val b = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true }
+      android.graphics.BitmapFactory.decodeFile(photoPath, b)
+      if (max(b.outWidth, b.outHeight) > UPSCALE_MAX_EDGE) error("too big ${b.outWidth}x${b.outHeight}")
+    }
+    val src = ModelImage.decodeUpright(photoPath, if (op == "upscale") UPSCALE_MAX_EDGE else MAX_EDGE) ?: error("can't read the photo")
     var segMs = 0L
     var png = false
     val out: Bitmap =
@@ -55,6 +70,19 @@ object PhotoEdit {
           val mode = args["mode"] as? String ?: "white"
           png = mode == "remove"
           background(src, mask, mode, args["color"] as? String)
+        }
+        "erase" -> {
+          val model = segModelPath ?: error("erase model missing")
+          val t1 = SystemClock.elapsedRealtime()
+          @Suppress("UNCHECKED_CAST")
+          val strokes = (args["strokes"] as? List<List<Number>>) ?: error("nothing marked to erase")
+          val radius = (args["radius"] as? Number)?.toFloat() ?: 0.04f
+          erase(model, src, strokes, radius).also { segMs = SystemClock.elapsedRealtime() - t1 }
+        }
+        "upscale" -> {
+          val model = segModelPath ?: error("upscale model missing")
+          val t1 = SystemClock.elapsedRealtime()
+          upscale(model, src).also { segMs = SystemClock.elapsedRealtime() - t1 }
         }
         else -> error("unknown edit $op")
       }
@@ -77,7 +105,144 @@ object PhotoEdit {
       if (seg != 0L) OrtShim.release(seg)
       seg = 0
       segPath = null
+      if (aux != 0L) OrtShim.release(aux)
+      aux = 0
+      auxPath = null
     }
+
+  /** The erase or upscale model (one at a time: they are rarely used together). */
+  private fun auxSession(path: String): Long {
+    if (aux == 0L || auxPath != path) {
+      if (aux != 0L) OrtShim.release(aux)
+      aux = OrtShim.create(path, 4)
+      auxPath = path
+    }
+    return aux
+  }
+
+  /**
+   * Fills what the user brushed over. [strokes]: each a flat list x0,y0,x1,y1,… in 0..1 of the
+   * picture; [radius]: brush radius as a fraction of the shorter edge. The brush is drawn a
+   * little wider than shown, since a leftover rim of the object spoils the fill (measured).
+   */
+  private fun erase(modelPath: String, b: Bitmap, strokes: List<List<Number>>, radius: Float): Bitmap {
+    val w = b.width
+    val h = b.height
+    val mask = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
+    val canvas = android.graphics.Canvas(mask)
+    canvas.drawColor(Color.WHITE)
+    val paint =
+      android.graphics.Paint().apply {
+        color = Color.BLACK
+        isAntiAlias = false
+        style = android.graphics.Paint.Style.STROKE
+        strokeCap = android.graphics.Paint.Cap.ROUND
+        strokeJoin = android.graphics.Paint.Join.ROUND
+        strokeWidth = max(2f, radius * 1.25f * min(w, h) * 2)
+      }
+    var any = false
+    for (s in strokes) {
+      if (s.size < 2) continue
+      val path = android.graphics.Path()
+      path.moveTo(s[0].toFloat() * w, s[1].toFloat() * h)
+      // A single tap is a dot: a zero-length line with round caps.
+      if (s.size < 4) path.lineTo(s[0].toFloat() * w + 0.1f, s[1].toFloat() * h)
+      var i = 2
+      while (i + 1 < s.size) {
+        path.lineTo(s[i].toFloat() * w, s[i + 1].toFloat() * h)
+        i += 2
+      }
+      canvas.drawPath(path, paint)
+      any = true
+    }
+    require(any) { "nothing marked to erase" }
+    val mpx = pixels(mask)
+    mask.recycle()
+    val px = pixels(b)
+    val plane = w * h
+    val img = ByteArray(3 * plane)
+    val m = ByteArray(plane)
+    for (i in 0 until plane) {
+      val c = px[i]
+      img[i] = Color.red(c).toByte()
+      img[plane + i] = Color.green(c).toByte()
+      img[2 * plane + i] = Color.blue(c).toByte()
+      // MI-GAN: 255 keeps a pixel, 0 fills it.
+      m[i] = if (Color.red(mpx[i]) < 128) 0 else 255.toByte()
+    }
+    val outShape = LongArray(8)
+    val out =
+      synchronized(lock) {
+        OrtShim.runU8(
+          auxSession(modelPath),
+          arrayOf(img, m),
+          arrayOf(longArrayOf(1, 3, h.toLong(), w.toLong()), longArrayOf(1, 1, h.toLong(), w.toLong())),
+          outShape,
+        )
+      }
+    check(out.size == 3 * plane) { "unexpected erase output" }
+    for (i in 0 until plane) {
+      px[i] = Color.rgb(out[i].toInt() and 0xff, out[plane + i].toInt() and 0xff, out[2 * plane + i].toInt() and 0xff)
+    }
+    return fromPixels(px, w, h)
+  }
+
+  /**
+   * 4x larger, tile by tile (128 px tiles with a 10 px margin each side, so seams don't show).
+   * Inputs at most [UPSCALE_MAX_EDGE] (bigger photos are already sharp enough to keep).
+   */
+  private fun upscale(modelPath: String, b: Bitmap): Bitmap {
+    val w = b.width
+    val h = b.height
+    val src = pixels(b)
+    val ow = w * 4
+    val oh = h * 4
+    val out = IntArray(ow * oh)
+    val outShape = LongArray(8)
+    synchronized(lock) {
+      val session = auxSession(modelPath)
+      for (ty in 0 until h step TILE) {
+        for (tx in 0 until w step TILE) {
+          val x0 = max(0, tx - TILE_PAD)
+          val y0 = max(0, ty - TILE_PAD)
+          val x1 = min(w, tx + TILE + TILE_PAD)
+          val y1 = min(h, ty + TILE + TILE_PAD)
+          val tw = x1 - x0
+          val th = y1 - y0
+          val plane = tw * th
+          val input = FloatArray(3 * plane)
+          for (y in 0 until th) for (x in 0 until tw) {
+            val c = src[(y0 + y) * w + x0 + x]
+            val i = y * tw + x
+            input[i] = Color.red(c) / 255f
+            input[plane + i] = Color.green(c) / 255f
+            input[2 * plane + i] = Color.blue(c) / 255f
+          }
+          val r = OrtShim.run(session, input, longArrayOf(1, 3, th.toLong(), tw.toLong()), outShape)
+          val rw = tw * 4
+          val rp = rw * th * 4
+          // Copy only this tile's own area (without the margin) into the result.
+          val cx0 = tx
+          val cy0 = ty
+          val cx1 = min(w, tx + TILE)
+          val cy1 = min(h, ty + TILE)
+          for (y in (cy0 - y0) * 4 until (cy1 - y0) * 4) {
+            val oy = y0 * 4 + y
+            for (x in (cx0 - x0) * 4 until (cx1 - x0) * 4) {
+              val i = y * rw + x
+              out[oy * ow + x0 * 4 + x] =
+                Color.rgb(
+                  (r[i] * 255f).roundToInt().coerceIn(0, 255),
+                  (r[rp + i] * 255f).roundToInt().coerceIn(0, 255),
+                  (r[2 * rp + i] * 255f).roundToInt().coerceIn(0, 255),
+                )
+            }
+          }
+        }
+      }
+    }
+    return fromPixels(out, ow, oh)
+  }
 
   private fun rotate(b: Bitmap, degrees: Int): Bitmap {
     val d = ((degrees % 360) + 360) % 360

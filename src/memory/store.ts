@@ -12,7 +12,7 @@ import { guardWrite, mayGrowMemory } from '@/engine/storage-guard';
 import { isAgreement, isConsentQuestion, CONSENT_WINDOW_MS, lineFate } from './consent';
 import { EMBED_DIMS, getDb, vecParam } from './db';
 import { appendSeen, captureText } from './photo-text';
-import { OCR_FOUND, readPendingPhotoText, readTextOf } from './photo-ocr';
+import { OCR_FOUND, OCR_NO_TEXT, readPendingPhotoText, readTextOf } from './photo-ocr';
 import {
   embedDocument,
   embedderChanged,
@@ -709,6 +709,28 @@ export async function rememberPhotoQuestion(
 }
 
 /**
+ * A picture Sidekick drew (picture.ts): kept with its request so the chat history shows it again.
+ * Kind 'picture', never treated as something the user saw: no photo description, image vector
+ * or OCR (marked done here), and never re-read to answer "what did I see".
+ */
+export async function rememberPicture(
+  question: string,
+  answer: string,
+  tmpPath: string,
+): Promise<number | undefined> {
+  if (!mayGrowMemory()) return undefined;
+  const db = await getDb();
+  const at = Date.now();
+  const photoPath = `${dataDir()}/pictures/${at}.png`;
+  SidekickNative.copyFile(tmpPath, photoPath);
+  const r = await db.execute(
+    'INSERT INTO moments (kind, at, text, photo_path, image_embedded, photo_ocr) VALUES (?, ?, ?, ?, 1, ?)',
+    ['picture', at, `Q: ${question}\nA: ${answer}`, photoPath, OCR_NO_TEXT],
+  );
+  return r.insertId;
+}
+
+/**
  * Called with the id of every newly captured moment, e.g. to tag it with the place. Other
  * features register here instead of editing the capture code.
  */
@@ -778,7 +800,7 @@ export async function nextUndescribedPhoto(): Promise<{ id: number; photoPath: s
   const r = await db.execute(
     `SELECT m.id, m.photo_path FROM moments m
      LEFT JOIN photo_descriptions d ON d.moment_id = m.id
-     WHERE m.photo_path IS NOT NULL AND m.kind != 'frame' AND d.moment_id IS NULL AND m.photo_ocr != ${OCR_FOUND}
+     WHERE m.photo_path IS NOT NULL AND m.kind NOT IN ('frame', 'picture') AND d.moment_id IS NULL AND m.photo_ocr != ${OCR_FOUND}
      ORDER BY m.at DESC LIMIT 1`,
   );
   const row = r.rows[0];
