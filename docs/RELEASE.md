@@ -33,6 +33,13 @@ Nothing here costs money. EAS free plan: up to 15 Android cloud builds (expo.dev
 
 ## B. Claude steps (each release)
 
+**Owner rule (26 Nov): store builds only with the owner's OK, and always both stores from the same
+commit** (Android AAB to the Play closed test and iOS to TestFlight together, same version), so the
+two stores stay in sync. Local test APKs for the phone don't need an OK. A new iOS build in
+TestFlight doesn't disturb a version that is in review; only attaching it to that version would.
+Changes to native code (or the Expo SDK) need a new store build; JavaScript-only fixes go out as
+quick fixes (EAS Update) to builds with the same fingerprint.
+
 1. `scripts/release.sh check`: typecheck, lint and tests; store text lengths; no secret files tracked; legal texts in sync; quick fixes never check automatically (`updates.checkAutomatically` must be `NEVER`; the app checks only when "Get quick fixes" is on).
 2. Write plain-words notes (one change per line) and run `scripts/release.sh bump --version 1.0.1 --notes notes.txt --real`. This adds the entry to `src/content/changelog.ts` (shown in the app under What's new, once after the update) and sets `app.json` version. Commit, PR, merge.
 3. Verify on the test phone first (preview build or dev build). Report what was checked on the device.
