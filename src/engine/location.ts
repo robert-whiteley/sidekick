@@ -48,6 +48,7 @@ import { queueOnline } from './online-queue';
 import { packFind } from './geo-pack';
 import { haversineM, type LatLon } from './place-logic';
 import { askLocationPermission, currentRegion, placeName } from './places';
+import { platformText } from './platform-text';
 import { getSettings } from './settings';
 import { parseTimeRange } from '@/memory/time-range';
 import { deletePlace, fixesBetween, namePlace, pruneTrack } from '@/memory/places-store';
@@ -158,8 +159,7 @@ export type LocationAnswer = {
 };
 
 const OFF = 'Location memory is off. Turn it on in Settings → Privacy → Location.';
-const NOT_RECORDED =
-  "I don't know: your location is only remembered while Sidekick is listening or open, with location allowed.";
+const notRecorded = () => platformText('locationNotRecorded');
 
 async function needPermission(): Promise<string | null> {
   if (hasPermission()) return null;
@@ -232,10 +232,7 @@ export async function answerLocation(
     case 'parked': {
       const fixes = await fixesBetween(now.getTime() - 3 * DAY, now.getTime() + 1);
       const spot = parkedSpot(fixes);
-      if (!spot)
-        return {
-          text: "I don't know where you parked. I mark the spot when your car's Bluetooth disconnects while Sidekick is listening.",
-        };
+      if (!spot) return { text: platformText('parkingUnknown') };
       const w = await where(spot, true);
       const me = await fixNow();
       const when = whenText(spot.at, now);
@@ -251,7 +248,7 @@ export async function answerLocation(
     case 'whereAt': {
       const fixes = await fixesBetween(q.at - DAY / 24, q.at + DAY / 24);
       const f = fixAt(fixes, q.at);
-      if (!f) return { text: NOT_RECORDED };
+      if (!f) return { text: notRecorded() };
       return { text: `${cap(q.label)} you were ${await where(f, false)}.` };
     }
     case 'lastAt': {

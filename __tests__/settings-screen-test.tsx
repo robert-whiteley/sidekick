@@ -113,16 +113,21 @@ test('camera page marks Recommended values for this phone', async () => {
   }
 });
 
-test('on iPhone the camera page explains live camera memory needs Android', async () => {
+test('on iPhone the camera page explains there is no live camera memory', async () => {
   await render(<CameraAudioSettings />);
-  expect(screen.getByText(/Live camera memory needs Android/)).toBeTruthy();
+  expect(screen.getByText(/no live camera memory/)).toBeTruthy();
   expect(screen.getByText('Remember photos')).toBeTruthy();
 });
 
 test('privacy page has consent and delete', async () => {
-  await render(<PrivacySettings />);
-  expect(screen.getByText('Consent mode')).toBeTruthy();
-  expect(screen.getByText('Delete everything')).toBeTruthy();
+  Platform.OS = 'android';
+  try {
+    await render(<PrivacySettings />);
+    expect(screen.getByText('Consent mode')).toBeTruthy();
+    expect(screen.getByText('Delete everything')).toBeTruthy();
+  } finally {
+    Platform.OS = 'ios';
+  }
 });
 
 test('connections and phone features list everything', async () => {

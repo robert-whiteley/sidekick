@@ -30,7 +30,8 @@ export default function ConnectionSettings() {
   return (
     <Page title={item.name}>
       <Section title={item.name}>
-        <AppText>{item.description}</AppText>
+        {/* Unavailable on iPhone: the Android description would only list what isn't there. */}
+        {a.available || profile.platform !== 'ios' ? <AppText>{item.description}</AppText> : null}
         {!a.available && (
           <AppText variant="bodySmall" tone="muted">
             {a.why}

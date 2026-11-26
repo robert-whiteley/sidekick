@@ -77,13 +77,17 @@ test('overrides win, null follows Recommended', () => {
 
 test('phone features say why something is unavailable', () => {
   const ios = phoneFeatures(phone({ platform: 'ios', usbHost: false }));
-  const usb = ios.find((f) => f.id === 'usbCamera')!;
-  expect(usb.available).toBe(false);
-  expect(usb.why).toMatch(/iPhone/);
-  for (const id of ['listen', 'camera', 'pocketVoice', 'tile', 'widget', 'assistant'])
+  for (const id of ['listen', 'camera', 'pocketVoice', 'directSms'])
     expect(ios.find((f) => f.id === id)).toMatchObject({ available: false });
+  expect(ios.find((f) => f.id === 'listen')!.why).toMatch(/iPhone/);
+  // Android-only ways in and hardware aren't listed on iPhone at all.
+  for (const id of ['usbCamera', 'tile', 'widget', 'assistant', 'splitAudio', 'heat'])
+    expect(ios.find((f) => f.id === id)).toBeUndefined();
+  expect(ios.find((f) => f.id === 'appLock')!.name).toBe('App lock (Face ID or passcode)');
   const android = phoneFeatures(phone({}));
   expect(android.find((f) => f.id === 'listen')!.available).toBe(true);
+  expect(android.find((f) => f.id === 'tile')!.available).toBe(true);
+  expect(android.find((f) => f.id === 'appLock')!.name).toBe('App lock (fingerprint, face or PIN)');
   expect(android.find((f) => f.id === 'camera')!.available).toBe(true);
   const play = phoneFeatures(phone({}));
   expect(play.find((f) => f.id === 'directSms')).toMatchObject({ available: false });

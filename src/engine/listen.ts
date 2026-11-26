@@ -7,12 +7,11 @@ import { applySpeechModel, speechModelsReady } from './language';
 import { MODEL_FILES, OPTIONAL_SPEECH_FILES } from './models';
 import { modelsDir } from './paths';
 import { askLocationPermission, pushPauseRules } from './places';
+import { IPHONE } from './platform-text';
 import { SYSTEM_PROMPT } from './prompts';
 import { getSettings } from './settings';
 import { listenPlan } from './listen-mode';
 import { DEFAULT_WAKE_PHRASE, parseSentencepiece, wakeKeywordLines } from './wake-word';
-
-export const LISTEN_NEEDS_ANDROID = 'Listening in the background needs Android.';
 
 const KWS_DIR = MODEL_FILES.wakeWord.unpackedCheck!.split('/')[0];
 
@@ -82,7 +81,7 @@ export async function askMicPermission(): Promise<boolean> {
 /** Starts background listening. Must be called from a visible screen (Android rule). */
 export async function startListening(): Promise<string | null> {
   // iOS doesn't let apps keep the microphone on in the background (ADR 0006).
-  if (Platform.OS === 'ios') return LISTEN_NEEDS_ANDROID;
+  if (Platform.OS === 'ios') return IPHONE.listen;
   if (!speechReady()) return 'Speech models are not downloaded yet.';
   if (!(await askMicPermission())) return 'Microphone permission is needed to listen.';
   configureListening();

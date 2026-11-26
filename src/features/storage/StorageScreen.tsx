@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
 import { AUDIO_KEEP_OPTIONS, RESERVE_OPTIONS, VIDEO_KEEP_OPTIONS } from '@/engine/device-profile';
+import { onIphone, platformText } from '@/engine/platform-text';
 import { updateSettings } from '@/engine/settings';
 import { formatBytes, KIND_LABELS, recommendedKeep, type StorageKind } from '@/engine/storage';
 import {
@@ -20,6 +21,9 @@ const COLORS = Object.fromEntries(KINDS.map((k, i) => [k, chart[i]])) as Record<
   StorageKind,
   string
 >;
+/** iPhone: no live camera or background listening, so no video, stills or conversation audio. */
+const IPHONE_KINDS: StorageKind[] = ['photos', 'text', 'models'];
+const IPHONE_ROWS = new Set(['Always leave free for the phone']);
 
 function days(d: number) {
   return d >= 36500 ? 'Forever' : daysLabel(d);
@@ -41,10 +45,12 @@ export function StorageScreen() {
   // The same Recommended values and choices as Settings › Camera & audio and › Advanced.
   const { s, rec } = useSettings();
   const stillsRec = recommendedKeep(report.total).stillsKeepDays;
-  const used = KINDS.reduce((n, k) => n + report.usage[k], 0);
+  const iphone = onIphone();
+  const kinds = iphone ? IPHONE_KINDS : KINDS;
+  const used = kinds.reduce((n, k) => n + report.usage[k], 0);
   const st = useStyles();
 
-  const rows: {
+  const allRows: {
     title: string;
     current: number | null;
     recommended: number;
@@ -85,6 +91,7 @@ export function StorageScreen() {
       set: (v) => updateSettings({ storageReserveGB: v }),
     },
   ];
+  const rows = iphone ? allRows.filter((r) => IPHONE_ROWS.has(r.title)) : allRows;
 
   return (
     <Page title="Storage">
@@ -92,7 +99,7 @@ export function StorageScreen() {
         Sidekick uses {formatBytes(used)} · {formatBytes(report.free)} free on the phone
       </AppText>
       <View style={st.bar} accessibilityLabel="Storage used by kind">
-        {KINDS.map((k) => (
+        {kinds.map((k) => (
           <View
             key={k}
             style={{
@@ -102,7 +109,7 @@ export function StorageScreen() {
           />
         ))}
       </View>
-      {KINDS.map((k) => (
+      {kinds.map((k) => (
         <View key={k} style={styles.kind}>
           <View style={[styles.dot, { backgroundColor: COLORS[k] }]} />
           <AppText style={styles.flex}>{KIND_LABELS[k]}</AppText>
@@ -139,8 +146,7 @@ export function StorageScreen() {
         ))}
       </Section>
       <AppText variant="bodySmall" tone="muted">
-        When space runs low, the oldest video goes first, then camera stills past their keep period.
-        Text, memories and photos you asked about are never deleted without asking.
+        {platformText('storageCleanupNote')}
       </AppText>
     </Page>
   );

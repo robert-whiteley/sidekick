@@ -4,6 +4,7 @@ import { View } from 'react-native';
 import type { NamedPlace } from '@/engine/location-logic';
 import { hasLocationPermission, refreshPlaces } from '@/engine/location-track';
 import { askLocationPermission } from '@/engine/places';
+import { platformText } from '@/engine/platform-text';
 import { getSettings, type Settings, updateSettings } from '@/engine/settings';
 import {
   clearTrack,
@@ -41,11 +42,7 @@ export function LocationSection() {
     <Section title="Location">
       <Row
         label="Remember where I was"
-        hint={
-          'While Sidekick is listening or open, it notes where the phone is (every few minutes, ' +
-          'after moving) so you can ask "where was I at 3?", "where did I park?" or "how long ' +
-          'was I at work?". Stays on this phone, encrypted.'
-        }
+        hint={platformText('locationHint')}
         value={s.locationMemory}
         onChange={(v) => setS(updateSettings({ locationMemory: v }))}
       />

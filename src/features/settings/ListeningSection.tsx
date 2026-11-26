@@ -1,7 +1,7 @@
 import { useState } from 'react';
-import { Platform } from 'react-native';
 
 import { configureListening, wakeLine } from '@/engine/listen';
+import { onIphone } from '@/engine/platform-text';
 import { currentRegion } from '@/engine/region';
 import { getSettings, type Settings, updateSettings } from '@/engine/settings';
 import { type ConsentChoice, lawRequiresConsent } from '@/memory/consent-region';
@@ -62,15 +62,25 @@ export function ListeningSection({
     setMsg(`Wake word set to "${p}".`);
   };
 
+  // iPhone: no background listening or wake word (ADR 0006). Push-to-talk only takes the
+  // owner's own question, so consent and "Instructions only" have nothing to act on there.
+  const iphone = onIphone();
+  if (iphone && part === 'privacy') return null;
   const title =
-    part === 'assistant' ? 'Talking to Sidekick' : part === 'privacy' ? 'Recording' : 'Listening';
+    part === 'assistant'
+      ? 'Talking to Sidekick'
+      : part === 'privacy'
+        ? 'Recording'
+        : iphone
+          ? 'Photos'
+          : 'Listening';
 
   return (
     <Section title={title}>
       {show('assistant') && (
         <>
           {/* iPhone: no wake word (no background listening, ADR 0006); hold the mic instead. */}
-          {Platform.OS !== 'ios' && (
+          {!iphone && (
             <>
               <TextField
                 label="Wake word"
@@ -95,7 +105,7 @@ export function ListeningSection({
           />
         </>
       )}
-      {show('listening') && (
+      {show('listening') && !iphone && (
         <>
           <Row
             label="Remember conversations"
@@ -109,6 +119,10 @@ export function ListeningSection({
             value={s.showConversation}
             onChange={(v) => setS(updateSettings({ showConversation: v }))}
           />
+        </>
+      )}
+      {show('listening') && (
+        <>
           <Row
             label="Remember photos"
             hint="Keep photos you ask about, so later questions can look at them again."
@@ -117,7 +131,7 @@ export function ListeningSection({
           />
         </>
       )}
-      {show('privacy') && (
+      {show('privacy') && !iphone && (
         <>
           <Row
             label="Instructions only"

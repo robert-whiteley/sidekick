@@ -1,5 +1,3 @@
-import { Platform } from 'react-native';
-
 import { captionMode } from '@/memory/photo-text';
 import {
   AUDIO_KEEP_OPTIONS,
@@ -7,6 +5,7 @@ import {
   FRAME_WINDOW_OPTIONS,
   VIDEO_KEEP_OPTIONS,
 } from '@/engine/device-profile';
+import { IPHONE, onIphone } from '@/engine/platform-text';
 import type { ImageDetail } from '@/engine/settings';
 import { daysLabel, hoursLabel } from '@/features/settings/choice-logic';
 import { DevicesSection } from '@/features/settings/DevicesSection';
@@ -18,14 +17,11 @@ import { AppText } from '@/ui';
 
 export default function CameraAudioSettings() {
   const { s, rec, set } = useSettings();
-  if (Platform.OS === 'ios')
+  if (onIphone())
     return (
       <Page title="Camera & audio">
         <Section title="Camera memory">
-          <AppText>
-            Live camera memory needs Android: iPhone apps can’t film in the background. Take a photo
-            on the Ask screen to ask about it; it is kept if Remember photos is on.
-          </AppText>
+          <AppText>{IPHONE.liveCameraSettings}</AppText>
         </Section>
         <ListeningSection part="listening" />
       </Page>

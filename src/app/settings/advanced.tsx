@@ -1,4 +1,5 @@
 import { RESERVE_OPTIONS } from '@/engine/device-profile';
+import { onIphone, platformText } from '@/engine/platform-text';
 import { DEFAULTS } from '@/engine/settings';
 import { ChipSection } from '@/features/settings/ChipSection';
 import { Page } from '@/features/settings/Page';
@@ -37,12 +38,13 @@ export default function AdvancedSettings() {
         />
         <Row
           label="Get quick fixes (Recommended)"
-          hint="Small fixes arrive without a Play Store update, on Wi-Fi only. Off: Sidekick never contacts Expo, the update service; fixes come with Play Store updates."
+          hint={platformText('quickFixesHint')}
           value={s.quickFixes}
           onChange={(v) => set({ quickFixes: v })}
         />
       </Section>
-      <ChipSection />
+      {/* iPhone: the model runs on the CPU only (ADR 0006), so there is no chip to choose. */}
+      {onIphone() ? null : <ChipSection />}
       <Section title="Reset">
         <AppText variant="bodySmall" tone="muted">
           Sets every adjustable setting back to Recommended for this phone.

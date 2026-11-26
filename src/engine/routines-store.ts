@@ -16,6 +16,7 @@ import {
   parseRoutine,
   upcoming,
 } from './routines-logic';
+import { IPHONE } from './platform-text';
 import { getSettings, updateSettings } from './settings';
 import { parseIntent } from '@/integrations/parse';
 import type { KvStore } from '@/integrations/prefs';
@@ -212,13 +213,6 @@ export function openExactRoutineSettings() {
   routinesNative()?.openExactSettings();
 }
 
-/**
- * iPhone: an app can't wake itself at a set time or when something happens, so routines (which
- * run the AI model by themselves) are Android only there. Reminders still arrive on time.
- */
-export const ROUTINES_NEED_ANDROID =
-  'Routines need Android: iPhone apps can’t run by themselves at a set time or when something happens. Reminders still work, e.g. "remind me at 6pm to call Sam".';
-
 // --- Migration: the old fixed daily briefing becomes a routine ---
 
 export function migrateBriefing(now = Date.now()) {
@@ -245,7 +239,8 @@ export function routineRequest(
   if (!p) return null;
   if (!p.ok) return { text: p.reason };
   if (p.when.type === 'once' && parseIntent(p.action, now)) return null;
-  if (Platform.OS === 'ios') return { text: ROUTINES_NEED_ANDROID };
+  // iPhone: an app can't wake itself to run the model, so there are no routines (ADR 0006).
+  if (Platform.OS === 'ios') return { text: IPHONE.routines };
   const r = addRoutine(question.trim(), p.when, p.action, now.getTime());
   if (!r.ok) return { text: r.reason };
   // Without "Alarms & reminders" Android delays the alarm (a minute up to ~10 in Doze); say so,

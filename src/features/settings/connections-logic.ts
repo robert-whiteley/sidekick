@@ -1,4 +1,5 @@
 import type { DeviceProfile } from '@/engine/device-profile';
+import { IPHONE } from '@/engine/platform-text';
 import type { Integration } from '@/integrations/registry';
 
 /**
@@ -6,7 +7,7 @@ import type { Integration } from '@/integrations/registry';
  * work here when just some do (Phone info on iPhone: battery, storage and steps).
  */
 export function integrationAvailability(
-  i: Pick<Integration, 'androidOnly'> & Partial<Pick<Integration, 'switches'>>,
+  i: Pick<Integration, 'androidOnly'> & Partial<Pick<Integration, 'switches' | 'google'>>,
   p: Pick<DeviceProfile, 'platform'>,
 ): { available: boolean; why?: string; only?: string[] } {
   const some = (i.switches ?? []).filter((s) => s.iphone).map((s) => s.id);
@@ -16,7 +17,12 @@ export function integrationAvailability(
   if (i.androidOnly && p.platform !== 'android') {
     return {
       available: false,
-      why: p.platform === 'ios' ? 'Not possible on iPhone: Apple doesn’t allow it' : 'Android only',
+      why:
+        p.platform !== 'ios'
+          ? 'Android only'
+          : i.google
+            ? IPHONE.googleNotSetUp
+            : 'Not possible on iPhone: Apple doesn’t allow it',
     };
   }
   return { available: true };

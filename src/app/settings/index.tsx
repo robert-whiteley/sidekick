@@ -1,3 +1,4 @@
+import { platformText } from '@/engine/platform-text';
 import { Page } from '@/features/settings/Page';
 import { NavRow } from '@/features/settings/ui';
 
@@ -6,24 +7,20 @@ export default function SettingsScreen() {
     <Page title="Settings">
       <NavRow
         label="Assistant"
-        hint="Voice, model, wake word, follow-ups"
+        hint={platformText('settingsAssistantHint')}
         href="/settings/assistant"
       />
       <NavRow
         label="Camera & audio"
-        hint="Inputs and outputs, frame rate, how long video is kept"
+        hint={platformText('settingsCameraHint')}
         href="/settings/camera"
       />
       <NavRow
         label="Connections"
-        hint="Calendar, messages, email and other apps"
+        hint={platformText('settingsConnectionsHint')}
         href="/settings/connections"
       />
-      <NavRow
-        label="Privacy"
-        hint="Recording consent, pause places, online lookup, export, delete"
-        href="/settings/privacy"
-      />
+      <NavRow label="Privacy" hint={platformText('settingsPrivacyHint')} href="/settings/privacy" />
       <NavRow
         label="Phone features"
         hint="What this phone can and can't do"
@@ -31,7 +28,7 @@ export default function SettingsScreen() {
       />
       <NavRow
         label="Advanced"
-        hint="Storage reserve, downloads, AI chip"
+        hint={platformText('settingsAdvancedHint')}
         href="/settings/advanced"
       />
       <NavRow label="Memory" hint="You, people, to-dos, timeline, saved" href="/memory" />

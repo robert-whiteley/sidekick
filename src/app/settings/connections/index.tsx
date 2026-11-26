@@ -1,6 +1,7 @@
 import { useState } from 'react';
 
 import { readDeviceProfile } from '@/engine/device-profile';
+import { onIphone, platformText } from '@/engine/platform-text';
 import type { ReadIncomingMode } from '@/engine/hands-free-logic';
 import { INTEGRATIONS } from '@/integrations/registry';
 import { Page } from '@/features/settings/Page';
@@ -16,8 +17,8 @@ export default function ConnectionsSettings() {
     <Page title="Connections">
       <Section title="Sending">
         <ChoiceRow
-          label="Messages, emails, events and calls"
-          hint="A card shows what will be sent; Cancel or say stop during the countdown."
+          label={platformText('sendingLabel')}
+          hint={platformText('sendingHint')}
           options={[
             { value: 'countdown', label: 'After 5 s' },
             { value: 'instant', label: 'At once' },
@@ -27,20 +28,23 @@ export default function ConnectionsSettings() {
           recommended="countdown"
           onChange={(v) => set({ actionSend: v ?? 'countdown' })}
         />
-        <ChoiceRow<ReadIncomingMode>
-          label="Read new messages aloud"
-          hint={
-            'Reads new messages as they arrive; say "reply …" to answer. Needs Notification access.'
-          }
-          options={[
-            { value: 'off', label: 'Off' },
-            { value: 'headphones', label: 'With headphones or in the car' },
-            { value: 'always', label: 'Always' },
-          ]}
-          value={settings.readIncoming}
-          recommended="off"
-          onChange={(v) => set({ readIncoming: v })}
-        />
+        {/* iPhone apps can't read other apps' messages (ADR 0006). */}
+        {onIphone() ? null : (
+          <ChoiceRow<ReadIncomingMode>
+            label="Read new messages aloud"
+            hint={
+              'Reads new messages as they arrive; say "reply …" to answer. Needs Notification access.'
+            }
+            options={[
+              { value: 'off', label: 'Off' },
+              { value: 'headphones', label: 'With headphones or in the car' },
+              { value: 'always', label: 'Always' },
+            ]}
+            value={settings.readIncoming}
+            recommended="off"
+            onChange={(v) => set({ readIncoming: v })}
+          />
+        )}
       </Section>
       <Section title="Apps Sidekick can use">
         {INTEGRATIONS.map((i) => {

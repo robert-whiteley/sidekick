@@ -241,19 +241,26 @@ URLSession through expo-file-system), app lock, export and delete-everything, on
 Left out on iPhone, with why (users see the reason in Phone features, Connections or the reply):
 
 - **Background listening, wake word, live conversation notes:** iOS doesn't let an app keep the
-  microphone on in the background for this. Hold the mic instead. Reply: "Listening in the background
-  needs Android."
+  microphone on in the background for this. Hold the mic instead. Reply: "iPhone apps can't listen
+  in the background. Hold the mic button to ask." Privacy hides Consent mode, Instructions only and
+  pause places (push-to-talk takes only the owner's own question); Auto-pause becomes "Quiet hours"
+  (the times "Quiet at night" uses).
 - **Live camera memory and "tell me when you see…":** iOS doesn't let apps film in the background, and
-  there is no USB camera API for apps. Reply: "The live camera needs Android. On iPhone, take a photo
-  with the camera button and ask about it."
+  there is no USB camera API for apps. Reply: "iPhone apps can't film in the background, so there is
+  no live camera. Tap the camera button to take a photo, then ask about it." "What am I looking at?"
+  (or "what is this?", "watch live") with the camera closed opens the camera instead of asking the
+  model; the next send takes the photo. The iPhone system prompt says the same, so the model doesn't
+  guess (it once talked about "Android phones").
 - **Routines:** an iPhone app can't wake itself at a time or on an event to run the model. Reply:
-  "Routines need Android…"; the Routines settings row is hidden. Reminders still arrive (local
+  "Routines aren't possible on iPhone…"; the Routines settings row is hidden. Reminders still arrive (local
   notifications).
 - **Quick Settings tile, home-screen widget, default assistant:** Android features; iOS equivalents
-  (widget extension, Siri/App Intents) need a native target — later, if asked for.
+  (widget extension, Siri/App Intents) need a native target — later, if asked for. Not listed in
+  Phone features on iPhone (nor USB camera, heat protection or the two-mic split).
 - **Notifications, messages, calls, alarms, timers, media, phone controls, screen time, Google
   (Gmail, Tasks, Drive):** iOS gives apps no access to other apps' notifications, texts, call log,
-  alarms or system switches; Google sign-in isn't set up for iOS. Shown as "Not possible on iPhone".
+  alarms or system switches; Google sign-in isn't set up for iOS. Shown as "Not possible on iPhone"
+  (Google ones: "Not on iPhone yet: Google sign-in isn't set up for iPhone").
 - **Natural voice (Pocket TTS):** not ported (ONNX Runtime iOS build not added); the iPhone's own voice
   reads answers.
 - **GPU/NPU for the model:** the LiteRT-LM xcframework used (v0.19.1) is CPU only for the Swift API;
@@ -262,5 +269,13 @@ Left out on iPhone, with why (users see the reason in Phone features, Connection
   open, and Apple rejects background modes an app doesn't need.
 - **China mainland:** not offered (App Store availability). Generative AI apps there need a CAC
   Security Assessment and an AIGC filing through a local entity, which a free open-source app can't do.
+- **Android wording (26 Nov polish):** every text that differs by platform lives in
+  `src/engine/platform-text.ts` (Face ID / passcode, App Store, "Save to Photos" instead of
+  Pictures/Sidekick folders, location only "while Sidekick is open"); `__tests__/ios-wording-test.tsx`
+  renders the settings screens as an iPhone and fails on Android-only words. Replies no longer say
+  "needs Android": they say what the iPhone can't do and what to do instead. Left Android-only:
+  "Understand other languages around me" (Listen only; Apple Speech hears the question), conversation
+  notes, "Read new messages aloud", the AI chip section (CPU only), video / stills / conversation
+  audio keep periods. The privacy policy and changelog cover both phones and are unchanged.
 - **Download after the app is killed:** the background download continues while the app is
   suspended, but if the user force-quits Sidekick it restarts on the next open (no resume data kept).
