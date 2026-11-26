@@ -95,3 +95,110 @@ touched.
 - **Overlapping speech** still lands in one line.
 - Synthetic voices and noise only; real rooms and real voices will differ. The phone test used a
   laptop speaker, which makes voices sound more alike than in person.
+
+## Answers, routing and recall (26 Nov 2026)
+
+**What is measured.** 143 fixed requests (`bench/answers/cases.ts`): general knowledge 15,
+arithmetic 12, dates 14, units 8, short reasoning 8, every tool and command 63 (timers, alarms,
+reminders, to-dos, routines incl. one-offs, camera settings, speech speed, torch, volume,
+listening, navigation, memory, notes, recap, steps/battery/storage, weather, online lookup,
+message/call/email/calendar drafts, location, watching), near-misses that must not start a tool
+14 ("tell me about timers", "write a poem", "I love the camera on this phone"), refusals 5
+("text me a fun fact") and multi-step 4. Each case says which rule or tool is right (with key
+arguments) and, where checkable, words the answer must or must not contain. On the phone the
+router only picks; nothing is run, sent or saved.
+
+Recall (`bench/recall/generate.ts`): 37 invented facts in about 5 weeks of made-up conversation
+notes, notes and photo captions (Priya and the boiler, Westgate car park level 4, the book club),
+filler up to any size, and 50 questions with the expected answer words.
+
+Pixel 5, CPU, Gemma via LiteRT-LM. "Before" is main with the bench added; "after" is this branch.
+
+### Root causes found
+
+- **Any instruction-shaped sentence offered the model all ~30 tools.** "Tell me a joke", "Write a
+  short poem", "Give me three tips", "Explain how GPS works" and word puzzles ("Tom is taller than
+  Sam… Who is the shortest?") waited 16–22 s for the tool router, which then searched memory
+  instead of answering. Questions with an action word in them ("What language do people **speak**
+  in Brazil?", "How many **minutes** are in 3 hours?") were offered speech speed or timers. Now a
+  question (its last sentence, after any "If …,") is never offered action tools, and jokes, poems,
+  tips, explanations, look-ups and remarks go straight to the answer.
+- **The model doesn't know today's date** and gets calendar facts wrong ("A leap year has
+  thirty-six days", "2028 is not a leap year", "I do not have access to the current date"). Date
+  questions are now worked out in code (`src/integrations/date-answers.ts`: today, tomorrow, leap
+  years, days in a month, days until/since a date or holiday, the weekday of a date), and any
+  answer prompt about dates or time gets today's date and time.
+- **"Text me a fun fact" drafted a text to a contact called "me".** Messages, emails and calls to
+  me/myself are now never drafted; the model answers instead.
+- **Rules missing for plain phrasings**, so they waited ~5–7 s for the router (and twice got
+  the arguments wrong): "Lower the frame rate", "Use the selfie camera", "Start a countdown of
+  90 seconds", "Add bread to my to-do list", "Don't let me forget to buy milk".
+- **"Every Monday at 8 tell me the weather" answered today's weather** instead of setting up the
+  routine.
+- **Memory questions caught by other rules:** "Where did I leave my umbrella?" (weather), "How
+  much does Wen's plumber charge?" (battery), "What did I buy Kofi for his birthday?" (contacts'
+  birthdays), "Until when is…" (all tools), "What did I talk about with Hamid?" (a recap about
+  "with hamid"). "Where did I park?" / "Where was I on Tuesday?" with nothing in location history
+  now answer from memory notes when they say, else give the old reason.
+- "Half of 87", "How many pounds is 2 kg?", "How many millilitres are in 2.5 litres?" now
+  calculated in code (the model wrote the right answer, in words).
+
+### Results: before → after
+
+| Set (cases)      | Right rule/tool, phone | Answers right, phone | Offline rules (any PC) |
+| ---------------- | ---------------------- | -------------------- | ---------------------- |
+| Knowledge (15)   | 13 → 15                | 13/13 → 15/15        | 13 → 15                |
+| Arithmetic (12)  | 11 → 12                | 10/11 → 11/12        | 9 → 12                 |
+| Dates (14)       | 14 → 14                | **5/14 → 14/14**     | 14 → 14                |
+| Units (8)        | 8 → 8                  | 6/8 → 6/8            | 8 → 8                  |
+| Reasoning (8)    | 4 → 8                  | 4/4 → 8/8            | 3 → 8                  |
+| Tools (63)       | 59 → 63                |                      | 49 → 61 (+2 for model) |
+| Near-misses (14) | 9 → 14                 |                      | 6 → 13 (+1 for model)  |
+| Refusals (5)     | 3 → 5                  | 1/1 → 2/2            | 1 → 4 (+1 for model)   |
+| Multi-step (4)   | 4 → 4                  |                      | 4 → 4                  |
+| **All (143)**    | **125 → 143**          | **40/52 → 57/60**    | **107 → 139**          |
+
+The three answers still marked wrong after (half of 87, 2 kg in pounds, 2.5 l in ml) were right
+in words; they are now calculated in code (offline: 32/32 code answers right; not re-run on the
+phone).
+
+| Speed (phone)                             | Before                              | After         |
+| ----------------------------------------- | ----------------------------------- | ------------- |
+| Tool-router calls across the 143          | 34, 326 s total                     | 4, 24 s total |
+| Router waits over 12 s                    | 9                                   | 0             |
+| "Tell me a joke": first words             | none (17.5 s, then a memory search) | 3.5 s         |
+| Word puzzle (bat and ball): first words   | 19.5 s                              | 3.2 s         |
+| "Lower the frame rate"                    | 6.9 s                               | instant       |
+| Model answers: median first words / total | 3.2 s / 6.1 s                       | 3.2 s / 5.6 s |
+
+### Recall (phone, after)
+
+100 test memories added next to the phone's own (about 1,300 in all; only counts of the phone's
+own memories were read, never their content):
+
+| Measure                                         | Result                    |
+| ----------------------------------------------- | ------------------------- |
+| Right memory ranked first by search             | 49/50                     |
+| Right memory in the top 4 (what the model sees) | 50/50                     |
+| Search time (about 1,300 memories)              | median 0.35 s, max 0.43 s |
+| Full answer right                               | 44/50                     |
+| Answer: median first words / total              | 3.9 s / 7.1 s             |
+| Adding 100 memories (with vectors)              | 31 s                      |
+
+Of the 6 misses: "What did I talk about with Hamid?" became a recap about "with hamid" (fixed,
+not re-run on the phone); "Where did I park?" answered from the phone's real parking spot, which
+is right; 4 had some of the owner's memories in the notes the model saw, so their text was not
+logged and why they missed is unknown (the bench now logs which test notes were seen and whether
+the answer said it didn't know, without the text). Test memories were removed afterwards: the
+owner's counts of memories, facts and voices were the same before, during and after; test rows 0.
+
+### Still weak / not measured
+
+- **Search time at 1,000 and 5,000 memories and storage used: not measured.** The phone was on
+  its PIN lock screen when the second session started. The bench can do it
+  (`run=recall-load&size=5000`, then `run=recall-search`); the storage query is fixed (it read 0).
+- Units: the model writes numbers in words ("four and four-tenths pounds"); fine to hear, but not
+  checkable by rule.
+- 4 requests still go to the model router on purpose (an unusual phrasing like "give me a shout
+  in a quarter of an hour", "make it grab fewer pictures", "The alarm went off too early").
+- Answers with the owner's own memories in the prompt can't be scored without reading them.
