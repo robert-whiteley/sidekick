@@ -290,3 +290,8 @@ Left out on iPhone, with why (users see the reason in Phone features, Connection
   as well, but words on cut parts got much worse (WER 7% → 18.5% in babble at 10 dB).
 - Left: similar voices merging across conversations, misheard unusual names, overlapping speech in
   one line, and loud babble (5 dB and below) where words and voices both fall apart.
+- Built (descriptions): short pieces that sound alike (≥ 0.5) add up to a new person once they
+  total 2.5 s, so people who only say short things get a voice and a role instead of "Someone".
+  The voice bench now scores names and descriptions together.
+- Rejected: 0.55 or 0.6 for "sound alike" when adding up short pieces (fewer people found, more
+  "Someone"); kept 0.5.

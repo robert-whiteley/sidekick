@@ -83,8 +83,51 @@ The line cut fired 7 times in about 3 minutes ("line cut in 2–9 where the voic
 errors or slowdowns seen. The wake word and push-to-talk were not used, so the owner's voice was not
 touched.
 
+### Descriptions (people with no name)
+
+Unnamed people should show a role from what they say ("Waiter", "Bus driver"). The bench now scores
+this: every made-up person has a role, four are never named (waiter, bus driver, shop assistant,
+doctor), and a person counts as **shown right** when the voice that is mostly them shows their name
+or their role at the end of each conversation. Offline, only the role phrases run; the model's
+reading of the conversation runs on the phone only.
+
+**Why the waiter became "Someone":** after the line cut, many turns are shorter than 2.5 s. A new
+voice needed one piece at least 2.5 s long, so a person who only says short things ("Can I get you
+any drinks?") never got a voice; their lines stayed "Someone", and descriptions are only given to
+voices. **Fix:** short pieces that sound alike (similarity ≥ 0.5, within a minute) now add up: once
+they total 2.5 s they become a new person, and the earlier "Someone" lines move to them. Role phrases
+also accept the shorter wording speech-to-text produces ("You need a bag?", "a few more minutes").
+
+Shown right, everyone / unnamed only (25 people, 11 scenes), before the line cut → after it (PR 21)
+→ with this fix:
+
+| Condition | Shown right (all) | Unnamed shown by role | "Someone" (other people) |
+| --------- | ----------------- | --------------------- | ------------------------ |
+| clean     | 26% → 50% → 52%   | 50% → 75% → 88%       | 2% → 1% → 1%             |
+| reverb    | 32% → 52% → 54%   | 75% → 88% → 100%      | 2% → 2% → 2%             |
+| babble 20 | 32% → 56% → 58%   | 75% → 88% → 100%      | 1% → 2% → 2%             |
+| babble 10 | 6% → 34% → 36%    | 25% → 88% → 100%      | 0% → 21% → 17%           |
+| babble 5  | 0% → 6% → 8%      | 0% → 13% → 25%        | 0% → 39% → 39%           |
+| pink 20   | 24% → 54% → 56%   | 63% → 88% → 100%      | 1% → 1% → 1%             |
+| pink 10   | 30% → 48% → 50%   | 75% → 88% → 100%      | 1% → 3% → 3%             |
+| pink 5    | 22% → 28% → 28%   | 50% → 63% → 63%       | 3% → 4% → 4%             |
+| pink 0    | 6% → 14% → 16%    | 13% → 13% → 25%       | 3% → 7% → 7%             |
+| street 20 | 32% → 56% → 58%   | 75% → 88% → 100%      | 1% → 1% → 1%             |
+| street 10 | 24% → 60% → 62%   | 63% → 88% → 100%      | 2% → 2% → 2%             |
+| street 5  | 20% → 38% → 40%   | 63% → 88% → 100%      | 2% → 1% → 1%             |
+| street 0  | 22% → 22% → 22%   | 38% → 38% → 38%       | 3% → 9% → 9%             |
+
+The fix changes no other number except in babble 10 and 5 (babble 10: turns right per conversation
+72% → 75%, "Someone" 21% → 17%, one more split). Thresholds tried for "sound alike": 0.5 is best;
+0.55 kept more "Someone" (20%), 0.6 and above did nothing.
+
+**Phone check: not done.** The phone was locked behind its PIN when this ran, so the café, bus and
+shop clips were not played; the fix is checked offline and by tests only.
+
 ### Still weak
 
+- **A person split into two voices** can lose their role: in the clean café the waiter's first
+  conversation splits, and the larger part has no waiter phrases, so it shows "Person N".
 - **Similar voices merge across conversations** (4–5 merges out of 21 people, mostly between scenes).
   Raising the same-voice threshold to 0.6 helped clean audio a little but hurt echo; not changed.
 - **Speech-to-text mishears unusual names** (Okello → Okolo, Tomasz → Thanas, Wren → Ren), so the
