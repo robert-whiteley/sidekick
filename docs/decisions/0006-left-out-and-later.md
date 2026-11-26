@@ -30,6 +30,21 @@ Read this before proposing any of these again. Each line says why.
 
 - Nothing listed right now.
 
+## Chat: Edit, Try again, answer style, formatting, private facts (26 Nov)
+
+- Edit and Try again work on the last exchange only (the one continuous chat would otherwise
+  disagree with what the model was told later). Not offered on photo or screenshot questions (the
+  photo can't be taken again), rule replies (reminders, drafts, "remember …": redoing them would
+  repeat the action) or Off the record (nothing was saved; its own chat isn't rewound).
+- Taking an exchange back restarts the model's chat from the summary and the turns left (one
+  re-read of the instructions, about a second on the Pixel 5) instead of undoing just the last
+  native turn: an answer with an online lookup is two turns, so undo alone could leave half of it.
+- Rejected: a markdown library (react-native-markdown-display and similar pull in a parser and
+  styles for far more than we use); our own parser covers lists, steps, bold, small tables.
+- A person fact the model can't clearly classify counts as private and is not suggested (better
+  to lose a suggestion than to keep a private one). Facts the user asks Sidekick to remember are
+  always kept. Conversation notes and voice descriptions are not filtered.
+
 ## Smart Turn end of turn (built 2026-11-24, Android)
 
 - Smart Turn v3.2 (pipecat-ai, BSD-2-Clause, 32 MB, optional Wi-Fi download) through the ORT bridge. Whisper log-mel features in Kotlin (`WhisperMel.kt`): within 1.6e-5 of transformers' extractor; Kotlin + JNI bridge + sherpa's ORT 1.28.2 gives the same probability as Python (max diff 2.5e-6, 59 clips).
