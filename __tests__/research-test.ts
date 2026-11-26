@@ -274,6 +274,30 @@ describe('research()', () => {
     expect(r.pagesRead).toBe(2);
   });
 
+  test('short Wikimedia budget: one search, no Wikipedia page read', async () => {
+    const d = deps({ wikiLeft: () => 0 });
+    const r = await research(
+      'Research tidal power',
+      () => {},
+      () => {},
+      d,
+    );
+    expect(d.search).toHaveBeenCalledTimes(1);
+    expect(d.read).not.toHaveBeenCalled();
+    // The Wikipedia hit's search snippet is still used, with no request for the page.
+    expect(r.web.map((w) => w.url)).toEqual(['https://en.wikipedia.org/wiki/Tidal_power']);
+  });
+
+  test('a page that cannot be read still gives its search snippet', async () => {
+    const r = await research(
+      'Research tidal power',
+      () => {},
+      () => {},
+      deps({ read: jest.fn(async () => '') }),
+    );
+    expect(r.web.length).toBeGreaterThan(0);
+  });
+
   test('offline setting and no internet answer at once, without the model', async () => {
     const d = deps({ enabled: () => false });
     const r = await research(

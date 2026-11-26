@@ -33,13 +33,11 @@ export const LOOKUP_TIMEOUT_MS = 4000;
  */
 export const NEWS_TIMEOUT_MS = LOOKUP_TIMEOUT_MS;
 /**
- * Wikimedia's 2026 limits: a User-Agent without a contact URL or email counts as unidentified
- * (10 requests/min per IP; a research run needs ~15), one with a URL as a compliant bot (200/min).
- * Measured 26 Nov: the old one got 429 from the 11th request in a minute, this one didn't. The URL
- * is the public project page: nothing about the user.
+ * Names the app only: no URL, email or username, so nothing points at a person. Wikimedia counts
+ * such a client as unidentified (10 requests a minute per IP, 2026 limits); every Wikimedia
+ * request goes through one per-minute window that keeps under that (rate-limit.ts).
  */
-export const USER_AGENT =
-  'SidekickApp/1.0 (https://github.com/robert-whiteley/sidekick; on-device assistant app)';
+export const USER_AGENT = 'SidekickApp/1.0 (on-device assistant app)';
 /** Each source's text in the prompt; every prompt token delays the first word on a phone. */
 export const SOURCE_CHARS = 360;
 export const MAX_SOURCES = 3;

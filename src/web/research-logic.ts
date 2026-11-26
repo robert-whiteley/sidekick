@@ -16,6 +16,42 @@ export const MAX_PAGES = 6;
 /** Sources quoted in the report prompt. */
 export const MAX_REPORT_SOURCES = 6;
 /**
+ * Wikimedia requests one research search makes (Wikipedia's top hit and a full-text search). Each
+ * phone stays under Wikimedia's 10 a minute (rate-limit.ts), so the plan is trimmed to fit.
+ */
+export const WIKI_PER_SEARCH = 2;
+/** Wikipedia articles left room for when the plan is trimmed to the Wikimedia budget. */
+export const MIN_WIKI_READS = 3;
+
+/** How many of [n] planned searches fit with [wikiLeft] Wikimedia requests left (at least 1). */
+export function searchesWithin(n: number, wikiLeft: number): number {
+  return Math.max(1, Math.min(n, Math.floor((wikiLeft - MIN_WIKI_READS) / WIKI_PER_SEARCH)));
+}
+
+/**
+ * The pages to read, in [order], at most [max]: Wikipedia pages only while the budget lasts,
+ * other sites in their place (they aren't limited).
+ */
+export function chooseReads<T>(
+  order: T[],
+  max: number,
+  wikiLeft: number,
+  isWiki: (x: T) => boolean,
+): T[] {
+  const out: T[] = [];
+  let left = wikiLeft;
+  for (const x of order) {
+    if (out.length >= max) break;
+    if (isWiki(x)) {
+      if (left <= 0) continue;
+      left--;
+    }
+    out.push(x);
+  }
+  return out;
+}
+
+/**
  * Characters of source text in the report prompt (~1,100 tokens). On the Pixel 5 every prompt
  * token is read before the first word, and the model's window is 4,096 tokens for prompt + answer.
  */

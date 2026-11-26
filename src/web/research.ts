@@ -12,7 +12,9 @@ import { listSpeakers } from '@/memory/store';
 import { fetchJson, fetchText, isOnline, searchWeb, type SearchOptions } from './lookup';
 import { mergeSources, USER_AGENT, type WebSource } from './lookup-logic';
 import { isNewsQuestion, topicWords } from './news-logic';
+import { isWikimedia, politeFetch, wikimedia } from './rate-limit';
 import {
+  chooseReads,
   cleanArticle,
   cleanReport,
   fallbackQueries,
@@ -35,6 +37,7 @@ import {
   RESEARCH_NO_INTERNET,
   RESEARCH_NOTHING,
   RESEARCH_OFFLINE,
+  searchesWithin,
   siteName,
   wikipediaArticleUrl,
   wikipediaSearchUrl,
@@ -54,12 +57,17 @@ export async function fetchPage(
   const ctl = new AbortController();
   const timer = setTimeout(() => ctl.abort(), timeoutMs);
   try {
-    const res = await doFetch(url, {
-      signal: ctl.signal,
-      headers: { Accept: 'text/html,application/xhtml+xml', 'User-Agent': USER_AGENT },
-      credentials: 'omit',
-    });
-    if (!res.ok || (res.url && !res.url.startsWith('https://'))) return null;
+    const res = await politeFetch(
+      doFetch,
+      url,
+      {
+        signal: ctl.signal,
+        headers: { Accept: 'text/html,application/xhtml+xml', 'User-Agent': USER_AGENT },
+        credentials: 'omit',
+      },
+      { deadline: Date.now() + timeoutMs - 1000 },
+    );
+    if (!res || !res.ok || (res.url && !res.url.startsWith('https://'))) return null;
     const type = res.headers?.get?.('content-type') ?? '';
     if (type && !/html|xml/i.test(type)) return null;
     if (Number(res.headers?.get?.('content-length') ?? 0) > MAX_PAGE_BYTES) return null;
@@ -85,6 +93,8 @@ export type ResearchDeps = {
   searxUrl: () => string;
   feeds: () => string[];
   now: () => Date;
+  /** Wikimedia requests this phone may still make this minute (rate-limit.ts). */
+  wikiLeft?: () => number;
 };
 
 /** Reads one result: a Wikipedia article through the API, anything else as HTML. */
@@ -156,6 +166,7 @@ export const defaultDeps: ResearchDeps = {
   searxUrl: () => getSettings().searxngUrl,
   feeds: () => getSettings().newsFeeds,
   now: () => new Date(),
+  wikiLeft: () => wikimedia.left(),
 };
 
 let stopped = 0;
@@ -213,7 +224,10 @@ export async function research(
     await deps.ask(planPrompt(topic, now), PLAN_MAX_TOKENS).catch(() => ''),
     names,
   );
-  const queries = planned.length ? planned : fallbackQueries(topic, names);
+  const wikiLeft = deps.wikiLeft ?? (() => wikimedia.left());
+  // Fewer searches when Wikimedia's per-minute budget is short, keeping room to read articles.
+  const all = planned.length ? planned : fallbackQueries(topic, names);
+  const queries = all.slice(0, searchesWithin(all.length, wikiLeft()));
   timings.planMs = Date.now() - t0;
   if (!queries.length || cancelled()) return say(RESEARCH_NOTHING);
 
@@ -242,15 +256,22 @@ export async function research(
   const order: typeof found = [];
   for (let k = 0; order.length < found.length; k++)
     for (const list of byQuery) if (list[k]) order.push(list[k]);
-  const toRead = order.slice(0, MAX_PAGES);
+  // Wikipedia articles only while the budget lasts; other sites take the rest of the places.
+  const toRead = chooseReads(order, MAX_PAGES, wikiLeft(), (f) => isWikimedia(f.source.url));
   const t2 = Date.now();
   const pages: ReadPage[] = toRead.map((f) => ({ ...f, text: '' }));
   let done = 0;
   await pool(toRead, 3, async (f, i) => {
     if (cancelled()) return;
-    pages[i].text = await deps.read(f.source).catch(() => '');
+    // A page that can't be read still gives its search snippet.
+    pages[i].text = (await deps.read(f.source).catch(() => '')) || f.source.text || '';
     onStatus(progress.reading(++done, toRead.length, siteName(f.source)));
   });
+  // Places left over (Wikipedia pages past the budget): their search snippets, no request.
+  for (const f of order) {
+    if (pages.length >= MAX_PAGES) break;
+    if (!toRead.includes(f) && f.source.text) pages.push({ ...f, text: f.source.text });
+  }
   timings.readMs = Date.now() - t2;
   if (cancelled()) return say('Research stopped.');
 
@@ -266,7 +287,7 @@ export async function research(
   timings.writeMs = Date.now() - t3;
   const text = cleanReport(raw, picked.length);
   onText(text);
-  const pagesRead = pages.filter((p) => p.text).length;
+  const pagesRead = pages.slice(0, toRead.length).filter((p) => p.text).length;
   // Timings and counts only (no topic text) for checking on a phone.
   console.log(
     `[research] ${queries.length} searches (${planned.length ? 'model' : 'rules'}), ${found.length} results, ${pagesRead}/${pages.length} pages read, ${picked.length} cited; plan ${timings.planMs} ms, search ${timings.searchMs} ms, read ${timings.readMs} ms, write ${timings.writeMs} ms, total ${Date.now() - t0} ms`,
