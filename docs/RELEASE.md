@@ -96,7 +96,7 @@ third-party content). An empty extra draft submission sits in App Store Connect;
 Future sessions run in the cloud, which has no local key files and no phone. Everything that ships
 goes through GitHub Actions instead, so it works the same from the cloud or the laptop:
 
-- **Store builds and uploads:** `gh workflow run release.yml -f track=alpha`: both stores from one commit; it waits until the owner taps **Approve** in GitHub (email or GitHub app). Direct EAS store builds are blocked by `scripts/block-store-builds.sh`.
+- **Store builds and uploads:** `gh workflow run release.yml -f track=alpha`: both stores from one commit; starting it shows the owner an approval prompt in the chat. Direct EAS store builds are blocked (`scripts/block-store-builds.sh`).
   (`.github/workflows/release.yml`): EAS builds Android and iOS, uploads the AAB to Play (track
   `alpha` = closed test; `internal`, `beta`, `store` = production only after the owner's go) and the
   iOS build to TestFlight. Watch with `gh run watch`.
