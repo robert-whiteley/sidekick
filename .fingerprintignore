@@ -1,0 +1,8 @@
+# Generated on EAS during the iOS build (no ios/ folder exists locally; see Continuous Native Generation)
+ios
+ios/**/*
+# Fetched/copied by the sidekick-native podspec at pod install time (gitignored)
+modules/sidekick-native/ios/vendor
+modules/sidekick-native/ios/vendor/**/*
+modules/sidekick-native/ios/Resources
+modules/sidekick-native/ios/Resources/**/*
