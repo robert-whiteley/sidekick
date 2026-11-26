@@ -57,7 +57,7 @@ import {
   MET_SOURCE_URL,
   parseWeatherQuestion,
 } from '@/web/weather-logic';
-import { getForecast, online } from '@/web/weather';
+import { forecastUnreachable, getForecast, online } from '@/web/weather';
 import type { WebSource } from '@/web/lookup-logic';
 
 const DAY = 86_400_000;
@@ -150,7 +150,12 @@ async function where(p: Fix | LatLon, withStreet: boolean): Promise<string> {
 
 // --- Answers ---
 
-export type LocationAnswer = { text: string; web?: WebSource[] };
+export type LocationAnswer = {
+  text: string;
+  web?: WebSource[];
+  /** Kept until the internet works (online-queue.ts); a back-online run tries again later. */
+  waitingOnline?: boolean;
+};
 
 const OFF = 'Location memory is off. Turn it on in Settings → Privacy → Location.';
 const NOT_RECORDED =
@@ -364,13 +369,14 @@ async function weatherAnswer(
   if (!pos)
     return { text: 'I can\'t get your location right now. Say a town, like "weather in Leeds".' };
   // Offline: kept and answered when the phone is back online (online-queue.ts).
-  if (!(await online()))
-    return {
-      text: question
-        ? queueOnline('weather', question, now.getTime())
-        : "There's no internet right now, so I can't get the forecast.",
-    };
+  const offline = (): LocationAnswer =>
+    question
+      ? { text: queueOnline('weather', question, now.getTime()), waitingOnline: true }
+      : { text: "There's no internet right now, so I can't get the forecast." };
+  if (!(await online())) return offline();
   const f = await getForecast(pos.lat, pos.lon);
+  // Android says online but no server answered: the same as offline.
+  if (!f && forecastUnreachable()) return offline();
   if (!f) return { text: "I couldn't get the forecast just now. Try again in a minute." };
   const country = q.town ? null : currentRegion().country;
   const text = describeForecast(f, q, now, {

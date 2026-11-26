@@ -6,3 +6,4 @@ coverage
 package-lock.json
 assets/geonames
 src/content/legal.ts
+.claude/worktrees/

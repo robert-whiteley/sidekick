@@ -183,6 +183,19 @@ test('a charger that cannot keep up pauses slow photo work', () => {
   ];
   expect(drainingOnCharger(rising, t + 5 * 60_000)).toBe(false);
   expect(drainingOnCharger(falling.slice(0, 1), t)).toBe(false);
+  // Seen on the Pixel 5 on a 450 mA USB port: 33 → 32 → 31 → back to 32 while falling overall.
+  const bouncing = [32, 33, 32, 31, 32].map((l, i) => ({
+    at: t + i * 2 * 60_000,
+    level: l / 100,
+    charging: true,
+  }));
+  expect(drainingOnCharger(bouncing, t + 8 * 60_000)).toBe(true);
+  const steady = [33, 32, 33, 33].map((l, i) => ({
+    at: t + i * 60_000,
+    level: l / 100,
+    charging: true,
+  }));
+  expect(drainingOnCharger(steady, t + 3 * 60_000)).toBe(false);
   const b = {
     mode: 'charging',
     charging: true,

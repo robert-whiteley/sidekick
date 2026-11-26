@@ -2,6 +2,8 @@ import { Platform } from 'react-native';
 
 import SidekickNative, { type FrameJournalEntry } from '../../modules/sidekick-native';
 import { EMBED_DIMS, getDb, vecParam } from './db';
+import { placeForFrame } from '@/engine/place-logic';
+import { here } from '@/engine/places';
 import { keptFile } from './media-files';
 import { OCR_NO_TEXT, OCR_PENDING, readTextOf } from './photo-ocr';
 import type { Segment } from '@/features/media/media-logic';
@@ -75,11 +77,15 @@ async function ingestNow(): Promise<number> {
   if (!frames.length) return 0;
   const db = await getDb();
   const toRead: number[] = [];
+  // Where the phone was (when location is allowed), like every other moment: "what did I see in
+  // Leeds" and the Timeline's place name.
+  const last = here();
   await db.transaction(async (tx) => {
     for (const f of frames) {
+      const p = placeForFrame(f.at, last);
       // The full-resolution still (text or a plate was seen) is the photo kept for that moment.
       const r = await tx.execute(
-        'INSERT INTO moments (kind, at, text, photo_path, image_embedded, photo_ocr) VALUES (?, ?, ?, ?, ?, ?)',
+        'INSERT INTO moments (kind, at, text, photo_path, image_embedded, photo_ocr, lat, lon, place) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
         [
           'frame',
           f.at,
@@ -87,6 +93,9 @@ async function ingestNow(): Promise<number> {
           f.stillPath ?? f.path,
           f.vector ? 1 : 0,
           f.ocrNeeded ? OCR_PENDING : OCR_NO_TEXT,
+          p?.lat ?? null,
+          p?.lon ?? null,
+          p?.place ?? null,
         ],
       );
       const id = r.insertId!;

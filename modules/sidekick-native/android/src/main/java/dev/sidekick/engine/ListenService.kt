@@ -215,10 +215,15 @@ class ListenService : Service() {
     val nm = getSystemService(NotificationManager::class.java)
     if (Build.VERSION.SDK_INT >= 26 && nm.getNotificationChannel(CHANNEL) == null) {
       nm.createNotificationChannel(
-        NotificationChannel(CHANNEL, "Listening", NotificationManager.IMPORTANCE_LOW).apply {
-          description = "Shown while Sidekick is listening"
+        NotificationChannel(CHANNEL, ServiceNotice.CHANNEL_NAME, ServiceNotice.CHANNEL_IMPORTANCE).apply {
+          description = "Shown while Sidekick is listening or filming, with Pause and Stop (also on the lock screen)"
+          if (!ServiceNotice.CHANNEL_SOUND) setSound(null, null)
+          enableVibration(ServiceNotice.CHANNEL_VIBRATE)
+          lockscreenVisibility = Notification.VISIBILITY_PUBLIC
+          setShowBadge(false)
         }
       )
+      nm.deleteNotificationChannel(ServiceNotice.OLD_CHANNEL)
     }
     val open =
       PendingIntent.getActivity(
@@ -250,6 +255,8 @@ class ListenService : Service() {
         .setContentTitle(n.title)
         .setContentText(n.body)
         .setOngoing(true)
+        // Updates (pause, resume, heat) never alert again.
+        .setOnlyAlertOnce(true)
         .setContentIntent(open)
         // Shown in full on the lock screen: it only says what is on, never what was heard.
         .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
@@ -309,7 +316,7 @@ class ListenService : Service() {
 
   companion object {
     private const val TAG = "SidekickListen"
-    private const val CHANNEL = "listen"
+    private const val CHANNEL = ServiceNotice.CHANNEL
     private const val NOTIFICATION_ID = 42
     private const val ACTION_STOP = "dev.sidekick.STOP_LISTENING"
     private const val ACTION_PAUSE_CAMERA = "dev.sidekick.PAUSE_CAMERA"

@@ -224,6 +224,30 @@ describe('fetch and orchestration', () => {
     expect((ask.mock.calls[0] as unknown[])[0]).toContain('[Wikipedia: President of France]');
   });
 
+  test('online by Android but no server reached: marked offline (kept for later)', async () => {
+    const d = deps({ search: jest.fn(async () => []), unreachable: () => true });
+    const ask = jest.fn(async () => ({ text: 'a', stats: stats(10) }));
+    const r = await askWithLookup(
+      'Who is the president of France?',
+      false,
+      build,
+      ask,
+      () => {},
+      d,
+    );
+    expect(r.offline).toBe(true);
+    const found = deps({ search: jest.fn(async () => []), unreachable: () => false });
+    const r2 = await askWithLookup(
+      'Who is the president of France?',
+      false,
+      build,
+      ask,
+      () => {},
+      found,
+    );
+    expect(r2.offline).toBe(false);
+  });
+
   test('no network: offline answer', async () => {
     const d = deps({ online: async () => false });
     const ask = jest.fn(async () => ({ text: 'a', stats: stats(10) }));

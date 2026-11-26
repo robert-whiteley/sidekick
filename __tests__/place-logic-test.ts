@@ -1,9 +1,11 @@
 import {
   formatMinutes,
+  FRAME_PLACE_MAX_GAP_MS,
   haversineM,
   inQuietHours,
   insidePlace,
   parseTime,
+  placeForFrame,
 } from '@/engine/place-logic';
 
 const leeds = { lat: 53.7965, lon: -1.5478 };
@@ -39,4 +41,12 @@ test('time parsing and formatting', () => {
   expect(parseTime('24:00')).toBeNull();
   expect(parseTime('noon')).toBeNull();
   expect(formatMinutes(450)).toBe('07:30');
+});
+
+test('camera frames take the last position only if it is recent', () => {
+  const fix = { lat: 51.5, lon: -1.2, place: 'Town', at: 1_000_000 };
+  expect(placeForFrame(1_000_000 + 5 * 60_000, fix)).toBe(fix);
+  expect(placeForFrame(1_000_000 - 9 * 60_000, fix)).toBe(fix);
+  expect(placeForFrame(1_000_000 + FRAME_PLACE_MAX_GAP_MS + 1, fix)).toBeNull();
+  expect(placeForFrame(1_000_000, null)).toBeNull();
 });
