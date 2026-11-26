@@ -32,9 +32,11 @@ Each task in that list: click it → answer → **Save** → back to the Dashboa
     and `https://robert-whiteley.github.io/sidekick-site/delete-data`.
 - [ ] **Government apps**: No.
 - [ ] **Financial features**: My app doesn't provide any financial features.
-- [ ] **Health**: tick **Activity and fitness** only (Sidekick counts steps; the data stays on the phone).
-- [ ] **Trader status** (EU law): **I'm not a trader**. Sidekick is free, with no ads, purchases or
-      income. If you ever charge for it or for something in it, change this to trader.
+- [ ] **Health**: tick **Activity and fitness** only (Sidekick can say today's step count; the data stays on the phone) → Next.
+- [ ] **Trader status**: **Yes, my trader status applies to this app** (your account is a trader;
+      "No" would tell EU/UK users consumer protection doesn't apply, and would need changing for any
+      paid feature). Terms of Service URL: leave empty (optional; Claude writes terms if paid features come).
+- [ ] **Target audience** extra box "Restrict users … determined to be minors": tick it.
 - [ ] **Select an app category and provide contact details**: category **Productivity**, tags skip;
       email `info@sashy.ai`; website `https://robert-whiteley.github.io/sidekick-site`; phone empty.
 - [ ] **Set up your store listing**:
