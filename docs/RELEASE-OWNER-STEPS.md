@@ -140,29 +140,19 @@ Done:
 - [x] The iPhone app itself: built from the same code; what it can't do on iPhone is hidden or
       explained in the app (`docs/store/app-store.md` lists it).
 
-Your steps (after Claude says the first build is in TestFlight):
+Your steps (all done, 26 Nov):
 
-- [x] **TestFlight**: install the TestFlight app on the iPhone → App Store Connect → TestFlight →
-      Internal Testing → add yourself → open the invite on the iPhone → **Install**. First launch
-      downloads the AI model (about 3 GB, use Wi-Fi). Tell Claude what works and what doesn't.
-- [ ] **Screenshots**: on the iPhone, open screens with test data only and press side button + volume
-      up (3 to 10). Copy them to the PC (e.g. into Downloads), tell Claude the folder; Claude runs
-      `node scripts/iphone-screenshots.mjs <folder>` and gives you the files (1284 × 2778). Drag them
-      into **6.5" Display** under version 1.0.
+- [x] **TestFlight**: installed on your iPhone; works.
+- [x] **Screenshots**: 2 real ones, 1206 × 2622, in "iPhone with Dynamic Island (medium)" (other sizes
+      were rejected). No made-up screenshots (risk of rejection).
 - [x] **Version 1.0 texts, subtitle, categories, copyright, URLs**: Claude pushed them from
-      `store.config.json` (`eas metadata:push`, 26 Nov). Check them on the page.
-- [ ] **Build**: version 1.0 → **Add build** → pick the TestFlight build. **App Information**:
-      content rights **No**.
-- [ ] **Age Rating** (EAS can't set it yet; Apple added a "social media" question): answer None/No
-      to everything → override to **18+** (why: in the store doc).
-- [ ] **App Privacy**: privacy policy URL → "Do you collect data?" **No** → **Publish** (label
-      "Data Not Collected").
-- [ ] **App Review Information**: sign-in **No**, your name and phone, email `info@sashy.ai`, notes
-      from the store doc.
-- [ ] **Pricing and Availability**: Free; all countries **except China mainland**; untick Mac and
-      Vision Pro.
-- [ ] When the TestFlight build works on your iPhone: **Add for Review** → **Submit**. Review usually
-      takes a day or two; Apple may ask questions by email or in App Store Connect.
+      `store.config.json` (`eas metadata:push`).
+- [x] **Age Rating** (EAS can't set it; Apple added a "social media" question): set by you, 18+.
+- [x] **App Privacy** "Data Not Collected", **App Review Information**, **Pricing and Availability**:
+      set by you.
+- [x] **Build 4 attached, content rights "no third-party content", submitted for review**: Claude, with
+      `scripts/asc-submit.mjs`. State: Waiting for Review. Apple emails you the result; forward any
+      questions to Claude.
 
 ## 11. Later
 
