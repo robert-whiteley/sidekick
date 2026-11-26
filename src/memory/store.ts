@@ -7,7 +7,8 @@ import { dataDir } from '@/engine/paths';
 import { here, placeName } from '@/engine/places';
 import { consentModeNow } from '@/engine/region';
 import { getSettings } from '@/engine/settings';
-import { isAgreement, isConsentQuestion, CONSENT_WINDOW_MS, keepOtherSpeech } from './consent';
+import { guardWrite, mayGrowMemory } from '@/engine/storage-guard';
+import { isAgreement, isConsentQuestion, CONSENT_WINDOW_MS, lineFate } from './consent';
 import { EMBED_DIMS, getDb, vecParam } from './db';
 import { appendSeen, captureText } from './photo-text';
 import { OCR_FOUND, readPendingPhotoText, readTextOf } from './photo-ocr';
@@ -44,7 +45,8 @@ import {
   type Speaker,
 } from './voices';
 import { applyAutoName, assignLabel, collectPersonInfo, type KeptLine } from './people';
-import { CONVERSATION_GAP_MS, speakerLabel } from './people-logic';
+import { CONVERSATION_GAP_MS, nextLabelNo, type PersonRef, speakerLabel } from './people-logic';
+import { isUnsavedId, UnsavedVoices } from './unsaved-voices';
 import { liveTranscript } from '@/engine/live-transcript';
 import { noteFix } from '@/engine/location-track';
 import { momentIdsAtNamedPlace } from './places-store';
@@ -105,69 +107,189 @@ export async function syncOwnerVoice() {
   pushOwnerVoice(ownerCentroid(await speakers()));
 }
 
-async function speakers(): Promise<Speaker[]> {
+/** When the owner last asked for consent ("is it OK if I take notes?"). */
+let lastConsentAsk = 0;
+
+/** A voice to match against: stored (with whether it agreed to notes) or unsaved (in memory). */
+type Known = Speaker & { consented: boolean };
+
+/** When each stored voice was last heard in this app session (conversation context). */
+const lastHeard = new Map<number, number>();
+
+/** Voices that haven't agreed (consent mode): told apart for the conversation, never stored. */
+const unsaved = new UnsavedVoices();
+
+/** Stored voices only (the owner's voice, people pages). */
+async function speakers(): Promise<Known[]> {
   const db = await getDb();
-  const r = await db.execute('SELECT id, centroid, count, is_owner FROM speakers');
-  return r.rows.map((x) => ({
-    id: x.id as number,
-    centroid: JSON.parse(x.centroid as string),
-    count: x.count as number,
-    isOwner: x.is_owner === 1,
-  }));
+  const r = await db.execute('SELECT id, centroid, count, is_owner, consented_at FROM speakers');
+  const out: Known[] = [];
+  for (const x of r.rows) {
+    const centroid = JSON.parse(x.centroid as string) as number[];
+    if (!centroid.length) continue; // voiceprint removed (forgetUnagreedVoices)
+    const id = x.id as number;
+    out.push({
+      id,
+      centroid,
+      count: x.count as number,
+      isOwner: x.is_owner === 1,
+      consented: x.consented_at != null,
+      lastAt: lastHeard.get(id),
+    });
+  }
+  return out;
+}
+
+/** Stored voices and the unsaved ones of the conversation going on. */
+async function voicesNow(now: number): Promise<Known[]> {
+  return [...(await speakers()), ...unsaved.all(now).map((v) => ({ ...v, consented: false }))];
+}
+
+/** Unsaved voices for the live transcript (labels only; nothing stored). */
+export function unsavedPeople(now = Date.now()): PersonRef[] {
+  return unsaved.people(now);
+}
+
+/** The label number a new voice gets: past every stored and on-screen one. */
+async function newLabelNo(now: number): Promise<number> {
+  const db = await getDb();
+  const r = await db.execute('SELECT label_no FROM speakers WHERE is_owner = 0');
+  return nextLabelNo([
+    ...r.rows.map((x) => (x.label_no as number | null) ?? null),
+    ...unsaved.labels(now),
+  ]);
+}
+
+/** Stores a new voice; [labelNo] keeps the label it had on screen while unsaved. */
+async function storeVoice(
+  centroid: number[],
+  count: number,
+  isOwner: boolean,
+  consentedAt: number | null,
+  labelNo?: number,
+): Promise<Known> {
+  const db = await getDb();
+  const r = await db.execute(
+    'INSERT INTO speakers (is_owner, centroid, count, consented_at) VALUES (?, ?, ?, ?)',
+    [isOwner ? 1 : 0, JSON.stringify(centroid), count, consentedAt],
+  );
+  const id = r.insertId!;
+  if (isOwner) pushOwnerVoice(centroid);
+  else {
+    if (labelNo != null)
+      await db.execute(
+        'UPDATE speakers SET label_no = ? WHERE id = ? AND NOT EXISTS (SELECT 1 FROM speakers WHERE label_no = ? AND is_owner = 0)',
+        [labelNo, id, labelNo],
+      );
+    // Every new voice is "Person N" right away, stable for that voice.
+    await assignLabel(id);
+  }
+  return { id, centroid, count, isOwner, consented: consentedAt != null };
 }
 
 /**
- * Finds (and learns) who is speaking. Owner clips teach the owner's voice. Also says whether the
- * line counts as the owner's: a wake-word clip that doesn't sound like the owner does not.
+ * Who said a line, and whether it is kept. A voice is written to the database only with a line of
+ * theirs that is kept: in consent mode, voices that haven't agreed stay in memory (unsaved) for
+ * the conversation, so lines are still told apart on screen, and their voiceprint is never stored.
+ * Owner clips teach the owner's voice; a wake-word clip that doesn't sound like the owner doesn't
+ * count as theirs. [trusted]: push-to-talk, certainly the owner.
  */
-async function assignSpeaker(
+async function hearVoice(
   voice: number[] | null,
-  owner: boolean,
-  durationMs?: number,
-  /** Push-to-talk: certainly the owner. */
-  trusted = false,
-): Promise<{ speaker: Speaker | null; owner: boolean }> {
-  if (!voice) return { speaker: null, owner };
+  claimsOwner: boolean,
+  durationMs: number | undefined,
+  at: number,
+  opts: { trusted?: boolean; consentMode: boolean; text?: string },
+): Promise<{ speaker: Known | null; owner: boolean; kept: boolean }> {
+  const fate = (isOwner: boolean, s: { consented: boolean } | null) =>
+    lineFate({
+      consentMode: opts.consentMode,
+      isOwner,
+      hasVoice: !!s,
+      consented: s?.consented ?? false,
+      agrees: !!opts.text && at - lastConsentAsk < CONSENT_WINDOW_MS && isAgreement(opts.text),
+    });
+  if (!voice) {
+    const f = fate(claimsOwner, null);
+    return { speaker: null, owner: claimsOwner, kept: f.keep };
+  }
   const db = await getDb();
-  const all = await speakers();
+  const all = await voicesNow(at);
   console.log(
     // The closest few only: one entry per voice ever heard made this line grow without end.
-    `[voice] ${owner ? 'owner clip' : 'clip'} sims (of ${all.length}): ${all
+    `[voice] ${claimsOwner ? 'owner clip' : 'clip'} sims (of ${all.length}): ${all
       .map((x) => ({ x, sim: cosine(voice, x.centroid) }))
       .sort((p, q) => q.sim - p.sim)
       .slice(0, 5)
       .map(({ x, sim }) => `${x.id}${x.isOwner ? '*' : ''}=${sim.toFixed(2)}`)
       .join(' ')}`,
   );
-  const choice = chooseSpeaker(voice, owner, durationMs, trusted, all);
+  const choice = chooseSpeaker(voice, claimsOwner, durationMs, !!opts.trusted, all, undefined, at);
+
   if (choice.kind === 'none') {
-    if (choice.owner) return { speaker: null, owner: true };
-    return { speaker: await newVoiceFromShortClips(voice, durationMs, all), owner: false };
-  }
-  if (choice.kind === 'join') {
-    const s = choice.speaker;
-    if (!choice.learn) return { speaker: s, owner: false };
-    const c = addToCentroid(s, voice);
-    await db.execute('UPDATE speakers SET centroid = ?, count = count + 1 WHERE id = ?', [
-      JSON.stringify(c),
-      s.id,
-    ]);
-    if (s.isOwner) pushOwnerVoice(c);
-    return { speaker: s, owner: s.isOwner };
-  }
-  owner = choice.owner;
-  const r = await db.execute('INSERT INTO speakers (is_owner, centroid) VALUES (?, ?)', [
-    owner ? 1 : 0,
-    JSON.stringify(voice),
-  ]);
-  const s: Speaker = { id: r.insertId!, centroid: voice, count: 1, isOwner: owner };
-  if (owner) pushOwnerVoice(voice);
-  // Every new voice is "Person N" right away, stable for that voice.
-  if (!owner) {
-    await assignLabel(s.id);
+    if (choice.owner) return { speaker: null, owner: true, kept: true };
+    // Short unmatched clips that sound alike may add up to a new person.
+    const found = voiceFromPending(voice, durationMs, pendingClips, all, at);
+    if (!found) return { speaker: null, owner: false, kept: fate(false, null).keep };
+    const f = fate(false, { consented: false });
+    const count = found.group.length + 1;
+    const s: Known = f.keep
+      ? await storeVoice(found.centroid, count, false, f.consentNow ? at : null)
+      : { ...unsaved.add(found.centroid, count, await newLabelNo(at), at), consented: false };
+    if (s.id > 0) lastHeard.set(s.id, at);
+    pendingClips = pendingClips.filter((p) => !found.group.includes(p));
+    await giveClips(found.group, s);
+    console.log(`[voice] ${count} short lines together are a new voice ${s.id}`);
     await claimWaitingClips(s, [...all, s]);
+    return { speaker: s, owner: false, kept: f.keep };
   }
-  return { speaker: s, owner };
+
+  if (choice.kind === 'join') {
+    const s = choice.speaker as Known;
+    const f = fate(s.isOwner, s);
+    if (isUnsavedId(s.id)) {
+      if (!f.keep) {
+        unsaved.heard(s.id, at, choice.learn ? voice : undefined);
+        return { speaker: s, owner: false, kept: false };
+      }
+      // It agreed (or consent mode went off): stored from now on, under the label it had.
+      const u = unsaved.take(s.id)!;
+      const c = choice.learn ? addToCentroid(u, voice) : u.centroid;
+      const saved = await storeVoice(
+        c,
+        u.count + (choice.learn ? 1 : 0),
+        false,
+        f.consentNow ? at : null,
+        u.labelNo,
+      );
+      lastHeard.set(saved.id, at);
+      liveTranscript.respeak(u.id, saved.id);
+      return { speaker: saved, owner: false, kept: true };
+    }
+    lastHeard.set(s.id, at);
+    if (f.consentNow) {
+      await db.execute('UPDATE speakers SET consented_at = ? WHERE id = ?', [at, s.id]);
+      s.consented = true;
+    }
+    // Nothing of a line that isn't kept is learned into a stored voiceprint.
+    if (choice.learn && f.keep) {
+      const c = addToCentroid(s, voice);
+      await db.execute('UPDATE speakers SET centroid = ?, count = count + 1 WHERE id = ?', [
+        JSON.stringify(c),
+        s.id,
+      ]);
+      if (s.isOwner) pushOwnerVoice(c);
+    }
+    return { speaker: s, owner: s.isOwner, kept: f.keep };
+  }
+
+  const f = fate(choice.owner, { consented: false });
+  const s: Known = f.keep
+    ? await storeVoice(voice, 1, choice.owner, f.consentNow ? at : null)
+    : { ...unsaved.add(voice, 1, await newLabelNo(at), at), consented: false };
+  if (s.id > 0) lastHeard.set(s.id, at);
+  if (!choice.owner) await claimWaitingClips(s, [...all, s]);
+  return { speaker: s, owner: choice.owner, kept: f.keep };
 }
 
 /** Short clips nobody matched yet (in memory only), re-checked when a new voice appears. */
@@ -179,66 +301,52 @@ function addPendingClip(c: PendingClip) {
   pendingClips.push(c);
 }
 
-/** Relabels earlier "Someone" lines that clearly belong to a voice that just became known. */
-async function claimWaitingClips(joined: Speaker, all: Speaker[]) {
-  const { claimed, waiting } = claimPending(pendingClips, joined, all, Date.now());
-  pendingClips = waiting;
-  if (!claimed.length) return;
+/** Earlier "Someone" lines become [s]'s: on screen, and in memory when both are stored. */
+async function giveClips(clips: PendingClip[], s: Speaker) {
   const db = await getDb();
-  for (const c of claimed) {
-    if (c.momentId != null)
-      await db.execute('UPDATE moments SET speaker_id = ? WHERE id = ? AND speaker_id IS NULL', [
-        joined.id,
-        c.momentId,
-      ]);
-    liveTranscript.relabel(c.at, joined.id);
-  }
-  console.log(`[voice] ${claimed.length} earlier short line(s) now voice ${joined.id}`);
-}
-
-/**
- * A short unmatched clip that sounds like waiting ones: together they start a new person, and the
- * earlier "Someone" lines become theirs. Null when they don't add up yet.
- */
-async function newVoiceFromShortClips(
-  voice: number[],
-  durationMs: number | undefined,
-  all: Speaker[],
-): Promise<Speaker | null> {
-  const found = voiceFromPending(voice, durationMs, pendingClips, all, Date.now());
-  if (!found) return null;
-  const db = await getDb();
-  const r = await db.execute('INSERT INTO speakers (is_owner, centroid, count) VALUES (0, ?, ?)', [
-    JSON.stringify(found.centroid),
-    found.group.length + 1,
-  ]);
-  const s: Speaker = {
-    id: r.insertId!,
-    centroid: found.centroid,
-    count: found.group.length + 1,
-    isOwner: false,
-  };
-  await assignLabel(s.id);
-  pendingClips = pendingClips.filter((p) => !found.group.includes(p));
-  for (const c of found.group) {
-    if (c.momentId != null)
+  for (const c of clips) {
+    if (c.momentId != null && !isUnsavedId(s.id))
       await db.execute('UPDATE moments SET speaker_id = ? WHERE id = ? AND speaker_id IS NULL', [
         s.id,
         c.momentId,
       ]);
     liveTranscript.relabel(c.at, s.id);
   }
-  console.log(`[voice] ${found.group.length + 1} short lines together are a new voice ${s.id}`);
-  await claimWaitingClips(s, [...all, s]);
-  return s;
+}
+
+/** Relabels earlier "Someone" lines that clearly belong to a voice that just became known. */
+async function claimWaitingClips(joined: Speaker, all: Speaker[]) {
+  const { claimed, waiting } = claimPending(pendingClips, joined, all, Date.now());
+  pendingClips = waiting;
+  if (!claimed.length) return;
+  await giveClips(claimed, joined);
+  console.log(`[voice] ${claimed.length} earlier short line(s) now voice ${joined.id}`);
+}
+
+/**
+ * Consent mode: voiceprints of people who never agreed and have no kept line are removed (older
+ * builds stored one for every voice heard). A person the user named or wrote notes about keeps
+ * their page, without the voiceprint; the rest are deleted. Returns how many were cleaned.
+ */
+export async function forgetUnagreedVoices(): Promise<number> {
+  if (!consentModeNow()) return 0;
+  const db = await getDb();
+  const orphan =
+    "is_owner = 0 AND consented_at IS NULL AND centroid <> '[]' AND NOT EXISTS (SELECT 1 FROM moments m WHERE m.speaker_id = speakers.id)";
+  const kept = "(name IS NOT NULL OR notes <> '')";
+  const del = await db.execute(`DELETE FROM speakers WHERE ${orphan} AND NOT ${kept}`);
+  const wiped = await db.execute(
+    `UPDATE speakers SET centroid = '[]', count = 0 WHERE ${orphan} AND ${kept}`,
+  );
+  const n = (del.rowsAffected ?? 0) + (wiped.rowsAffected ?? 0);
+  if (n) console.log(`[voice] removed ${n} stored voice(s) that never agreed to notes`);
+  return n;
 }
 
 /** A push-to-talk clip is always the owner: use it to learn their voice. */
 export async function learnOwnerVoice(voice: number[]) {
-  await assignSpeaker(voice, true, undefined, true);
+  await hearVoice(voice, true, undefined, Date.now(), { trusted: true, consentMode: false });
 }
-
-let lastConsentAsk = 0;
 
 let ingesting: Promise<number> | null = null;
 
@@ -259,6 +367,8 @@ export async function ingestJournal(): Promise<number> {
 const journalAcks = new AckPolicy();
 
 async function ingestJournalNow(): Promise<number> {
+  // Phone storage full: the lines stay in the journal (on the phone) until there is space.
+  if (!mayGrowMemory()) return 0;
   const batch = takeJournal(SidekickNative);
   const lines = batch.lines;
   if (!lines.length) return 0;
@@ -298,32 +408,26 @@ async function ingestJournalNow(): Promise<number> {
         added++;
         continue;
       }
-      const { speaker: s, owner: isOwner } = await assignSpeaker(e.voice, e.owner, e.durationMs);
+      const heard = await hearVoice(e.voice, e.owner, e.durationMs, e.at, {
+        consentMode,
+        text: e.text,
+      });
+      const s = heard.speaker;
+      const isOwner = heard.owner;
       if (isOwner && isConsentQuestion(e.text)) lastConsentAsk = e.at;
-      if (!isOwner) {
-        let consented = false;
-        if (s) {
-          const row = await db.execute('SELECT consented_at FROM speakers WHERE id = ?', [s.id]);
-          consented = row.rows[0]?.consented_at != null;
-          if (!consented && e.at - lastConsentAsk < CONSENT_WINDOW_MS && isAgreement(e.text)) {
-            await db.execute('UPDATE speakers SET consented_at = ? WHERE id = ?', [e.at, s.id]);
-            consented = true;
-          }
-        }
-        if (!keepOtherSpeech({ consentMode, speakerConsented: consented })) {
-          // Not kept: nor is their voice recording.
-          if (e.audioPath) SidekickNative.deleteFile(e.audioPath);
-          if (!s && e.voice)
-            addPendingClip({ at: e.at, voice: e.voice, momentId: null, durationMs: e.durationMs });
-          liveTranscript.put({
-            at: e.at,
-            text: e.text,
-            speakerId: s?.id ?? null,
-            isOwner,
-            saved: false,
-          });
-          continue;
-        }
+      if (!heard.kept) {
+        // Not kept: nor is their voice recording, nor their voiceprint (memory only).
+        if (e.audioPath) SidekickNative.deleteFile(e.audioPath);
+        if (!s && e.voice)
+          addPendingClip({ at: e.at, voice: e.voice, momentId: null, durationMs: e.durationMs });
+        liveTranscript.put({
+          at: e.at,
+          text: e.text,
+          speakerId: s?.id ?? null,
+          isOwner,
+          saved: false,
+        });
+        continue;
       }
       const ins = await db.execute(
         'INSERT INTO moments (kind, at, text, speaker_id, audio_path) VALUES (?, ?, ?, ?, ?)',
@@ -577,6 +681,8 @@ export async function suggestFacts(texts: string[]) {
 
 /** Saves a photo question: the original image is kept so detail questions can re-read it. */
 export async function rememberPhotoQuestion(tmpPhoto: string, question: string, answer: string) {
+  // Phone storage full: not remembered (the answer was still given).
+  if (!mayGrowMemory()) return;
   const db = await getDb();
   const at = Date.now();
   let photoPath: string | null = null;
@@ -616,6 +722,8 @@ export async function capturePhoto(
   note: string | null,
   at = Date.now(),
 ): Promise<number> {
+  // Throws StorageFullError (shown to the user) when the phone is out of space.
+  guardWrite('photo');
   const db = await getDb();
   const photoPath = `${dataDir()}/photos/${at}.jpg`;
   SidekickNative.copyFile(tmpPhoto, photoPath);
@@ -775,6 +883,8 @@ export async function embedPending(
   // One run at a time: overlapping runs picked the same rows and embedded each photo 2-3 times,
   // queueing on the embedder (slow questions, battery drain). Idle-time callers skip when a run
   // is going; a question's text-only catch-up waits for it (photo runs yield to questions).
+  // Phone storage full: vectors wait (search still works on what is stored).
+  if (!mayGrowMemory()) return 0;
   return (await embedOnce(opts.photos !== false, limit, opts)) ?? 0;
 }
 
@@ -1085,6 +1195,8 @@ export async function deleteEverything() {
   await deleteMoments('1 = 1', []);
   const db = await getDb();
   await db.execute('DELETE FROM speakers');
+  unsaved.clear();
+  lastHeard.clear();
   pushOwnerVoice(null);
   await db.execute('DELETE FROM facts');
   await db.execute('DELETE FROM followups');

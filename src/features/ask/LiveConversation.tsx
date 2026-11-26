@@ -6,14 +6,17 @@ import { type LiveLine, liveTranscript, ORPHAN_WAIT_MS } from '@/engine/live-tra
 import { configureListening } from '@/engine/listen';
 import { getSettings, onSettingsChange, updateSettings } from '@/engine/settings';
 import { labelFor, type PersonRef } from '@/memory/people-logic';
+import { isUnsavedId } from '@/memory/unsaved-voices';
 import { inferNamesIfIdle } from '@/engine/name-inference';
-import { ingestJournal, listSpeakers, nameSpeaker } from '@/memory/store';
+import { ingestJournal, listSpeakers, nameSpeaker, unsavedPeople } from '@/memory/store';
 import { AppText, makeStyles, radius, space, Tappable, TextButton, TextField, Toggle } from '@/ui';
 
 type People = Map<number, PersonRef & { nameAuto: boolean }>;
 
 async function loadPeople(): Promise<People> {
-  return new Map((await listSpeakers()).map((p) => [p.id, p]));
+  // Voices that haven't agreed (consent mode) are in memory only, with a label for this screen.
+  const unsaved = unsavedPeople().map((p) => ({ ...p, nameAuto: false }));
+  return new Map([...(await listSpeakers()), ...unsaved].map((p) => [p.id, p]));
 }
 
 /**
@@ -133,7 +136,8 @@ export function LiveConversation({ listening }: { listening: boolean }) {
           {lines.map((l) => {
             const p = l.speakerId != null ? people.get(l.speakerId) : undefined;
             const label = l.isOwner ? 'You' : labelFor(l.speakerId, people);
-            const canRename = !l.isOwner && p && !p.isOwner;
+            // An unsaved voice (no consent yet) has nothing stored to rename.
+            const canRename = !l.isOwner && p && !p.isOwner && !isUnsavedId(p.id);
             return (
               <View key={l.at} style={local.line}>
                 <Tappable

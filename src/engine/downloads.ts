@@ -7,6 +7,8 @@ import { batteryState } from './battery';
 import { formatProgress, type ModelFile } from './models';
 import { modelsDir } from './paths';
 import { getSettings } from './settings';
+import { spaceNeeded } from './storage';
+import { currentSpace, guardDownload, spaceMessage, StorageFullError } from './storage-guard';
 
 /** Wi-Fi (or cable) vs mobile data, online at all, and charging. Safe defaults on error. */
 export async function connection(): Promise<{ wifi: boolean; online: boolean; charging: boolean }> {
@@ -66,6 +68,9 @@ export async function downloadFile(
   cancelled: () => boolean = () => false,
 ): Promise<void> {
   if (isDownloaded(f)) return;
+  // Never takes the phone under its free-space reserve (what is already fetched counts).
+  const part = Platform.OS === 'android' ? SidekickNative.downloadPartBytes(modelPath(f)) : 0;
+  guardDownload(Math.max(0, spaceNeeded([f]) - part));
   if (Platform.OS === 'ios') return downloadFileIos(f, onProgress, wifiOnly, cancelled);
   const dest = modelPath(f);
   const id = SidekickNative.downloadStart(f.url, dest, `Sidekick: ${f.name}`, wifiOnly);
@@ -75,6 +80,11 @@ export async function downloadFile(
     if (cancelled()) {
       SidekickNative.downloadCancel(id);
       throw new DownloadCancelled();
+    }
+    if (currentSpace().level === 'full') {
+      // Something else filled the phone meanwhile: stop before it is completely full.
+      SidekickNative.downloadCancel(id);
+      throw new StorageFullError(spaceMessage('download', currentSpace().free, f.bytes));
     }
     const st = SidekickNative.downloadStatus(id);
     const total = st.total > 0 ? st.total : f.bytes;

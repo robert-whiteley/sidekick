@@ -51,6 +51,8 @@ class ListenService : Service() {
   override fun onCreate() {
     super.onCreate()
     instance = this
+    // Also with the app closed: low memory frees the chat model and embedder (reload on demand).
+    MemoryWatch.install(this)
     registerReceiver(
       screen,
       IntentFilter().apply {

@@ -326,7 +326,77 @@ an answer is written.
   on a charger that can't keep up: need the phone (a 2 h unplugged run is planned).
 - Not yet run on the phone: very long single inputs, killing the app mid-answer or mid-model-load,
   switching apps mid-answer, low memory with Live + Listen + questions, rotation with the camera on.
-- When space is short only video stops; keyframes and database writes go on.
-- No reaction to Android's low-memory signal: both models stay loaded until Android kills the app.
-- Voices that haven't consented: a voice centroid row is stored for them (`speakers`), which may go
-  against SPEC 4 ("not stored"). Flagged only.
+- ~~When space is short only video stops~~, ~~no reaction to Android's low-memory signal~~ and
+  ~~a voiceprint stored for voices that haven't consented~~: fixed, see "Robustness fixes" below.
+
+### Robustness fixes (26 Nov 2026)
+
+Built and unit-tested (JS and Kotlin), voice bench re-run offline. **Not checked on the phone:** the
+shared-phone scripts (`scripts/phone-lock.sh`, `scripts/phone-input.sh`) are not on `main` yet, so
+the phone was not used.
+
+**Voices that haven't agreed were stored (SPEC 4).** In consent mode every new voice got a
+`speakers` row with its voiceprint before the consent check, even when none of its lines was kept.
+Now a voice is written only together with a kept line of theirs. Until then it lives in memory for
+the conversation (negative id, its own "Person N" on screen, learned in memory, forgotten after 10
+minutes unheard or when the app closes), so lines are still told apart live; when that voice says
+yes it is stored under the same label. Lines that aren't kept no longer teach a stored voiceprint.
+On start, in consent mode, stored voices that never agreed and have no kept line are removed (a
+person the user named or wrote notes about keeps the page, without the voiceprint). Tests:
+`robustness-fixes-test.ts` (consent rule, in-memory voices, transcript relabel).
+
+**One person's lines on two people.** Cause: a voice that has just started has a centroid from 1–3
+clips, so its own person's next lines score lower against it (often under the 0.55 same-voice
+line) than against an older, well-learned voice that sounds alike, or they start yet another
+voice. The match took the single highest score and ignored the conversation going on. That is the
+café finding (the waiter's lines going to a voice from an earlier test at 0.55–0.76) and the
+offline café split (the waiter as two voices, so the part with "Ready to order?" was not the one
+shown). Fix: a voice with at most 3 clips heard in the last 10 minutes is joined from 0.45 and
+wins over an older voice unless that one scores 0.1 more; never for the owner.
+
+Voice bench (same data as above, line-cut pipeline), before → after:
+
+| Condition | Right person | Across talks | "Someone" | People split | Again later | Shown right |
+| --------- | ------------ | ------------ | --------- | ------------ | ----------- | ----------- |
+| clean     | 93%          | 83% → 81%    | 1%        | 1 → 0        | 80% → 76%   | 52% → 54%   |
+| reverb    | 91%          | 82%          | 2%        | 0            | 80%         | 54%         |
+| babble 20 | 90%          | 83%          | 2%        | 0            | 80%         | 58%         |
+| babble 10 | 75% → 77%    | 65% → 68%    | 17% → 15% | 3            | 56% → 60%   | 36%         |
+| babble 5  | 54% → 58%    | 46% → 50%    | 39% → 35% | 9            | 48%         | 8%          |
+| pink 20   | 92% → 93%    | 84% → 85%    | 1%        | 1 → 0        | 80%         | 56%         |
+| pink 10   | 89% → 90%    | 84% → 86%    | 3%        | 5 → 2        | 84%         | 50%         |
+| pink 5    | 86% → 88%    | 85% → 86%    | 4% → 3%   | 7 → 3        | 88% → 84%   | 28% → 36%   |
+| pink 0    | 78% → 80%    | 72% → 74%    | 7% → 6%   | 15 → 12      | 64%         | 16% → 20%   |
+| street 20 | 93%          | 83%          | 1%        | 0            | 80%         | 58%         |
+| street 10 | 91% → 92%    | 83% → 85%    | 2%        | 3 → 0        | 84%         | 62%         |
+| street 5  | 90% → 91%    | 79% → 80%    | 1%        | 4 → 1        | 72% → 76%   | 40%         |
+| street 0  | 80% → 85%    | 75% → 77%    | 9% → 8%   | 14 → 9       | 60% → 64%   | 22%         |
+
+Averaged over the 13 conditions: right person 84.8% → 86.2%, across talks 77.2% → 78.5%, again
+later 73.5% → 73.8%, "Someone" 6.8% → 6.2%, people split 62 → 39, unnamed shown by role 80% → 84%;
+"You" found and "You" wrong unchanged. The one drop: in clean audio the café waiter is now one
+voice, and the footballer Femi (next scene, a similar TTS voice) then merges into it across
+scenes (across talks 83% → 81%, again later 80% → 76%); that is the known cross-conversation merge,
+not a split. Tried: 0.5 or 0.55 instead of 0.45 (fewer splits fixed), 0.4 (babble 5 again-later
+48% → 44%), any recent voice instead of young ones only (more cross-scene merges), margin 0–0.15
+(no difference). Rerun: `node bench/voice/score.mjs DATA [--no-recent] COND…` (`--no-recent` = before).
+
+**No reaction to low memory.** Android's memory signals now free the big models (`MemoryWatch.kt`,
+for the app and the listen service): running-moderate/low trim levels and the low-memory flag
+(checked every 30 s while both are loaded) unload the embedder; running-critical, the background
+levels and `onLowMemory` unload both, the chat model only while it isn't answering. OCR goes too,
+and JS drops its place-name pack. All reload on demand; a question that arrives just after an
+unload loads the model again and is asked once more. iPhone: a memory warning frees the embedder
+and the idle chat model. Tests: `RobustnessTest.kt` (levels, what is freed), `jsPlan`.
+
+**Only video stopped when space was short.** Now one rule on both sides
+(`storage-guard.ts`, `StorageGuard.kt`):
+
+| Free space                                  | Paused                                                                                      | Still saved                          |
+| ------------------------------------------- | ------------------------------------------------------------------------------------------- | ------------------------------------ |
+| Under the reserve (Settings → Storage)      | Video, full-size camera stills, conversation audio; downloads that would go under it        | Words heard, photos taken, keyframes |
+| Under 500 MB or 1% of the phone (≤ reserve) | Also photos ("Phone storage is full… free up space"), keyframes, downloads, vectors, memory | Heard lines wait in the journal file |
+
+Stopping at the floor, well before the disk is full, keeps room for the database's own writes, so
+it can't be left half-written; heard lines and camera frames wait on the phone and are saved once
+space is back. A notice says what is paused. Tests: `robustness-fixes-test.ts`, `StorageGuardTest`.

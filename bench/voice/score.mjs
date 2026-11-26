@@ -4,8 +4,9 @@
 // and name metrics per condition.
 //
 //   node bench/voice/score.mjs DATA_DIR [--rules '{"sameVoice":0.5}'] [--no-defer] [--no-group]
-//     [--group-sim 0.5] [--dump] [--json] COND...
-// --no-defer / --no-group: name cues settled at once / no new voices from short clips (as before).
+//     [--group-sim 0.5] [--no-recent] [--dump] [--json] COND...
+// --no-defer / --no-group / --no-recent: name cues settled at once / no new voices from short
+// clips / no conversation context in voice matching (as before).
 import { readFileSync } from 'node:fs';
 
 import {
@@ -33,6 +34,7 @@ while (args.length) {
   else if (a === '--dump') opts.dump = true;
   else if (a === '--no-defer') opts.noDefer = true;
   else if (a === '--no-group') opts.noGroup = true;
+  else if (a === '--no-recent') opts.noRecent = true;
   else if (a === '--group-sim') opts.groupSim = Number(args.shift());
   else conds.push(a);
 }
@@ -86,13 +88,16 @@ export function replay(rows, rules, opts = {}) {
     if (prevConv && row.conv !== prevConv) snap(prevConv);
     prevConv = row.conv;
     const at = convIndex.get(row.conv) * HOUR + Math.round(row.start * 1000);
-    const choice = chooseSpeaker(row.voice, row.owner, row.durationMs, false, speakers, rules);
+    // opts.noRecent: no conversation context (as before).
+    const now = opts.noRecent ? undefined : at;
+    const choice = chooseSpeaker(row.voice, row.owner, row.durationMs, false, speakers, rules, now);
     let s = null;
     let isOwner = choice.owner;
     const newSpeaker = (centroid, count) => {
       const x = { id: nextId++, centroid, count, isOwner: false, name: null, suggested: null };
       x.suggestedCount = 0;
       x.description = null;
+      x.lastAt = at;
       speakers.push(x);
       return x;
     };
@@ -126,6 +131,7 @@ export function replay(rows, rules, opts = {}) {
     }
     if (choice.kind === 'join') {
       s = choice.speaker;
+      s.lastAt = at;
       if (choice.learn) {
         s.centroid = addToCentroid(s, row.voice);
         s.count++;

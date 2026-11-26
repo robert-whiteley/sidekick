@@ -316,3 +316,19 @@ Left out on iPhone, with why (users see the reason in Phone features, Connection
   doesn't want hard-coded splits. Revisit if users ask.
 - Separate chats were left out for the same reason; the assistant should find the right context
   itself.
+
+## Robustness fixes (26 Nov; details in docs/BENCH.md)
+
+- Built: voices that haven't agreed (consent mode) are kept in memory for the conversation only,
+  never stored; old stored ones without a kept line are removed at start.
+- Rejected: deleting a person page the user named or wrote notes about when removing a voiceprint
+  that never agreed; the page stays, without the voiceprint (what the user wrote is theirs).
+- Built: conversation context in voice matching (a young voice heard in the last 10 min joins from
+  0.45). Rejected: 0.4 (babble 5 again-later 48% → 44%), 0.5/0.55 (fewer splits fixed), applying it
+  to every recent voice (more cross-scene merges). Left: in clean audio one more cross-scene merge
+  (Femi joins the café waiter), the known similar-voices weakness.
+- Built: Android memory signals free the embedder (low) or both models (critical; the chat model
+  only when idle). Left: the Pocket voice model (once used it stays loaded; freeing it while a
+  sentence is being made on its thread could crash, so it needs its own idle hook first).
+- Built: two free-space levels. Rejected: refusing photos the user takes as soon as space is under
+  the reserve (they would be refused with gigabytes free); only under the 500 MB / 1% floor.

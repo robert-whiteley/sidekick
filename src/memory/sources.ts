@@ -6,6 +6,7 @@ import { modelPath } from '@/engine/downloads';
 import { OCR_FILES } from '@/engine/models';
 import { ocrReady } from '@/engine/photo-ocr';
 import { getSettings, updateSettings } from '@/engine/settings';
+import { mayGrowMemory } from '@/engine/storage-guard';
 import { readPdfPages } from './pdf-read';
 import { getDb } from './db';
 import {
@@ -471,6 +472,8 @@ export async function ingestNotifications(): Promise<number> {
 
 /** Re-reads whichever enabled sources are due. Cheap when nothing is due; call when idle. */
 export async function syncSourcesIfDue(now = Date.now()): Promise<number> {
+  // Phone storage full: imports wait (they are re-scanned once there is space).
+  if (!mayGrowMemory()) return 0;
   const s = getSettings();
   let n = 0;
   const run = async (on: boolean, source: SyncedSource, fn: () => Promise<number>) => {

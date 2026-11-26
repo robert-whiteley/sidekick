@@ -162,7 +162,16 @@ export async function askLlm(
   background = false,
 ): Promise<{ text: string; stats: LlmStats }> {
   await ensureLlm();
-  return queue.run(background, () => generate(prompt, imagePath, onText, opts));
+  return queue.run(background, async () => {
+    try {
+      return await generate(prompt, imagePath, onText, opts);
+    } catch (e) {
+      // Freed for low memory between loading and asking (MemoryWatch): load again, ask once more.
+      if (!/not loaded/i.test(String(e)) || SidekickNative.llmIsLoaded()) throw e;
+      await ensureLlm();
+      return generate(prompt, imagePath, onText, opts);
+    }
+  });
 }
 
 /** A background pass (facts, follow-ups, photo descriptions): waits its turn, yields to questions. */

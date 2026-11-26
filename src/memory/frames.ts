@@ -4,6 +4,7 @@ import SidekickNative, { type FrameJournalEntry } from '../../modules/sidekick-n
 import { EMBED_DIMS, getDb, vecParam } from './db';
 import { placeForFrame } from '@/engine/place-logic';
 import { here } from '@/engine/places';
+import { mayGrowMemory } from '@/engine/storage-guard';
 import { keptFile } from './media-files';
 import { OCR_NO_TEXT, OCR_PENDING, readTextOf } from './photo-ocr';
 import type { Segment } from '@/features/media/media-logic';
@@ -71,6 +72,8 @@ export function ingestFrames(): Promise<number> {
 }
 
 async function ingestNow(): Promise<number> {
+  // Phone storage full: frames wait in the camera's folder until there is space.
+  if (!mayGrowMemory()) return 0;
   const frames = SidekickNative.cameraFramesDrain(null)
     .map(parseFrameLine)
     .filter((f) => !!f);

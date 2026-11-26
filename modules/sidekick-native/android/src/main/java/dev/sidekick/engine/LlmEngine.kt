@@ -366,6 +366,20 @@ class LlmEngine(private val cacheDir: String, private val nativeLibDir: String) 
     runCatching { scratch?.cancelProcess() }
   }
 
+  val isLoaded: Boolean
+    get() = engine != null
+
+  /**
+   * Unloads unless an answer is being written (memory pressure must not cut one off); the next
+   * question loads it again. True if it is not loaded afterwards.
+   */
+  @Synchronized
+  fun unloadIfIdle(): Boolean {
+    if ((running?.count ?: 0L) > 0L) return false
+    if (engine != null) unload()
+    return true
+  }
+
   @Synchronized
   fun unload() {
     stopRunning()
