@@ -1,14 +1,13 @@
 import gdelt from './fixtures/web/gdelt-artlist.json';
 import eventsMissing from './fixtures/web/wikipedia-current-events-missing.json';
 import events from './fixtures/web/wikipedia-current-events.json';
-import { cleanModelQuery, decideLookup, modelQueryPrompt, webContext } from '@/web/lookup-logic';
+import { cleanModelQuery, modelQueryPrompt, webContext } from '@/web/lookup-logic';
 import {
   currentEventsTitle,
   currentEventsUrl,
   feedSources,
   gdeltUrl,
   interleave,
-  isNewsQuestion,
   normaliseFeedUrl,
   parseCurrentEvents,
   parseFeed,
@@ -40,23 +39,6 @@ const rateLimited = fixture('gdelt-rate-limited.txt');
 const NOW = new Date('2026-11-23T22:00:00Z');
 
 describe('news questions', () => {
-  test.each([
-    ['What is the latest news on COP31?', true],
-    ['What happened in Ukraine today?', true],
-    ["What's happening with Nvidia?", true],
-    ['Any recent headlines about climate?', true],
-    ['Who is the president of France?', false],
-  ])('%s -> news %s', (q, want) => {
-    expect(isNewsQuestion(q)).toBe(want);
-  });
-
-  test('news questions are looked up; personal ones still are not', () => {
-    const ctx = { enabled: true, photo: false, knownNames: ['Sam'] };
-    expect(decideLookup('What happened today?', ctx)).toBe('lookup');
-    expect(decideLookup('What did I do today?', ctx)).toBe('none');
-    expect(decideLookup("What's the news on Sam?", ctx)).toBe('none');
-  });
-
   test('topic words drop news words and small words', () => {
     expect(topicWords('latest news on the climate summit')).toEqual(['climate', 'summit']);
     expect(topicWords('what happened today')).toEqual([]);
@@ -330,7 +312,6 @@ describe('Gemma writes the search words', () => {
       'Sam Smith latest album release date 2026 news today extra',
       'Smith latest album release date 2026 news today',
     ],
-    ['LOOKUP', null],
     ["Sorry, I can't help with that.", null],
     ['', null],
     ['Sam', null],
@@ -382,7 +363,6 @@ describe('Gemma writes the search words', () => {
     online: async () => true,
     search: jest.fn(async () => []),
     writeQuery: jest.fn(async () => 'COP31 climate talks outcome'),
-    undoLast: () => {},
     now: () => NOW,
     ...over,
   });
@@ -397,8 +377,11 @@ describe('Gemma writes the search words', () => {
       ask,
       () => {},
       d,
+      undefined,
+      undefined,
+      { force: true, news: true },
     );
-    expect(d.writeQuery).toHaveBeenCalledWith('What happened at COP31?', ['Sam']);
+    expect(d.writeQuery).toHaveBeenCalledWith('What happened at COP31?', ['Sam'], undefined);
     expect(d.search).toHaveBeenCalledWith('COP31 climate talks outcome', {
       searx: '',
       news: true,
@@ -417,62 +400,33 @@ describe('Gemma writes the search words', () => {
       ask,
       () => {},
       d,
+      undefined,
+      undefined,
+      { force: true },
     );
     expect(r.webQuery).toBe('president of France');
   });
 
-  test('off, offline or personal: Gemma is not asked', async () => {
-    for (const [d, q] of [
-      [deps({ enabled: () => false }), 'What happened at COP31?'],
-      [deps({ online: async () => false }), 'What happened at COP31?'],
-      [deps(), 'What did I do today?'],
+  test('off, offline or not asked for: Gemma is not asked', async () => {
+    for (const [d, force] of [
+      [deps({ enabled: () => false }), true],
+      [deps({ online: async () => false }), true],
+      [deps(), false],
     ] as const) {
       const r = await askWithLookup(
-        q,
+        'What happened at COP31?',
         false,
         (w) => w,
         ask,
         () => {},
         d,
+        undefined,
+        undefined,
+        { force, news: true },
       );
       expect(d.writeQuery).not.toHaveBeenCalled();
       expect(d.search).not.toHaveBeenCalled();
       expect(r.webQuery).toBeUndefined();
     }
-  });
-});
-
-describe('searchTopic', () => {
-  const { searchTopic } = jest.requireActual('@/web/lookup-logic');
-  it('keeps the earlier topic for a follow-up that leans on it', () => {
-    expect(
-      searchTopic(
-        'And when did that change happen?',
-        'Why did KiwiSaver change its default funds?',
-      ),
-    ).toBe('Why did KiwiSaver change its default funds; And when did that change happen?');
-  });
-  it('leaves a new, self-contained question alone', () => {
-    expect(searchTopic('How tall is the Shard?', 'Who won the 2022 world cup?')).toBe(
-      'How tall is the Shard?',
-    );
-    expect(searchTopic('when did that happen', undefined)).toBe('when did that happen');
-  });
-});
-
-describe('trailing LOOKUP', () => {
-  const { requestsLookup, withoutLookupTail } = jest.requireActual('@/web/lookup-logic');
-  it('counts a reason followed by LOOKUP as a lookup request', () => {
-    expect(
-      requestsLookup(
-        'I do not have information about why Kiwi Saver changed its default funds. LOOKUP',
-      ),
-    ).toBe(true);
-    expect(requestsLookup('You can look it up in the manual.')).toBe(false);
-  });
-  it('never shows a trailing or partial LOOKUP', () => {
-    expect(withoutLookupTail('I do not know. LOOK')).toBe('I do not know.');
-    expect(withoutLookupTail('I do not know. LOOKUP')).toBe('I do not know.');
-    expect(withoutLookupTail('Turn left.')).toBe('Turn left.');
   });
 });

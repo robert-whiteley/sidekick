@@ -18,7 +18,6 @@ import {
 } from './routines-logic';
 import { IPHONE } from './platform-text';
 import { getSettings, updateSettings } from './settings';
-import { parseIntent } from '@/integrations/parse';
 import type { KvStore } from '@/integrations/prefs';
 
 const KEY = 'routines.v1'; // gitleaks:allow (storage key name, not a secret)
@@ -228,8 +227,8 @@ export function migrateBriefing(now = Date.now()) {
 
 /**
  * "Every day at 6pm give me a recap of my day", "whenever Sam messages me, read it out":
- * saves the routine and returns the reply; null when [question] isn't a routine. One-off sends
- * ("at 6pm text Sam …") stay scheduled sends, not routines.
+ * saves the routine and returns the reply; null when [question] isn't a routine. The words are
+ * the routine tool's own (tools.ts), written from what the model read.
  */
 export function routineRequest(
   question: string,
@@ -238,7 +237,6 @@ export function routineRequest(
   const p = parseRoutine(question, now);
   if (!p) return null;
   if (!p.ok) return { text: p.reason };
-  if (p.when.type === 'once' && parseIntent(p.action, now)) return null;
   // iPhone: an app can't wake itself to run the model, so there are no routines (ADR 0006).
   if (Platform.OS === 'ios') return { text: IPHONE.routines };
   const r = addRoutine(question.trim(), p.when, p.action, now.getTime());

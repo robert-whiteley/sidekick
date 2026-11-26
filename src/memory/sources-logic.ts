@@ -320,25 +320,6 @@ export function notificationKey(e: NotificationEntry, text: string): string {
 
 export type ContactRow = { name: string; phones: { label: string | null; number: string }[] };
 
-const NUMBER_Q = [
-  /\bwhat(?:'s| is| are)\s+(.+?)(?:'s|s'|’s)\s+(?:(?:mobile|cell|home|work|phone)\s+)*(?:phone\s+)?numbers?\b/i,
-  /^(?:what(?:'s| is)\s+)?(?:the\s+)?(?:phone\s+)?number\s+(?:for|of)\s+(.+?)\s*\??$/i,
-  /\bhow (?:do|can) i (?:call|ring|reach|text)\s+(.+?)\s*\??$/i,
-];
-
-/** "what's Sam's number" → "Sam". Null when the question isn't asking for a phone number. */
-export function askedNumberOf(question: string): string | null {
-  const q = question.trim().replace(/[?.!]+$/, '');
-  for (const re of NUMBER_Q) {
-    const m = q.match(re);
-    if (m) {
-      const who = m[1].replace(/^(?:my|the)\s+/i, '').trim();
-      if (who && who.split(/\s+/).length <= 4) return who;
-    }
-  }
-  return null;
-}
-
 const norm = (s: string) =>
   s
     .toLowerCase()

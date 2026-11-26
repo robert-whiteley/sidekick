@@ -20,12 +20,6 @@ export type WebSource = {
   ref?: number;
 };
 
-/**
- * 'lookup': search before answering. 'ask-model': let Gemma say LOOKUP if it needs to.
- * 'none': answer offline.
- */
-export type LookupDecision = 'lookup' | 'ask-model' | 'none';
-
 export const LOOKUP_TIMEOUT_MS = 4000;
 /**
  * GDELT gets the normal limit: in Nov 2026 tests (UK) it took 9–11 s and then only replied 429
@@ -43,39 +37,7 @@ export const SOURCE_CHARS = 360;
 export const MAX_SOURCES = 3;
 const QUERY_CHARS = 120;
 
-const EXPLICIT =
-  /\b(look (it |this |that )?up|search (the )?(web|internet|online)|search for|google|wikipedia|online)\b/i;
-/** About the user, their memory or their day: the answer is on the phone, not the web. */
-const PERSONAL =
-  /\b(i|i'm|i've|i'd|me|my|mine|myself|we|us|our|ours|you|your|remember|remind|reminder|to-?dos?|yesterday|this morning|last night|tonight)\b/i;
-const NOT_WEB = /\b(time is it|timer|alarm|what day is it|today's date|battery|weather)\b/i;
-const CURRENT =
-  /\b(latest|current(ly)?|newest|recent(ly)?|news|headlines?|what('s| has| is)? happen(ed|ing)|today|this (year|month|week)|right now|nowadays|still alive|20[2-9]\d)\b/i;
-/** Encyclopedia-style questions: who/what/when/where about a named thing. */
-const ENCYCLOPEDIC =
-  /^(who (is|was|were|are|invented|founded|wrote|discovered|painted|won)|what (is|are|was|were) (a |an |the )?\w|when (is|was|were|did)|where (is|are|was) (the )?\w|which \w+ (is|was|has)|how (many|much|old|tall|big|far|long|deep|high|large) (is|are|was|were|did|does|do)|tell me about|define|what does \S+ mean)\b/i;
-
-/**
- * With online lookup off: does the answer need the web, so the "Search the web in your browser"
- * link is worth showing? Only for explicit search requests and news / latest / current questions
- * (the model's own knowledge is stale there); never for questions about the user's own life.
- */
-export function webLinkWanted(question: string): boolean {
-  const q = question.trim();
-  if (!q) return false;
-  if (EXPLICIT.test(q)) return true;
-  if (PERSONAL.test(q) || NOT_WEB.test(q)) return false;
-  return CURRENT.test(q);
-}
-
 const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-
-/** Known names in the question (whole words, any case). */
-export function mentionsName(question: string, names: string[]): boolean {
-  return names.some(
-    (n) => n.trim().length > 1 && new RegExp(`\\b${escapeRe(n.trim())}\\b`, 'i').test(question),
-  );
-}
 
 /** Takes known people's names (and their possessive) out of the text sent online. */
 export function stripNames(text: string, names: string[]): string {
@@ -84,27 +46,6 @@ export function stripNames(text: string, names: string[]): string {
     out = out.replace(new RegExp(`\\b${escapeRe(n)}('s|s')?(?!\\w)`, 'gi'), ' ');
   }
   return out.replace(/\s+/g, ' ').trim();
-}
-
-/**
- * Simple, predictable rules (tested in __tests__/web-lookup-test.ts):
- * - off, a photo, or an empty question: offline.
- * - "look it up", "search online", "on Wikipedia"…: look up.
- * - about you, your memory, your day, someone you know, the time or weather: offline.
- * - "latest", "current", "news", "today", "what happened", a recent year…: look up.
- * - who/what/when/where questions about a thing: look up.
- * - anything else: Gemma may answer LOOKUP to ask for one.
- */
-export function decideLookup(
-  question: string,
-  ctx: { enabled: boolean; photo: boolean; knownNames: string[] },
-): LookupDecision {
-  const q = question.trim();
-  if (!ctx.enabled || ctx.photo || !q) return 'none';
-  if (EXPLICIT.test(q)) return 'lookup';
-  if (PERSONAL.test(q) || NOT_WEB.test(q) || mentionsName(q, ctx.knownNames)) return 'none';
-  if (CURRENT.test(q) || ENCYCLOPEDIC.test(q)) return 'lookup';
-  return 'ask-model';
 }
 
 const LEAD =
@@ -278,56 +219,21 @@ export function webContext(sources: WebSource[], today: Date): string {
   );
 }
 
-/** Asked of Gemma when the rules can't tell; it answers just LOOKUP to get outside facts. */
-export const LOOKUP_HINT =
-  'If answering well needs facts from the internet that you do not know, reply with only the ' +
-  'word LOOKUP.\n';
-
 export const LOOKUP_FAILED_NOTE =
   'The online lookup found nothing; answer from what you know and say you could not check.\n';
-
-/** Gemma asked for a lookup (allowing for punctuation or a stray word after it). */
-export function requestsLookup(text: string): boolean {
-  const t = text.trim();
-  // Also "I don't know about X. LOOKUP": the small model sometimes says why first.
-  return (/^\W*lookup\b/i.test(t) && t.length <= 40) || /\bLOOKUP\W*$/.test(t);
-}
-
-/** The streamed text without a trailing (maybe still partial) "LOOKUP", so it is never shown or spoken. */
-export function withoutLookupTail(text: string): string {
-  return text.replace(/\s*\bL(?:O(?:O(?:K(?:U(?:P)?)?)?)?)?\W*$/, '');
-}
-
-/** While the streamed reply could still turn out to be "LOOKUP", it isn't shown or spoken. */
-export function mightBeLookup(text: string): boolean {
-  const t = text.trimStart().replace(/^\W+/, '').toUpperCase();
-  if (!t) return true;
-  return 'LOOKUP'.startsWith(t) || (t.startsWith('LOOKUP') && t.length <= 40);
-}
 
 /** Gemma writes the search words; a fresh, memory-free chat sees only this and the question. */
 export const MODEL_QUERY_BUDGET_MS = 1500;
 export const MODEL_QUERY_MAX_TOKENS = 24;
 const MODEL_QUERY_WORDS = 8;
 
-/** A follow-up that leans on the earlier question ("and when did that happen?"). */
-const DEPENDS =
-  /^(and|but|so|also|then|what about|how about)\b|\b(that|this|it|its|they|them|their|he|him|his|she|her|there|those|these)\b/i;
-
-/**
- * What the search words are made from: on a spoken follow-up that leans on the earlier question,
- * both questions (so "and when did that change happen?" still searches the earlier topic).
- */
-export function searchTopic(question: string, previous?: string): string {
+export function modelQueryPrompt(question: string, previous?: string): string {
   const p = previous?.trim();
-  if (!p || !DEPENDS.test(question.trim())) return question;
-  return `${p.replace(/[?.!]+$/, '')}; ${question.trim()}`;
-}
-
-export function modelQueryPrompt(question: string): string {
   return (
     'Write a short web search query (at most 8 words) for the question below. Reply with only ' +
-    `the query: no quotes, no explanation.\nQuestion: ${question.trim()}`
+    'the query: no quotes, no explanation.\n' +
+    (p ? `Earlier question (use it only if this one refers to it): ${p}\n` : '') +
+    `Question: ${question.trim()}`
   );
 }
 
@@ -341,7 +247,7 @@ export function cleanModelQuery(text: string, knownNames: string[]): string | nu
       .split('\n')
       .map((l) => l.trim())
       .find(Boolean) ?? '';
-  if (!line || requestsLookup(line) || /\b(sorry|i can(no|')t|as an ai)\b/i.test(line)) return null;
+  if (!line || /\b(sorry|i can(no|')t|as an ai)\b/i.test(line)) return null;
   const words = stripNames(
     line
       .replace(/^(search( query)?|query|keywords?)\s*:\s*/i, '')

@@ -1,32 +1,25 @@
 /**
- * The model-driven action layer (tools-logic.ts has the catalog). For a request the rules didn't
- * recognise, the model picks a tool and its arguments; the call is checked against the schema and
- * run through the same handlers the rules use (draft cards, read-back and countdowns unchanged).
- * Up to MAX_TOOL_STEPS calls chain when one result feeds the next ("text Sam when my dentist
- * is": search memory → message). Anything else falls back to the normal answer.
+ * The model-driven action layer (tools-logic.ts has the catalog). Once the model has chosen a
+ * tool (decide.ts), it fills that tool's arguments; the call is checked against the schema and
+ * run through the app's handlers (draft cards, read-back and countdowns). Words the model gives
+ * a handler (times, places) are read by code that computes, never to guess what was meant.
  */
 import { Linking } from 'react-native';
-import { planIntent } from './actions';
-import { feedbackIntent, parseFeedback, supportEmail } from './feedback';
+import { moveEventTo, planIntent, planTelephony, scheduleDraft } from './actions';
+import { feedbackIntent, supportEmail } from './feedback';
 import { askLlm } from './llm';
 import {
-  isCompound,
-  MAX_TOOL_STEPS,
   parseRangeReply,
-  parseToolReply,
+  fillPrompt,
+  parseFillReply,
   rangePrompt,
-  relevantTools,
   ROUTER_SYSTEM,
-  routerPrompt,
   toolByName,
-  type ToolCall,
-  type ToolSpec,
-  type ToolStep,
-  type Validated,
   validateCall,
   wantsModelRange,
 } from './tools-logic';
 import { runParsedCommand } from './quick-commands';
+import { editCall, type EditCall } from './photo-edit-logic';
 import { cameraChangeFor } from './camera-settings-logic';
 import { runExtra } from '@/integrations/extras';
 import type { Extra, RideApp, SearchApp } from '@/integrations/extras-logic';
@@ -35,9 +28,18 @@ import type { Control, PanelKind } from '@/integrations/phone-controls-logic';
 import type { MediaCommand } from '@/integrations/native';
 import type { Intent } from '@/integrations/parse';
 import { isOn } from '@/integrations/prefs';
+import { spanLabel, type RecapRequest } from '@/memory/recap-logic';
 import type { MessageApp, PlannedAction } from '@/integrations/types';
 import { parseWhen } from '@/memory/followup-logic';
-import { searchMemory } from '@/memory/store';
+import { saveFact } from '@/memory/store';
+import { contactDetails } from '@/memory/sources';
+import {
+  calculateTool,
+  convertTool,
+  dateTool,
+  timeInTool,
+  type DateArgs,
+} from '@/integrations/compute';
 import { parseTimeRangeRules, rememberRange, type TimeRange } from '@/memory/time-range';
 
 /** What the assistant does with a routed request. */
@@ -49,9 +51,15 @@ export type RouteOutcome =
   /** Run this canonical request through the rules (reminders, routines, location, weather). */
   | { kind: 'rules'; text: string }
   /** The normal answer path (memory search, recaps), with any time span already remembered. */
-  | { kind: 'answer' }
+  /** Answer normally; clipboard: with the copied text added (extras.ts). */
+  | { kind: 'answer'; clipboard?: boolean }
   /** Several web searches and a short report with sources (src/web/research.ts). */
-  | { kind: 'research'; topic: string };
+  | { kind: 'research'; topic: string; news?: boolean }
+  /** An edited copy of the photo sent with the request (photo-edit.ts). */
+  | { kind: 'edit_photo'; edit: EditCall }
+  /** Translate [text] (empty: the text in the photo) into [to]: the assistant runs the model. */
+  | { kind: 'translate'; text: string; to: string }
+  | { kind: 'recap'; req: RecapRequest };
 
 export type RouteContext = {
   routine?: boolean;
@@ -59,8 +67,6 @@ export type RouteContext = {
   now?: Date;
   /** The model call; replaceable in tests. */
   ask?: (prompt: string, system: string, maxTokens: number) => Promise<string>;
-  /** Runs a canonical request through the rules and returns its reply text (for chains). */
-  viaRules?: (text: string) => Promise<string | null>;
   log?: (line: string) => void;
 };
 
@@ -68,12 +74,10 @@ const defaultAsk = async (prompt: string, system: string, maxTokens: number) =>
   (await askLlm(prompt, null, () => {}, { system, maxTokens, scratch: true })).text;
 
 const str = (v: unknown) => (typeof v === 'string' ? v : '');
-
-/** Feedback by rule, no model: "send feedback: …", "tell the developers …", "report a bug …". */
-export async function feedbackRule(q: string): Promise<RouteOutcome | null> {
-  const text = parseFeedback(q);
-  return text ? runFeedback(text) : null;
-}
+const computed = (text: string | null, fail: string): RouteOutcome => ({
+  kind: 'reply',
+  text: text ?? fail,
+});
 
 async function runFeedback(text: string): Promise<RouteOutcome> {
   const intent = feedbackIntent(text);
@@ -98,12 +102,12 @@ async function runFeedback(text: string): Promise<RouteOutcome> {
 }
 
 /** One validated call → what to do. Info tools return their text for chaining. */
-async function runTool(
+export async function runTool(
   name: string,
   a: Record<string, unknown>,
   question: string,
   ctx: RouteContext,
-  now: Date,
+  now: Date = new Date(),
 ): Promise<RouteOutcome | null> {
   const intent = (i: Intent) =>
     planIntent(i, now).then((p): RouteOutcome | null => (p ? { kind: 'plan', plan: p } : null));
@@ -117,8 +121,7 @@ async function runTool(
     );
   const rules = (text: string): RouteOutcome => ({ kind: 'rules', text: text.trim() });
   switch (name) {
-    case 'memory_search':
-    case 'recap': {
+    case 'memory_search': {
       const from = a.from as number | undefined;
       const to = (a.to as number | undefined) ?? now.getTime();
       if (from !== undefined && from < to)
@@ -126,16 +129,67 @@ async function runTool(
       return { kind: 'answer' };
     }
     case 'research':
-      return { kind: 'research', topic: str(a.topic) || question };
+      return { kind: 'research', topic: str(a.topic) || question, news: a.news === true };
+    case 'edit_photo': {
+      const edit = editCall(a);
+      return edit ? { kind: 'edit_photo', edit } : null;
+    }
+    case 'recap': {
+      const from = a.from as number | undefined;
+      const to = (a.to as number | undefined) ?? now.getTime();
+      const topic = str(a.topic) || null;
+      const range =
+        from !== undefined && from < to
+          ? { from, to, label: spanLabel(from, to, now.getTime()) }
+          : null;
+      // A topic with no span: the latest stretch about it ("recap what we've been working on").
+      return { kind: 'recap', req: { range, topic, stretch: !range && !!topic } };
+    }
     case 'message':
-      return intent({
-        type: 'message',
-        name: str(a.to),
-        text: str(a.text),
-        app: (str(a.app) || 'auto') as MessageApp,
-      });
-    case 'email':
-      return intent({ type: 'email', name: str(a.to), subject: str(a.subject), body: str(a.body) });
+    case 'email': {
+      // "Text Sam at 6pm …": the draft waits in the outbox until then.
+      const at = str(a.at) ? parseWhen(str(a.at), now) : null;
+      if (str(a.at) && (!at || at.at <= now.getTime()))
+        return { kind: 'reply', text: 'When should it go? Say a time later today or after.' };
+      const i: Intent =
+        name === 'message'
+          ? {
+              type: 'message',
+              name: str(a.to),
+              text: str(a.text),
+              app: (str(a.app) || 'auto') as MessageApp,
+            }
+          : { type: 'email', name: str(a.to), subject: str(a.subject), body: str(a.body) };
+      const plan = await planIntent(i, now);
+      const p = at ? scheduleDraft(plan, at.at) : plan;
+      return p ? { kind: 'plan', plan: p } : null;
+    }
+    case 'clipboard':
+      return { kind: 'answer', clipboard: true };
+    case 'move_event': {
+      const p = await moveEventTo(str(a.event), str(a.to), now);
+      return p ? { kind: 'plan', plan: p } : null;
+    }
+    case 'texts':
+    case 'calls':
+    case 'call_back': {
+      const range = str(a.when) ? parseTimeRangeRules(str(a.when), now) : null;
+      const who = str(a.from) || null;
+      const p = await planTelephony(
+        name === 'texts'
+          ? { type: 'texts', name: who, last: a.last === true, unread: a.unread === true, range }
+          : name === 'calls'
+            ? { type: 'calls', name: who, missed: a.missed === true, range }
+            : { type: 'callBack' },
+        now,
+      );
+      return p
+        ? { kind: 'plan', plan: p }
+        : {
+            kind: 'reply',
+            text: 'Reading texts and calls needs Sidekick as the default assistant.',
+          };
+    }
     case 'call':
       return intent({ type: 'call', name: str(a.to) });
     case 'event': {
@@ -169,7 +223,17 @@ async function runTool(
         mode: (str(a.mode) || 'driving') as 'driving',
       });
     case 'media':
-      return intent({ type: 'media', cmd: str(a.command) as MediaCommand });
+      return intent(
+        a.command === 'what'
+          ? { type: 'nowPlaying' }
+          : { type: 'media', cmd: str(a.command) as MediaCommand },
+      );
+    case 'draft':
+      return intent(a.do === 'send' ? { type: 'sendIt' } : { type: 'cancelIt' });
+    case 'reply_message':
+      return intent({ type: 'reply', name: str(a.to) || null, text: str(a.text) });
+    case 'read_messages':
+      return intent({ type: 'readMessages', name: str(a.from) || null });
     case 'reminder':
       return rules(`remind me to ${str(a.what)} ${str(a.when)}`);
     case 'routine':
@@ -210,7 +274,7 @@ async function runTool(
         within: (str(a.within) || 'next') as 'next',
       });
     case 'find_phone':
-      return extra({ type: 'findPhone' });
+      return extra(a.stop === true ? { type: 'stopRing' } : { type: 'findPhone' });
     case 'missed':
       return intent({ type: 'missed' });
     case 'weather': {
@@ -245,8 +309,40 @@ async function runTool(
       return command({ type: 'cameraSetting', change: cameraChangeFor(a, question) });
     case 'feedback':
       return runFeedback(str(a.text));
-    case 'reply':
-      return { kind: 'reply', text: str(a.text) };
+    case 'calculate':
+      return computed(calculateTool(str(a.expression)), "I couldn't work that sum out.");
+    case 'convert':
+      return computed(
+        convertTool(a.amount as number, str(a.from), str(a.to)),
+        "I can't convert between those units.",
+      );
+    case 'date':
+      return computed(dateTool(a as DateArgs, now), "I couldn't work that date out.");
+    case 'time_in':
+      return computed(
+        timeInTool(str(a.place), now),
+        `I don't know the time zone of ${str(a.place)}.`,
+      );
+    case 'remember':
+      if (ctx.offRecord)
+        return {
+          kind: 'reply',
+          text: "You're off the record, so I won't keep that. Leave Off the record and say it again.",
+        };
+      await saveFact(str(a.fact).replace(/[.!]+$/, ''));
+      return { kind: 'reply', text: "Got it, I'll remember that." };
+    case 'translate':
+      return { kind: 'translate', text: str(a.text), to: str(a.to) };
+    case 'repeat':
+      return command({ type: 'repeat' });
+    case 'help':
+      return command({ type: 'help' });
+    case 'scan':
+      return command({ type: 'scan' });
+    case 'list_watches':
+      return command({ type: 'watchList' });
+    case 'contact_number':
+      return { kind: 'reply', text: await contactDetails(str(a.name)) };
     default:
       return null;
   }
@@ -301,89 +397,6 @@ export function locationPhrase(kind: string, place: string, when: string): strin
   }
 }
 
-/** Text of an outcome for a chain's next step. */
-async function resultText(o: RouteOutcome, ctx: RouteContext, question: string): Promise<string> {
-  switch (o.kind) {
-    case 'reply':
-      return o.text;
-    case 'plan':
-      return o.plan.kind === 'reply' ? o.plan.text : `${o.plan.draft.title} (card shown)`;
-    case 'rules':
-      return (await ctx.viaRules?.(o.text)) ?? '';
-    case 'research':
-      return '';
-    case 'answer': {
-      const hits = await searchMemory(question, 4).catch(() => []);
-      return hits.length
-        ? hits.map((m) => `${new Date(m.at).toLocaleString()}: ${m.text.slice(0, 160)}`).join(' | ')
-        : 'nothing found';
-    }
-  }
-}
-
-/**
- * Lets the model route [question] (rules already missed). Null when no tool fits, the model is
- * unsure, or a call fails validation: then the normal answer runs.
- */
-export async function routeWithTools(
-  question: string,
-  ctx: RouteContext = {},
-): Promise<RouteOutcome | null> {
-  const now = ctx.now ?? new Date();
-  const tools: ToolSpec[] = relevantTools(question, ctx);
-  if (!tools.length) return null;
-  const ask = ctx.ask ?? defaultAsk;
-  const log = ctx.log ?? ((l: string) => console.log(`[router] ${l}`));
-  const compound = isCompound(question);
-  const steps: ToolStep[] = [];
-  for (let step = 0; step < MAX_TOOL_STEPS; step++) {
-    const { call, v, ms } = await askRouter(question, now, tools, steps, ask);
-    log(`step ${step + 1}: ${call?.tool ?? 'unparsed'} (${ms} ms, ${tools.length} tools)`);
-    if (!call || call.tool === 'none' || !v) return step ? lastOutcome(steps) : null;
-    if (!v.ok) {
-      log(`rejected: ${v.error}`);
-      return step ? lastOutcome(steps) : null;
-    }
-    const outcome = await runTool(call.tool, v.args, question, ctx, now).catch((e) => {
-      log(`failed: ${String(e)}`);
-      return null;
-    });
-    if (!outcome) return step ? lastOutcome(steps) : null;
-    const spec = tools.find((x) => x.name === call.tool);
-    // Done unless an info result feeds a compound request's next step. Research is a whole
-    // answer of its own (minutes on a slow phone), never a step in a chain.
-    if (
-      !compound ||
-      call.tool === 'reply' ||
-      spec?.kind === 'action' ||
-      outcome.kind === 'research'
-    )
-      return outcome;
-    steps.push({ tool: call.tool, args: v.args, result: await resultText(outcome, ctx, question) });
-  }
-  return lastOutcome(steps);
-}
-
-/** One router step: the model's pick for [question], checked against the offered tools. */
-async function askRouter(
-  question: string,
-  now: Date,
-  tools: ToolSpec[],
-  steps: ToolStep[],
-  ask: NonNullable<RouteContext['ask']>,
-): Promise<{ call: ToolCall | null; v: Validated | null; ms: number }> {
-  const t0 = Date.now();
-  const reply = await ask(routerPrompt(question, now, tools, steps), ROUTER_SYSTEM, 140).catch(
-    () => '',
-  );
-  const call = parseToolReply(reply);
-  const v =
-    call && call.tool !== 'none'
-      ? validateCall(call, steps.length ? [...tools, toolByName('reply')!] : tools)
-      : null;
-  return { call, v, ms: Date.now() - t0 };
-}
-
 export type ToolPick = {
   offered: string[];
   tool: string | null;
@@ -393,33 +406,31 @@ export type ToolPick = {
 };
 
 /**
- * The router's first pick for [question] without running it (the dev answers bench): the tools
- * offered, the call and whether it passed the schema. Null when no tool would be offered.
+ * The arguments for the one tool the model chose (decide-logic.ts), checked against its schema.
+ * The model may still decline ({"none":true}) when, seeing the tool's details, it doesn't fit.
  */
-export async function pickToolOnly(
+export async function fillTool(
   question: string,
-  ctx: Pick<RouteContext, 'routine' | 'offRecord' | 'now' | 'ask'> = {},
+  tool: string,
+  ctx: Pick<RouteContext, 'now' | 'ask'> = {},
 ): Promise<ToolPick | null> {
-  const tools = relevantTools(question, ctx);
-  if (!tools.length) return null;
-  const { call, v, ms } = await askRouter(
-    question,
-    ctx.now ?? new Date(),
-    tools,
-    [],
-    ctx.ask ?? defaultAsk,
-  );
-  const offered = tools.map((t) => t.name);
-  if (!call) return { offered, tool: null, args: {}, error: 'unparsed', ms };
-  if (call.tool === 'none' || !v) return { offered, tool: 'none', args: {}, ms };
+  const spec = toolByName(tool);
+  if (!spec) return null;
+  const t0 = Date.now();
+  const ask = ctx.ask ?? defaultAsk;
+  const reply = await ask(
+    fillPrompt(question, ctx.now ?? new Date(), spec),
+    ROUTER_SYSTEM,
+    140,
+  ).catch(() => '');
+  const ms = Date.now() - t0;
+  const call = parseFillReply(reply, tool);
+  if (!call) return { offered: [tool], tool: null, args: {}, error: 'unparsed', ms };
+  if (call.tool === 'none') return { offered: [tool], tool: 'none', args: {}, ms };
+  const v = validateCall(call, [spec]);
   return v.ok
-    ? { offered, tool: call.tool, args: v.args, ms }
-    : { offered, tool: call.tool, args: call.args, error: v.error, ms };
-}
-
-function lastOutcome(steps: ToolStep[]): RouteOutcome | null {
-  const last = steps[steps.length - 1];
-  return last?.result ? { kind: 'reply', text: last.result } : null;
+    ? { offered: [tool], tool, args: v.args, ms }
+    : { offered: [tool], tool, args: call.args, error: v.error, ms };
 }
 
 /**

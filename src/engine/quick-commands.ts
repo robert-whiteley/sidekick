@@ -14,13 +14,7 @@ import { liveCameraOn, pauseLiveCamera, startLiveCamera, stopLiveCamera } from '
 import { locationMemoryOn } from './location-track';
 import { IPHONE, platformText } from './platform-text';
 import { getSettings, updateSettings } from './settings';
-import {
-  helpText,
-  nextRate,
-  parseVoiceCommand,
-  rateReply,
-  type VoiceCommand,
-} from './quick-commands-logic';
+import { helpText, nextRate, rateReply, type VoiceCommand } from './quick-commands-logic';
 import { latestFramePaths } from '@/memory/frames';
 import { isOn } from '@/integrations/prefs';
 
@@ -55,19 +49,6 @@ export function applySpeechRate() {
   } catch {
     // Older native module: normal speed.
   }
-}
-
-/**
- * The reply for a command in [question], or null when it isn't one. [photoNow]: the photo taken
- * with the question (used by "scan this").
- */
-export async function runQuickCommand(
-  question: string,
-  photoNow: string | null,
-): Promise<string | null> {
-  const cmd = parseVoiceCommand(question);
-  if (!cmd) return null;
-  return execute(cmd, question, photoNow);
 }
 
 /** Runs an already-parsed command (the tool router picks these too). */

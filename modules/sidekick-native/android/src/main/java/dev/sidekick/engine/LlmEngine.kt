@@ -15,6 +15,7 @@ import com.google.ai.edge.litertlm.Message
 import com.google.ai.edge.litertlm.MessageCallback
 import com.google.ai.edge.litertlm.SpeculativeDecodingConfig
 import com.google.ai.edge.litertlm.SpeculativeDecodingMode
+import com.google.ai.edge.litertlm.ThinkingConfig
 import java.io.File
 
 /** One candidate way to run the model: a model file plus the hardware to run it on. */
@@ -35,6 +36,18 @@ data class GenerateOptions(
   val scratch: Boolean = false,
   val undoable: Boolean = false,
   val offRecord: Boolean = false,
+  /**
+   * Gemma's thinking mode for this turn: null leaves the library default (off for Gemma 4), 0 turns
+   * it off, -1 turns it on with no limit, a positive number turns it on with that many thinking
+   * tokens at most. Thoughts never
+   * reach [onText] or the chat history (see [LlmEngine.load]).
+   */
+  val thinkingBudget: Int? = null,
+  /**
+   * With [scratch]: keep [system] read in for next time (one of the kept bases, see
+   * [LlmEngine.bases]), for short side passes asked every question, like the request sorter.
+   */
+  val cacheSystem: Boolean = false,
 )
 
 /**
@@ -65,6 +78,10 @@ data class LlmStats(
   val decodeTokens: Int,
   val decodeTokensPerSec: Double,
   val totalMs: Long,
+  /** From the request to the first answer text (thoughts excluded), ms; 0 if none. */
+  val firstTextMs: Long = 0,
+  /** Characters of thinking the model wrote before answering (0 with thinking off). */
+  val thoughtChars: Int = 0,
 )
 
 /**
@@ -84,8 +101,9 @@ class LlmEngine(private val cacheDir: String, private val nativeLibDir: String) 
   /** The chat as it was before the last undoable turn (see [undoLast]); dropped at the next chat turn. */
   @Volatile private var before: Conversation? = null
   /** A conversation with only the system prompt read in; fresh questions start from a clone of it. */
-  private var base: Conversation? = null
-  private var baseSystem: String? = null
+  // Up to [MAX_BASES] system prompts stay read in (the chat's, and the request sorter's in
+  // decide-logic.ts), most recently used kept, so switching between them re-reads neither.
+  private val bases = LinkedHashMap<String, Conversation>(4, 0.75f, true)
   @Volatile var tuning = LlmTuning()
   var loaded: LlmLoadResult? = null
     private set
@@ -94,6 +112,8 @@ class LlmEngine(private val cacheDir: String, private val nativeLibDir: String) 
   fun load(candidates: List<LlmCandidate>): LlmLoadResult {
     unload()
     ExperimentalFlags.enableBenchmark = true
+    // Thinking (when a turn asks for it) stays out of the chat's memory: only the answer is kept.
+    ExperimentalFlags.filterChannelContentFromKvCache = true
     val failures = mutableListOf<String>()
     for (c in candidates) {
       if (!File(c.modelPath).canRead()) {
@@ -160,7 +180,7 @@ class LlmEngine(private val cacheDir: String, private val nativeLibDir: String) 
     val conv =
       try {
         if (opts.scratch) {
-          freshConversation(e, opts.system, keepBase = false).also { scratch = it }
+          freshConversation(e, opts.system, keepBase = opts.cacheSystem).also { scratch = it }
         } else if (opts.offRecord) {
           (
             offRecord?.takeIf { opts.keepHistory }
@@ -190,20 +210,27 @@ class LlmEngine(private val cacheDir: String, private val nativeLibDir: String) 
       add(Content.Text(prompt))
     }
     val start = System.nanoTime()
+    var firstTextMs = 0L
+    var thoughtChars = 0
     try {
       conv.sendMessageAsync(
         Message.of(parts),
         object : MessageCallback {
           override fun onMessage(message: Message) {
+            message.channels["thought"]?.let { thoughtChars += it.length }
             val text = message.toString()
-            if (text.isNotEmpty()) onText(text)
+            if (text.isNotEmpty()) {
+              if (firstTextMs == 0L) firstTextMs = (System.nanoTime() - start) / 1_000_000
+              onText(text)
+            }
           }
 
           override fun onDone() {
             val b = runCatching { conv.getBenchmarkInfo() }.getOrNull()
             // Free the next generate only after the callbacks have run (it may close [conv]).
             try {
-              if (b == null) return onFinish(LlmStats(0.0, 0, 0.0, 0, 0.0, (System.nanoTime() - start) / 1_000_000))
+              val totalMs = (System.nanoTime() - start) / 1_000_000
+              if (b == null) return onFinish(LlmStats(0.0, 0, 0.0, 0, 0.0, totalMs, firstTextMs, thoughtChars))
               onFinish(
                 LlmStats(
                   ttftMs = b.timeToFirstTokenInSecond * 1000,
@@ -211,7 +238,9 @@ class LlmEngine(private val cacheDir: String, private val nativeLibDir: String) 
                   prefillTokensPerSec = b.lastPrefillTokensPerSecond,
                   decodeTokens = b.lastDecodeTokenCount,
                   decodeTokensPerSec = b.lastDecodeTokensPerSecond,
-                  totalMs = (System.nanoTime() - start) / 1_000_000,
+                  totalMs = totalMs,
+                  firstTextMs = firstTextMs,
+                  thoughtChars = thoughtChars,
                 )
               )
             } finally {
@@ -228,6 +257,7 @@ class LlmEngine(private val cacheDir: String, private val nativeLibDir: String) 
           }
         },
         maxOutputToken = opts.maxTokens,
+        thinkingConfig = opts.thinkingBudget?.let { ThinkingConfig(enableThinking = it != 0, thinkingTokenBudget = if (it == 0) 0 else it) },
       )
     } catch (t: Throwable) {
       finish()
@@ -280,7 +310,7 @@ class LlmEngine(private val cacheDir: String, private val nativeLibDir: String) 
    */
   private fun freshConversation(e: Engine, system: String?, keepBase: Boolean = true): Conversation {
     try {
-      if (keepBase || (baseSystem == system && base?.isAlive == true)) return baseFor(e, system).clone()
+      if (keepBase || bases[system.orEmpty()]?.isAlive == true) return baseFor(e, system).clone()
       ExperimentalFlags.visualTokenBudget = tuning.visualTokenBudget
       return e.createConversation(conversationConfig(system, prefill = false))
     } catch (t: Throwable) {
@@ -291,14 +321,14 @@ class LlmEngine(private val cacheDir: String, private val nativeLibDir: String) 
 
   @Synchronized
   private fun baseFor(e: Engine, system: String?): Conversation {
-    base?.takeIf { baseSystem == system && it.isAlive }?.let { return it }
-    base?.close()
-    base = null
-    ExperimentalFlags.visualTokenBudget = tuning.visualTokenBudget
-    return e.createConversation(conversationConfig(system, prefill = true)).also {
-      base = it
-      baseSystem = system
+    val key = system.orEmpty()
+    bases[key]?.let { if (it.isAlive) return it else bases.remove(key)?.close() }
+    while (bases.size >= MAX_BASES) {
+      val oldest = bases.keys.first()
+      runCatching { bases.remove(oldest)?.close() }
     }
+    ExperimentalFlags.visualTokenBudget = tuning.visualTokenBudget
+    return e.createConversation(conversationConfig(system, prefill = true)).also { bases[key] = it }
   }
 
   private fun conversationConfig(system: String?, prefill: Boolean) =
@@ -310,9 +340,8 @@ class LlmEngine(private val cacheDir: String, private val nativeLibDir: String) 
   /** Drops the prefilled base so the next question rebuilds it with the current [tuning]. */
   @Synchronized
   fun resetBase() {
-    base?.close()
-    base = null
-    baseSystem = null
+    bases.values.forEach { runCatching { it.close() } }
+    bases.clear()
   }
 
   private fun speculativeConfig(): SpeculativeDecodingConfig? =
@@ -407,6 +436,8 @@ class LlmEngine(private val cacheDir: String, private val nativeLibDir: String) 
 
   companion object {
     private const val TAG = "SidekickLlm"
+    /** System prompts kept read in at once (see [bases]): two keeps RAM use small on 4 GB phones. */
+    private const val MAX_BASES = 2
   }
 }
 

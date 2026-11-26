@@ -1,17 +1,15 @@
 /**
- * The tool catalog: every capability Sidekick has, described once with a small argument schema,
- * so the model can pick one (with arguments) for requests the fast rules don't recognise. The
- * rules still run first (instant on a Pixel 5); this is the fallback that makes any phrasing work.
+ * The tool catalog: every capability Sidekick has, described once with a small argument schema.
+ * The model picks one for a request in any wording (decide.ts), fills its arguments, and they are
+ * checked here before tools.ts runs it. No word lists choose a tool.
  *
- * Pure (prompt, parsing, validation, relevance); the handlers live in tools.ts. Tested in
+ * Pure (prompts, parsing, validation); the handlers live in tools.ts. Tested in
  * __tests__/tools-router-test.ts.
  *
  * Format: strict JSON in a throwaway chat, not LiteRT-LM's native tool calling. The native API
  * runs Kotlin-annotated tools inside the engine; ours are JS handlers behind draft cards and
- * read-back, and the same prompt works on every backend and for the iPhone later.
+ * read-back, and the same prompt works on every backend and on the iPhone.
  */
-
-import { RESEARCH_WORDS } from '@/web/research-logic';
 
 export type ArgType = 'string' | 'number' | 'boolean' | 'datetime';
 
@@ -37,11 +35,6 @@ export type ToolSpec = {
   desc: string;
   kind: ToolKind;
   args: Record<string, ArgSpec>;
-  /**
-   * Words that make this tool worth offering for a request. Only narrows the list in the prompt
-   * (each tool line costs prompt reading time on a slow phone); the model still decides.
-   */
-  words: RegExp;
 };
 
 const s = (desc?: string, required = false): ArgSpec => ({ type: 'string', desc, required });
@@ -61,7 +54,29 @@ const num = (min: number, max: number, required = false, desc?: string): ArgSpec
 });
 const when = (desc: string): ArgSpec => ({ type: 'datetime', desc });
 
+export const EDIT_OPS = ['rotate', 'flip', 'crop', 'grayscale', 'enhance', 'background'] as const;
+export type EditOp = (typeof EDIT_OPS)[number];
+
+/** Offered only while a photo comes with the request (decide.ts); the edit is photo-edit.ts. */
+export const EDIT_TOOL: ToolSpec = {
+  name: 'edit_photo',
+  desc:
+    'change the photo: rotate (degrees 90 = clockwise, -90, 180), flip (mirror), crop to a ' +
+    'shape, grayscale (black and white), enhance (brighter, clearer colours), background ' +
+    '(remove, white, a colour, or blur)',
+  kind: 'action',
+  args: {
+    op: { type: 'string', values: [...EDIT_OPS], required: true },
+    degrees: { type: 'number', min: -270, max: 270 },
+    direction: { type: 'string', values: ['horizontal', 'vertical'] },
+    shape: { type: 'string', values: ['square', '4:3', '3:4', '16:9', '9:16', 'tighter'] },
+    mode: { type: 'string', values: ['remove', 'white', 'color', 'blur'] },
+    color: { type: 'string', desc: 'colour name, for mode color' },
+  },
+};
+
 export const TOOLS: ToolSpec[] = [
+  EDIT_TOOL,
   {
     name: 'memory_search',
     desc: 'what I saw, heard, said, was told, or have in notes, calendar, contacts or files',
@@ -73,89 +88,135 @@ export const TOOLS: ToolSpec[] = [
       person: s('who'),
       place: s('where'),
     },
-    words:
-      /\b(remember|said|say|told|tell me about|saw|seen|see|heard|mention|talk|discuss|meeting|appointment|calendar|note|when (did|was)|last time|earlier|ago|yesterday|week|month)\b/,
   },
   {
     name: 'recap',
     desc: 'summary of a time span or of a topic from memory',
     kind: 'answer',
     args: { from: when('start'), to: when('end'), topic: s('topic, if any') },
-    words: /\b(recap|summar|sum up|catch me up|overview|digest|what happened|been (doing|up to))\b/,
   },
   {
     name: 'research',
     desc: 'research a topic online in several searches and write a short report with sources',
     kind: 'info',
-    args: { topic: req('what to research, as asked') },
-    words: RESEARCH_WORDS,
+    args: {
+      topic: req('what to research, as asked'),
+      news: { type: 'boolean', desc: 'true if about recent news or events' },
+    },
   },
   {
     name: 'message',
-    desc: 'send a text/WhatsApp/Telegram/Signal message',
+    desc: 'send someone a text/WhatsApp/Telegram/Signal message',
     kind: 'action',
     args: {
       to: req('person'),
       text: req('message, written as me'),
       app: oneOf(['whatsapp', 'sms', 'telegram', 'signal', 'auto']),
+      at: s('time words, only if I said when to send it'),
     },
-    words:
-      // "tell me …" is a request to Sidekick, never a message (that needs someone else).
-      /\b(text|message|whatsapp|telegram|signal|sms|tell (?!me\b|us\b)|let .+ know|ask (him|her|them|\w+) |reply|send)\b/,
   },
   {
     name: 'email',
     desc: 'send an email',
     kind: 'action',
-    args: { to: req('person or address'), subject: s(), body: req('email text') },
-    words: /\b(e-?mail|mail|write to|send)\b/,
+    args: {
+      to: req('person or address'),
+      subject: s(),
+      body: req('email text'),
+      at: s('time words, only if I said when to send it'),
+    },
   },
   {
     name: 'call',
     desc: 'phone someone',
     kind: 'action',
     args: { to: req('person or number') },
-    words: /\b(call|ring|dial)\b|^ phone\b|\bphone (him|her|them|mum|mom|dad|back|home|work)\b/,
+  },
+  {
+    name: 'draft',
+    desc: 'send or cancel the message/email draft waiting in the chat',
+    kind: 'action',
+    args: { do: oneOf(['send', 'cancel'], true) },
+  },
+  {
+    name: 'reply_message',
+    desc: 'reply to a chat message I got (the one just read out, or from someone)',
+    kind: 'action',
+    args: { text: req('reply, written as me'), to: s('person, if said') },
+  },
+  {
+    name: 'read_messages',
+    desc: 'read out my recent chat messages (WhatsApp and other apps), all or from someone',
+    kind: 'info',
+    args: { from: s('person, as said') },
+  },
+  {
+    name: 'clipboard',
+    desc: 'a request about the text I copied (the clipboard): summarise, translate, explain it',
+    kind: 'info',
+    args: {},
+  },
+  {
+    name: 'move_event',
+    desc: 'move one of my calendar events to a new time',
+    kind: 'action',
+    args: { event: req('which event, as said'), to: req('the new time words') },
+  },
+  {
+    name: 'texts',
+    desc: 'read out my text messages (SMS): new ones, the last one, or those from someone',
+    kind: 'info',
+    args: {
+      from: s('person, as said'),
+      last: bool(false),
+      unread: bool(false),
+      when: s('time words'),
+    },
+  },
+  {
+    name: 'calls',
+    desc: 'who phoned me: missed calls and call history',
+    kind: 'info',
+    args: { from: s('person, as said'), missed: bool(false), when: s('time words') },
+  },
+  {
+    name: 'call_back',
+    desc: 'phone back whoever called me last',
+    kind: 'action',
+    args: {},
   },
   {
     name: 'event',
     desc: 'add a calendar event',
     kind: 'action',
     args: { title: req(), when: req('time words, e.g. Friday at 3pm'), place: s() },
-    words: /\b(calendar|diary|schedule|book|appointment|meeting|event|lunch|dinner|plan)\b/,
   },
   {
     name: 'reminder',
-    desc: 'remind me later, or add a to-do',
+    desc: 'a reminder notification with a message at a time, or a to-do (not an alarm sound)',
     kind: 'action',
     args: { what: req('what to do'), when: s('time words, or empty for a to-do') },
-    words: /\b(remind|reminder|to-?do|don't let me forget|nudge|todo|task|ping me)\b/,
   },
   {
     name: 'routine',
-    desc: 'do an instruction later (once) or repeat it on a schedule or when something happens',
+    desc: 'you carry out an instruction for me later or again and again (e.g. tell me the weather every morning, read out messages from someone)',
     kind: 'action',
     args: {
       when: req('e.g. in 10 minutes, at 5pm, every day at 6pm, whenever Sam messages me'),
       instruction: req('what to do then'),
     },
-    words:
-      /\b(every|each (day|morning|evening|night|week|month|hour|time|sunday|monday|tuesday|wednesday|thursday|friday|saturday)|whenever|daily|weekly|routine|any time|in (\d+|an?|one|two|three|five|ten|fifteen|twenty|thirty|half an) (minutes?|mins?|hours?|hrs?|hour))\b/,
   },
   {
     name: 'alarm',
-    desc: 'set an alarm',
+    desc: 'an alarm clock that rings at a time (e.g. to wake me up)',
     kind: 'action',
     args: { time: req('HH:MM, 24-hour'), label: s() },
-    words: /\b(alarm|wake me)\b/,
   },
   {
     name: 'timer',
-    desc: 'start a countdown timer',
+    desc: 'a countdown that rings after some minutes',
     kind: 'action',
     args: { minutes: num(0.1, 1440, true), label: s() },
-    words:
-      /\b(timer|countdown|count down|minutes|seconds|quarter of an hour|half an hour|give me a shout|shout)\b/,
   },
   {
     name: 'navigate',
@@ -165,15 +226,12 @@ export const TOOLS: ToolSpec[] = [
       destination: req(),
       mode: oneOf(['driving', 'walking', 'transit', 'cycling']),
     },
-    words:
-      /\b(navigate|directions|take me|get me to|drive|route|way to|how do i get|walk to|go to)\b/,
   },
   {
     name: 'ride',
     desc: 'order a taxi/ride',
     kind: 'action',
     args: { destination: s(), app: oneOf(['uber', 'bolt', 'lyft', 'freenow']) },
-    words: /\b(taxi|cab|uber|bolt|lyft|freenow|ride|lift)\b/,
   },
   {
     name: 'app_search',
@@ -186,28 +244,24 @@ export const TOOLS: ToolSpec[] = [
       ),
       query: req(),
     },
-    words: /\b(search|find|youtube|spotify|amazon|play store|google|browse|shop|buy|video)\b/,
   },
   {
     name: 'play',
-    desc: 'play music, a podcast or a video',
+    desc: 'start playing music, a podcast or a video',
     kind: 'action',
     args: { query: req(), app: s('app name, if said') },
-    words: /\b(play|listen to|put on|music|song|album|podcast|playlist)\b/,
   },
   {
     name: 'media',
-    desc: 'control what is playing',
+    desc: 'control what is playing, or say what it is',
     kind: 'action',
-    args: { command: oneOf(['play', 'pause', 'next', 'previous', 'stop'], true) },
-    words: /\b(pause|resume|skip|next|previous|stop|track|song|music)\b/,
+    args: { command: oneOf(['play', 'pause', 'next', 'previous', 'stop', 'what'], true) },
   },
   {
     name: 'open_app',
     desc: 'open an app',
     kind: 'action',
     args: { name: req('app name') },
-    words: /\b(open|launch|start|go to|show me)\b/,
   },
   {
     name: 'phone_setting',
@@ -232,8 +286,6 @@ export const TOOLS: ToolSpec[] = [
       level: num(0, 100, false, 'percent'),
       change: oneOf(['up', 'down', 'mute', 'unmute', 'max', 'auto']),
     },
-    words:
-      /\b(torch|flashlight|light|volume|louder|quieter|loud|quiet|mute|silent|disturb|dnd|brightness|bright|dim|dark|wi-?fi|bluetooth|airplane|aeroplane|flight mode|nfc|data)\b/,
   },
   {
     name: 'phone_info',
@@ -244,23 +296,18 @@ export const TOOLS: ToolSpec[] = [
       day: oneOf(['today', 'yesterday', 'week']),
       app: s('app, for screen time'),
     },
-    words:
-      /\b(battery|charge|charging|storage|space|memory full|steps|walked|screen time|on my phone for|clipboard|copied)\b/,
   },
   {
     name: 'birthdays',
     desc: 'birthdays from contacts',
     kind: 'info',
     args: { name: s(), within: oneOf(['next', 'week', 'month']) },
-    words: /\b(birthday|born|turning|how old)\b/,
   },
   {
     name: 'weather',
     desc: 'weather forecast',
     kind: 'info',
     args: { place: s('town, or empty for here'), day: s('e.g. today, tomorrow, Saturday') },
-    words:
-      /\b(weather|rain|raining|sunny|snow|cold|hot|warm|temperature|forecast|umbrella|coat|wind|windy|degrees)\b/,
   },
   {
     name: 'location',
@@ -274,91 +321,145 @@ export const TOOLS: ToolSpec[] = [
       place: s(),
       when: s('time words, for where_was / time_at / visited'),
     },
-    words:
-      /\b(where am i|where was i|where were we|park|parked|car|been|visit|visited|place|here|location|how long was i)\b/,
   },
   {
     name: 'name_place',
     desc: 'name the place I am at',
     kind: 'action',
     args: { name: req() },
-    words: /\b(call this place|this is (my )?(home|work|office|gym)|name (this|here)|this place)\b/,
   },
   {
     name: 'watch',
-    desc: 'tell me when the camera sees something',
+    desc: 'keep an eye out with the camera and tell me when it sees something',
     kind: 'action',
     args: { thing: req(), every: bool(false) },
-    words: /\b(when you see|look out|watch|keep an eye|spot|let me know if you see)\b/,
   },
   {
     name: 'stop_watching',
     desc: 'stop a camera watch',
     kind: 'action',
     args: { thing: s() },
-    words: /\b(stop (watching|looking)|don't watch|no longer)\b/,
   },
   {
     name: 'find_phone',
-    desc: 'ring this phone loudly',
+    desc: 'ring this phone loudly, or stop it ringing',
     kind: 'action',
-    args: {},
-    words: /\b(find my phone|lost my phone|where is my phone|ring my phone)\b/,
+    args: { stop: bool(false) },
   },
   {
     name: 'speech_speed',
     desc: 'change how fast you speak',
     kind: 'action',
     args: { change: oneOf(['faster', 'slower', 'normal']), percent: num(50, 200) },
-    words:
-      /\b((speak|talk)(ing)? (a bit |a little )?(more )?(slow|slower|slowly|faster|quicker|quickly|up)|speed|slower|faster|slow down|speed up|quicker)\b/,
   },
   {
     name: 'listening',
-    desc: 'start or stop background listening',
+    desc: 'start or stop listening to the conversations around me',
     kind: 'action',
     args: { on: bool() },
-    words: /\b(listen|listening|mic|microphone|hear)\b/,
   },
   {
     name: 'camera',
-    desc: 'turn the live camera on or off',
+    desc: 'switch the live camera on or off',
     kind: 'action',
     args: { on: bool() },
-    words: /\b(camera|video|recording)\b/,
   },
   {
     name: 'camera_setting',
-    desc: 'change the live camera: frame rate, front or back camera, image detail / resolution',
+    desc: 'change how the live camera works: front or back (selfie) camera, frame rate, image detail',
     kind: 'action',
     args: {
       frames: s('frame rate: more, fewer, normal, or a number per second'),
       lens: oneOf(['front', 'back', 'flip']),
       detail: oneOf(['low', 'medium', 'high', 'higher', 'lower', 'normal']),
     },
-    words:
-      /\b(camera|frames?|fps|frame rate|front|back|rear|selfie|flip|resolution|detail|quality|sharper|clearer|hd|720p?|1080p?|480p?)\b/,
   },
   {
     name: 'missed',
     desc: 'short summary of my unread notifications (what I missed), by person and app',
     kind: 'info',
     args: {},
-    words: /\b(miss|missed|notifications?|unread|catch me up|catch up|while i was)\b/,
   },
   {
     name: 'feedback',
     desc: 'send feedback about Sidekick to its makers',
     kind: 'action',
     args: { text: req('the feedback, as said') },
-    words: /\b(feedback|bug|suggestion|complain|developer|makers|report a problem)\b/,
   },
   {
-    name: 'reply',
-    desc: 'answer with this text (after using results)',
-    kind: 'answer',
-    args: { text: req() },
-    words: /$^/,
+    name: 'calculate',
+    desc: 'work out a sum exactly (+ - * / ^ % sqrt and brackets)',
+    kind: 'info',
+    args: { expression: req('the sum in symbols, e.g. (17*23)+4 or 15%*240') },
+  },
+  {
+    name: 'convert',
+    desc: 'convert units (length, weight, volume, speed, area, data, time, temperature)',
+    kind: 'info',
+    args: { amount: num(-1e12, 1e12, true), from: req('unit'), to: req('unit') },
+  },
+  {
+    name: 'date',
+    desc: "today's date, a weekday, days until or since a date, leap years, days in a month",
+    kind: 'info',
+    args: {
+      ask: oneOf(
+        ['today', 'weekday', 'days_until', 'days_since', 'leap_year', 'days_in_month', 'add_days'],
+        true,
+      ),
+      date: s('YYYY-MM-DD, if a date is meant'),
+      days: num(-100000, 100000),
+      year: num(1, 9999),
+      month: num(1, 12),
+    },
+  },
+  {
+    name: 'time_in',
+    desc: 'the time now in another city or country',
+    kind: 'info',
+    args: { place: req() },
+  },
+  {
+    name: 'remember',
+    desc: 'save a fact the user tells me to remember',
+    kind: 'action',
+    args: { fact: req('the fact, as said') },
+  },
+  {
+    name: 'translate',
+    desc: 'translate text into another language',
+    kind: 'action',
+    args: { text: s('the text, or empty for the text in the photo'), to: req('language') },
+  },
+  {
+    name: 'repeat',
+    desc: 'say the last answer again',
+    kind: 'action',
+    args: {},
+  },
+  {
+    name: 'help',
+    desc: 'say what Sidekick can do',
+    kind: 'action',
+    args: {},
+  },
+  {
+    name: 'scan',
+    desc: 'read a QR code or barcode with the camera',
+    kind: 'action',
+    args: {},
+  },
+  {
+    name: 'list_watches',
+    desc: 'say what the camera is watching for',
+    kind: 'info',
+    args: {},
+  },
+  {
+    name: 'contact_number',
+    desc: "a contact's phone number or email",
+    kind: 'info',
+    args: { name: req() },
   },
 ];
 
@@ -369,6 +470,7 @@ export const toolByName = (name: string) => TOOLS.find((t) => t.name === name);
  * message), so nothing that acts at once on the phone is allowed — only answers and draft cards.
  */
 export const NOT_IN_ROUTINES = new Set([
+  'edit_photo',
   'routine',
   'alarm',
   'timer',
@@ -387,9 +489,13 @@ export const NOT_IN_ROUTINES = new Set([
   'listening',
   'camera',
   'camera_setting',
+  // A routine's text can carry outside words: never send, reply, call back, move or read copied text.
+  'draft',
+  'reply_message',
+  'call_back',
+  'move_event',
+  'clipboard',
 ]);
-export const NOT_OFF_RECORD = new Set(['routine', 'name_place']);
-
 const norm = (q: string) =>
   ` ${q
     .toLowerCase()
@@ -397,129 +503,6 @@ const norm = (q: string) =>
     .replace(/[^a-z0-9' -]+/g, ' ')
     .replace(/\s+/g, ' ')
     .trim()} `;
-
-const QUESTION_START =
-  /^((at|in|on|for|by|from|to|of|until|till|since) (what|which|whom|how|when)|what|who|whom|whose|where|when|why|how|is|are|am|do|does|did|was|were|which|can i|could i|should|would|will|have|has|had)\b/;
-
-/**
- * The part of [q] that is asked: the last sentence, without a leading "if …," ("Tom is taller
- * than Sam. Who is the shortest?" → "who is the shortest").
- */
-function askedPart(q: string): string {
-  const parts = q
-    .toLowerCase()
-    .split(/[.?!]+\s+/)
-    .map((p) => p.trim())
-    .filter(Boolean);
-  const last = parts[parts.length - 1] ?? '';
-  return norm(
-    last.replace(/^(so|and|then|ok|okay|now)\b,? ?/, '').replace(/^if [^,]{1,80}, ?/, ''),
-  ).trim();
-}
-
-/** A question (its asked part starts with a question word), not a request. */
-export function looksQuestion(q: string): boolean {
-  return QUESTION_START.test(askedPart(q));
-}
-
-/** An instruction ("text…", "turn…", "book…"), not a question. */
-export function looksImperative(q: string): boolean {
-  const s = norm(q).trim();
-  if (QUESTION_START.test(s) || looksQuestion(q)) return false;
-  return s.split(' ').length >= 2;
-}
-
-/**
- * Requests for words, not actions: jokes, poems, tips, explanations. Answered by the model
- * directly unless an action word is in them too ("in one minute, tell me a fun fact").
- */
-const GENERATIVE =
-  /^(?:please )?(?:(?:can|could|would) you )?(tell me (?:a |an |some |another |one more )?(?:joke|story|fun fact|fact|riddle|poem|bit)s?\b|tell me (?:about|something)\b|(?:write|compose|make up|draft me) (?:me )?(?:a |an |some )?(?:short |little |funny )?(?:poem|story|limerick|haiku|song|joke|riddle|paragraph|essay|speech|toast)|give me (?:\d+|a|an|some|one|two|three|four|five|a few|ten) (?:\w+ )?(?:tips|ideas|reasons|ways|examples|facts|suggestions|names|words|synonyms)\b|explain\b|describe\b|define\b|summari[sz]e (?:the|this|what) (?:idea|concept|theory|history|plot)|suggest\b|recommend\b|look up\b|find out\b|list (?:\d+|some|a few|the)\b)/;
-
-/** Opinions and remarks ("I love the camera on this phone", "thanks"): nothing to do. */
-const REMARK =
-  /^(i (really |just |do )?(love|like|hate|enjoy|adore|dislike|liked|loved|hated)|that's|that was|it's (so|really|very|quite|too)|you're|you are|thanks|thank you|nice|cool|great|wow)\b/;
-
-/** Temperature words in science, cooking or health, not the weather. */
-const SCIENCE =
-  /\b(celsius|fahrenheit|kelvin|boil|boils|boiling|freeze|freezes|freezing point|melt|melts|oven|bake|body|fever|absolute zero)\b/;
-
-/** "What did I buy Kofi for his birthday?": a memory, not the contacts' birthdays. */
-const GIFT =
-  /\b(buy|bought|get|got|give|gave|make|made|send|sent) .*\bfor (his|her|their|your|my|the) birthday\b/;
-
-/** "How much does the plumber charge?": a price, not the battery. */
-const PRICE = /\b(how much|what) (do|does|did|will|would)\b.*\bcharge\b/;
-
-/** "Where did I leave my umbrella?": a lost thing, not the forecast. */
-const LOST_THING = /\b(where|left|leave|lost|find|found)\b.*\b(umbrella|coat)\b/;
-
-/** Sending or calling "me": there's no one to send to; the model answers instead. */
-const SELF_SEND =
-  /\b(text|message|msg|whatsapp|e-?mail|mail|call|ring|phone|send|ping) (me|myself|us)\b(?! (back|later|when|if|at|in|on|tomorrow|tonight))/;
-const SELF_SEND_TOOLS = new Set(['message', 'email', 'call']);
-
-/** Questions about general knowledge, opinions, or the scene: the plain answer path is best. */
-const PLAIN =
-  /^(what is|what are|what's|who is|who was|who are|why|explain|define|tell me (a joke|about (the|a|an) )|how (do|does|did|can|could|would|should) (you|i|we|it|they|people|a|an|the) (make|cook|work|fix|say|spell|pronounce|learn|become))\b/;
-
-/** Asks for text to be written or said: answered by the model, not a tool. */
-const ASKS_FOR_WORDS =
-  /^(give me|tell me|write|rewrite|list|suggest|explain|describe|summari[sz]e|shorten|translate|name|make it|make (me )?(a|an|up)|another|compose|come up with|think of|recommend|teach me|show me how|help me (write|think|plan|choose|decide))\b/;
-
-/**
- * The tools worth offering for [q], most relevant first, at most [max]; empty when the request is
- * plainly informational or no tool fits. `reply` is never offered first (only in chains).
- */
-export function relevantTools(
-  q: string,
-  opts: { routine?: boolean; offRecord?: boolean; max?: number } = {},
-): ToolSpec[] {
-  const s = norm(q);
-  const usable = TOOLS.filter(
-    (t) =>
-      t.name !== 'reply' &&
-      !(opts.routine && NOT_IN_ROUTINES.has(t.name)) &&
-      !(opts.offRecord && NOT_OFF_RECORD.has(t.name)),
-  );
-  const question = looksQuestion(q);
-  const selfSend = SELF_SEND.test(s);
-  const hits = usable.filter(
-    (t) =>
-      t.words.test(s) &&
-      !(t.name === 'weather' && (SCIENCE.test(s) || LOST_THING.test(s))) &&
-      !(t.name === 'phone_info' && PRICE.test(s)) &&
-      !(t.name === 'birthdays' && GIFT.test(s)) &&
-      // A question asks for an answer: "what language do people speak", "how many minutes in
-      // 3 hours" mustn't offer speech speed or timers. Requests ("can you…") aren't questions.
-      !(question && t.kind === 'action') &&
-      !(selfSend && SELF_SEND_TOOLS.has(t.name)),
-  );
-  const imperative = looksImperative(q);
-  const t0 = s.trim();
-  // A plain knowledge question with nothing but memory words in it: answer normally.
-  const onlyMemory = hits.every((t) => t.kind === 'answer');
-  if (!imperative && (PLAIN.test(t0) || onlyMemory)) return [];
-  // Jokes, poems, tips, explanations, remarks, "text me a joke": nothing to act on.
-  if (onlyMemory && (GENERATIVE.test(t0) || selfSend)) return [];
-  if (REMARK.test(t0)) return [];
-  if (!hits.length) {
-    // An instruction no rule knew and no word points at: offer everything (slower, rare). Not
-    // for a request for words ("give me a recipe for pancakes", "write one about autumn"): that
-    // is an answer, and offering every action let Gemma open a web search in the browser for it
-    // (Pixel 5, 26 Nov), besides ~15 s of routing over 30 tools on each such turn.
-    if (!imperative || ASKS_FOR_WORDS.test(s.trim())) return [];
-    return usable.slice(0, opts.max ?? usable.length);
-  }
-  // Memory search stays available: a request that matched an action word may still be a recall.
-  const memory = usable.find((t) => t.name === 'memory_search');
-  const list = [
-    ...hits.filter((t) => t.kind !== 'answer'),
-    ...hits.filter((t) => t.kind === 'answer'),
-  ];
-  if (memory && !list.includes(memory)) list.push(memory);
-  return list.slice(0, opts.max ?? 10);
-}
 
 function argLine(name: string, a: ArgSpec): string {
   const opt = a.required ? '' : '?';
@@ -540,35 +523,43 @@ export function catalogText(tools: ToolSpec[]): string {
 export const ROUTER_SYSTEM =
   "You pick the phone assistant's tool for a request. Reply with one JSON object only, no other text.";
 
-export type ToolStep = { tool: string; args: Record<string, unknown>; result: string };
-
 const two = (n: number) => String(n).padStart(2, '0');
 export function localIso(d: Date): string {
   return `${d.getFullYear()}-${two(d.getMonth() + 1)}-${two(d.getDate())}T${two(d.getHours())}:${two(d.getMinutes())}`;
 }
 
-/** The router prompt: the request, the offered tools, and the results of earlier steps. */
-export function routerPrompt(
-  question: string,
-  now: Date,
-  tools: ToolSpec[],
-  steps: ToolStep[] = [],
-): string {
-  const list = steps.length ? [...tools, toolByName('reply')!] : tools;
-  const done = steps.length
-    ? `\nDone so far:\n${steps.map((x) => `${x.tool} ${JSON.stringify(x.args)} → ${x.result.slice(0, 400)}`).join('\n')}\n` +
-      'Use these results: call the next tool, or reply with the answer.\n'
-    : '';
+export type ToolCall = { tool: string; args: Record<string, unknown> };
+
+/**
+ * Arguments for the one tool the model already chose (decide-logic.ts): only the tool's own
+ * line, so its argument values can't be mistaken for tool names. It may still decline.
+ */
+export function fillPrompt(question: string, now: Date, tool: ToolSpec): string {
   return `Now: ${now.toDateString()} ${localIso(now).slice(11)}.
 Request: ${JSON.stringify(question)}
+Tool: ${catalogText([tool])}
 
-Tools:
-${catalogText(list)}
-${done}
-Reply {"tool":"<name>","args":{...}} with only the arguments that were said or follow from the request, or {"tool":"none"} if no tool fits (then I answer normally).`;
+Reply with one JSON object of this tool's arguments, only those said or implied by the request. If this tool does not fit the request, reply {"none":true}.`;
 }
 
-export type ToolCall = { tool: string; args: Record<string, unknown> };
+/** The reply to [fillPrompt] → a call to [tool], {tool:'none'}, or null (not JSON). */
+export function parseFillReply(reply: string, tool: string): ToolCall | null {
+  const json = /\{[\s\S]*\}/.exec(reply.replace(/```(?:json)?/g, ''))?.[0];
+  if (!json) return null;
+  let o: unknown;
+  try {
+    o = JSON.parse(json);
+  } catch {
+    return null;
+  }
+  if (!o || typeof o !== 'object') return null;
+  const r = o as Record<string, unknown>;
+  if (r.none === true || r.tool === 'none') return { tool: 'none', args: {} };
+  // Also accepted: the router's own shape {"tool":…, "args":{…}}.
+  const inner = r.args ?? r.arguments;
+  const args = inner && typeof inner === 'object' ? (inner as Record<string, unknown>) : r;
+  return { tool, args };
+}
 
 /** The model's reply → a tool call, {tool:'none'}, or null (not JSON). */
 export function parseToolReply(reply: string): ToolCall | null {
@@ -679,20 +670,6 @@ export function validateCall(call: ToolCall, tools: ToolSpec[] = TOOLS): Validat
     return { ok: false, error: 'to is the user' };
   return { ok: true, args: out };
 }
-
-/** A request that needs one result to do the next thing ("text Sam when my dentist is"). */
-export function isCompound(q: string): boolean {
-  const s = norm(q);
-  return (
-    /\b(and then|then|after that)\b/.test(s) ||
-    /\b(text|message|email|tell|send|remind|let) .{0,30}\b(what|when|where|how much|how many|my|the)\b/.test(
-      s,
-    ) ||
-    /\b(and (text|tell|email|send|message|remind|add|call))\b/.test(s)
-  );
-}
-
-export const MAX_TOOL_STEPS = 3;
 
 // --- Time ranges the rules can't read ---
 

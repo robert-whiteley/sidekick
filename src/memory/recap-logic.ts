@@ -3,7 +3,7 @@
  * Tuesday", "recap what we've been working on"), built when asked (no fixed daily recap).
  * Pure; tested in __tests__/recap-logic-test.ts.
  */
-import { parseTimeRange, type RangeOptions, type TimeRange } from './time-range';
+import { type TimeRange } from './time-range';
 
 export type RecapRequest = {
   /** The time range said, or null (then a topic stretch, or today). */
@@ -13,18 +13,6 @@ export type RecapRequest = {
   /** "What have we been working on": find the stretch of related activity ending now. */
   stretch: boolean;
 };
-
-const TRIGGER =
-  /\b(recap|summari[sz]e|summary|sum up|catch me up|what (did|have|had) (we|i) (talk(ed)?|chat(ted)?|discuss(ed)?|say|said|do|done|been)\b|what (were|was) (we|i) (talking|chatting|doing|working)|what('ve| have) (we|i) been|how did i spend|remind me what (we|i) (talked|discussed|said|did|were))\b/;
-/** Things to summarise that aren't memory: the photo, a page, the camera. */
-const NOT_MEMORY =
-  /\b(summari[sz]e|recap|sum up|summary of) (this|that|it|these|the (photo|picture|image|page|text|document|article|screen|email|message|pdf|book|film|movie))\b/;
-const STRETCH =
-  /\b(been|was|were) (doing|working on|up to|talking about|busy with|focused on)\b|\bworking on\b/;
-
-/** Words that are not a topic ("recap it", "what have I been up to"). */
-const EMPTY_TOPIC =
-  /^(it|that|this|things|stuff|everything|anything|so far|lately|recently|today|me|us|there|then|now|the day|my day|our day|the week|my week|our conversations?|my conversations?|the conversations?|conversations?|chats?)$/;
 
 /** Removes time phrases so they don't count as a topic ("about the budget yesterday"). */
 export function withoutTimeWords(q: string): string {
@@ -57,40 +45,6 @@ export function withoutTimeWords(q: string): string {
     .replace(/\b(at|around|about) \d{1,2}([:.]\d{2})? ?(am|pm|o'?clock)\b/gi, ' ')
     .replace(/\s+/g, ' ')
     .trim();
-}
-
-/** The topic named after "about / on / regarding / with", or before "meeting / call". */
-export function recapTopic(q: string): string | null {
-  const s = withoutTimeWords(q.toLowerCase().replace(/[?!.]+/g, ' ')).replace(/\s+/g, ' ');
-  const m =
-    /\b(?:about|regarding|re|on|with|of (?:the|our|my)?)\s+(.+)$/.exec(
-      s.replace(/\b(working|work|worked|been|focused|busy) on\b/, 'about'),
-    ) ??
-    /\b(?:recap|summari[sz]e|sum up)(?: of)? (?:the |our |my )?(.+? (?:meeting|call|chat|conversation|discussion|talk))\b/.exec(
-      s,
-    );
-  if (!m) return null;
-  const t = m[1]
-    .replace(/\b(with (me|you|us)|for me|please|so far|then)\b/g, ' ')
-    .replace(/^(the|our|my|a) /, '')
-    // "What did I talk about with Hamid?": the topic is Hamid.
-    .replace(/^(with|to) /, '')
-    .replace(/\s+/g, ' ')
-    .trim();
-  if (!t || t.length < 2 || EMPTY_TOPIC.test(t)) return null;
-  return t;
-}
-
-/** Is this a recap / summary question about memory? What range and topic? Null if not one. */
-export function recapRequest(q: string, now: Date, opts: RangeOptions = {}): RecapRequest | null {
-  const s = ` ${q.toLowerCase().replace(/[’']/g, "'")} `;
-  if (!TRIGGER.test(s) || NOT_MEMORY.test(s)) return null;
-  // "What did I do with my keys" is a recall question, not a recap.
-  if (/\bwhat did i do with\b/.test(s)) return null;
-  const range = parseTimeRange(q, now, opts);
-  const topic = recapTopic(q);
-  const stretch = !range && (STRETCH.test(s) || !!topic);
-  return { range, topic, stretch };
 }
 
 /** A moment considered for a stretch: when, and whether it is about the topic. */

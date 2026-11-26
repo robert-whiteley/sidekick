@@ -27,6 +27,7 @@ import { runPhotoEditBench } from '@/engine/photo-edit-bench';
 import { runResearchBench } from '@/engine/research-bench';
 import { EMBED_DIMS } from '@/memory/db';
 import { cosine } from '@/memory/voices';
+import { runBackgroundBench, runDecideBench, runThinkingBench } from '@/engine/decide-bench';
 
 /** The speed-test photo, bundled with the app (no download). */
 async function benchPhoto(): Promise<string | null> {
@@ -119,14 +120,24 @@ export default function BenchScreen() {
 
   // Answers, routing and recall bench (src/engine/answers-bench.ts): JSON lines on logcat.
   // Started by deep link too: sidekick://bench?run=answers|recall-load|recall|recall-search|
-  // recall-clear|facts [&only=<id prefixes>] [&size=<rows>].
+  // recall-clear|facts|research|photo-edit|decide|thinking|background [&only=<id prefixes>]
+  // [&size=<rows>] [&variant=<decide variant or thinking budget>] (src/engine/decide-bench.ts).
   const quiet = (line: string) => {
     console.log(line);
     setLog((l) => [...l.slice(-40), line.slice(0, 200)]);
   };
-  const bench = (what: string, only?: string, size?: number) =>
+  const bench = (what: string, only?: string, size?: number, variant?: string) =>
     run(what, async () => {
       if (what === 'answers') await runAnswersBench(quiet, only);
+      else if (what === 'decide') await runDecideBench(quiet, variant ?? 'fused', only);
+      else if (what === 'thinking') await runThinkingBench(quiet, variant ?? 'default', only);
+      else if (what === 'background')
+        await runBackgroundBench(
+          quiet,
+          variant ?? 'default',
+          `${device.externalFilesDir ?? device.filesDir}/bench-photos`,
+          only,
+        );
       else if (what === 'recall-load') await loadRecallData(size ?? 100, quiet);
       else if (what === 'recall') await runRecallBench(quiet, only);
       else if (what === 'recall-search') await runRecallSearchOnly(quiet);
@@ -137,7 +148,13 @@ export default function BenchScreen() {
       else if (what === 'facts') await runFactsBench(quiet);
       quiet(`[bench] ${what} done`);
     });
-  const params = useLocalSearchParams<{ run?: string; only?: string; size?: string; t?: string }>();
+  const params = useLocalSearchParams<{
+    run?: string;
+    only?: string;
+    size?: string;
+    t?: string;
+    variant?: string;
+  }>();
   useEffect(() => {
     // Links run only on a phone set up for testing: a `bench-links` file in the app's external
     // files folder, which only adb or the app itself can write (any app can open a link).
@@ -145,13 +162,19 @@ export default function BenchScreen() {
     if (!params.run || !SidekickNative.fileExists(flag)) return;
     const what = params.run;
     const t = setTimeout(
-      () => void bench(what, params.only, params.size ? Number(params.size) : undefined),
+      () =>
+        void bench(
+          what,
+          params.only,
+          params.size ? Number(params.size) : undefined,
+          params.variant,
+        ),
       500,
     );
     return () => clearTimeout(t);
     // A new `t` re-runs the same request.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [params.run, params.only, params.size, params.t]);
+  }, [params.run, params.only, params.size, params.t, params.variant]);
 
   const download = (files: ModelFile[]) =>
     run('download', async () => {

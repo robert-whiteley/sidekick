@@ -1,8 +1,6 @@
 import {
   confirmFromModel,
   editedFields,
-  mightBeConfirmReply,
-  parseConfirmReply,
   readBackText,
   readBackWanted,
 } from '@/engine/readback-logic';
@@ -66,32 +64,6 @@ test('read-back wanted: voice (Recommended) only when spoken or hands-free; neve
   expect(readBackWanted('always', { ...o, speechAllowed: false })).toBe(false);
 });
 
-test('replies: yes, no, change it, add', () => {
-  expect(parseConfirmReply('Yes')).toEqual({ kind: 'yes' });
-  expect(parseConfirmReply('yeah send it.')).toEqual({ kind: 'yes' });
-  expect(parseConfirmReply('Send')).toEqual({ kind: 'yes' });
-  expect(parseConfirmReply('No')).toEqual({ kind: 'no' });
-  expect(parseConfirmReply('cancel it')).toEqual({ kind: 'no' });
-  expect(parseConfirmReply("don't send it")).toEqual({ kind: 'no' });
-  expect(parseConfirmReply('change it to I will be there at 7')).toEqual({
-    kind: 'replace',
-    text: 'I will be there at 7',
-  });
-  expect(parseConfirmReply('no, say see you soon')).toEqual({
-    kind: 'replace',
-    text: 'see you soon',
-  });
-  expect(parseConfirmReply('add sorry about that')).toEqual({
-    kind: 'append',
-    text: 'sorry about that',
-  });
-  expect(parseConfirmReply('also say love you')).toEqual({ kind: 'append', text: 'love you' });
-  // Something else: a new question.
-  expect(parseConfirmReply("what's the weather like tomorrow")).toBeNull();
-  expect(parseConfirmReply('no I think the meeting is actually on Thursday next week')).toBeNull();
-  expect(parseConfirmReply('')).toBeNull();
-});
-
 test('edits change the right field', () => {
   expect(editedFields(msg, { kind: 'replace', text: 'On my way' })).toEqual({ text: 'On my way' });
   expect(editedFields(msg, { kind: 'append', text: 'sorry' })).toEqual({
@@ -106,13 +78,7 @@ test('edits change the right field', () => {
   expect(editedFields(msg, { kind: 'yes' })).toBeNull();
 });
 
-test('model fallback: short replies only, JSON read safely', () => {
-  expect(mightBeConfirmReply('make it sound friendlier')).toBe(true);
-  expect(
-    mightBeConfirmReply(
-      'one two three four five six seven eight nine ten eleven twelve thirteen fourteen fifteen',
-    ),
-  ).toBe(false);
+test('the model reply is read safely', () => {
   expect(confirmFromModel('{"answer":"replace","text":"Hi!"}')).toEqual({
     kind: 'replace',
     text: 'Hi!',

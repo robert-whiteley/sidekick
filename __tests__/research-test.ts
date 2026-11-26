@@ -18,7 +18,7 @@ import {
   wikipediaArticleUrl,
   wikipediaTitle,
 } from '@/web/research-logic';
-import { relevantTools } from '@/engine/tools-logic';
+import { DECIDE_TOOLS } from '@/engine/decide-logic';
 import type { WebSource } from '@/web/lookup-logic';
 
 jest.mock('expo-network', () => ({ getNetworkStateAsync: jest.fn() }));
@@ -205,19 +205,10 @@ test('report prompt numbers sources; sources keep their number; bad citations go
   );
 });
 
-describe('router offers research for research requests', () => {
-  test.each([
-    'Research the history of the bicycle',
-    'Look into whether heat pumps work in old houses',
-    'Do some research on tidal power and write me a report',
-    'Find out everything about the James Webb telescope',
-    'Compare electric and petrol cars on running costs',
-  ])('%s', (q) => {
-    expect(relevantTools(q).map((t) => t.name)).toContain('research');
-  });
-  test('plain questions go the normal way', () => {
-    expect(relevantTools('What is the capital of France?')).toEqual([]);
-  });
+test('research is a tool the model picks, with its news reading as an argument', () => {
+  const t = DECIDE_TOOLS.find((x) => x.name === 'research');
+  expect(t?.args.topic.required).toBe(true);
+  expect(t?.args.news.type).toBe('boolean');
 });
 
 describe('research()', () => {

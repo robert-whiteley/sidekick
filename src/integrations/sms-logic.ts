@@ -4,7 +4,7 @@
  * default assistant (Google Play's condition for these permissions). Text bodies are untrusted:
  * read out, never obeyed.
  */
-import { parseTimeRange, type TimeRange } from '@/memory/time-range';
+import { type TimeRange } from '@/memory/time-range';
 
 export type SmsItem = {
   address: string;
@@ -56,89 +56,6 @@ export type TelephonyAsk =
     }
   | { type: 'calls'; name: string | null; missed: boolean; range: TimeRange | null }
   | { type: 'callBack' };
-
-const STOP =
-  /\s+(?:today|yesterday|tonight|this|last|on|since|in|over|between|at|earlier|recently|ago|before|after|around|from)\b.*$/;
-const NOT_NAMES = new Set(['me', 'you', 'anyone', 'anybody', 'someone', 'somebody', 'them', 'it']);
-
-function cleanName(raw: string | undefined): string | null {
-  if (!raw) return null;
-  const n = raw
-    .replace(STOP, '')
-    .replace(/^(?:my|the)\s+/, '')
-    .replace(/'s$/, '')
-    .trim();
-  if (!n || NOT_NAMES.has(n) || n.split(' ').length > 3) return null;
-  return n;
-}
-
-function norm(q: string): string {
-  return q
-    .toLowerCase()
-    .replace(/[’']/g, "'")
-    .replace(/[?!.,]+/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
-}
-
-const TEXT_WORD = /\b(?:texts?|sms(?:es)?|text messages?)\b|\btext(?:ed)? me\b/;
-
-/** Is [question] about texts or calls? Null when it isn't (other rules handle it). */
-export function parseTelephony(question: string, now: Date): TelephonyAsk | null {
-  const q = norm(question);
-  if (!q) return null;
-
-  // "Call them back" / "call back the last number" / "return that missed call".
-  if (
-    /^(?:please )?(?:call|ring|phone) (?:them|him|her) back$/.test(q) ||
-    /^(?:please )?(?:call|ring) back(?: (?:the )?(?:last|that) (?:number|caller|call|missed call))?$/.test(
-      q,
-    ) ||
-    /^(?:please )?return (?:the|that|my) (?:last )?(?:missed )?call$/.test(q)
-  )
-    return { type: 'callBack' };
-
-  // Calls: "who called me", "missed calls", "did Sam call", "calls from Jo yesterday".
-  let m: RegExpExecArray | null;
-  const range = () => parseTimeRange(question, now);
-  if ((m = /^did (.+?) (?:call|ring|phone)(?: me)?(?: .*)?$/.exec(q)) && !TEXT_WORD.test(q))
-    return { type: 'calls', name: cleanName(m[1]), missed: false, range: range() };
-  if (
-    /\bwho (?:called|rang|phoned|has called|has rung|tried to call)\b/.test(q) ||
-    /\bmissed calls?\b/.test(q) ||
-    /\b(?:call history|call log|recent calls|last call|latest call)\b/.test(q) ||
-    /^(?:any|did i (?:get|have|miss) any|have i (?:had|missed) any) (?:missed )?calls\b/.test(q) ||
-    /^(?:read|show|check|tell me)(?: me)? (?:my )?(?:missed |recent )?calls\b/.test(q)
-  ) {
-    const from = /\bcalls? from ([a-z][\w' -]*)/.exec(q);
-    return {
-      type: 'calls',
-      name: cleanName(from?.[1]),
-      missed: /\bmissed\b/.test(q),
-      range: range(),
-    };
-  }
-
-  // Texts: "read my last text from Mum", "any new texts", "what did Sam text me yesterday".
-  if (!TEXT_WORD.test(q)) return null;
-  // "Text Sam I'm late" is a new message, not a question.
-  if (/^(?:text|sms|send)\b/.test(q) && !/^texts? from\b/.test(q)) return null;
-  let name: string | null = null;
-  if ((m = /\bdid ([a-z][\w' -]*?) (?:text|sms|message|send)\b/.exec(q))) name = cleanName(m[1]);
-  else if ((m = /\b(?:texts?|sms(?:es)?|messages?) from ([a-z][\w' -]*)/.exec(q)))
-    name = cleanName(m[1]);
-  else if ((m = /\b([a-z]+)'s (?:last |latest |new |recent )?(?:texts?|sms)\b/.exec(q)))
-    name = cleanName(m[1]);
-  if (name === 'my') name = null;
-  return {
-    type: 'texts',
-    name,
-    last:
-      /\b(?:last|latest|newest|most recent)\b/.test(q) && !/\blast (?:week|night|month|\d)/.test(q),
-    unread: /\b(?:new|unread)\b/.test(q) || /^(?:any|have i got any|do i have any)\b/.test(q),
-    range: range(),
-  };
-}
 
 /** The last 8 digits: "+44 7700 900123" and "07700 900123" are the same number. */
 export function numberTail(n: string): string {

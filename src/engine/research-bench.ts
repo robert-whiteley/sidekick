@@ -5,7 +5,8 @@
  * logcat: `[research-bench] {...}`. Reports are logged (they are about made-up topics).
  */
 import { citationsOk, coverage, RESEARCH_CASES } from '../../bench/research/cases';
-import { pickToolOnly } from './tools';
+import { decideRequest } from './decide';
+import { fillTool } from './tools';
 import { defaultDeps, research } from '@/web/research';
 
 type Log = (line: string) => void;
@@ -15,12 +16,18 @@ export async function runResearchBench(log: Log, only?: string): Promise<void> {
   const cases = RESEARCH_CASES.filter((c) => !ids?.length || ids.some((p) => c.id.startsWith(p)));
   const rows: { cov: number; ms: number; routed: boolean; cites: boolean }[] = [];
   for (const c of cases) {
-    const pick = await pickToolOnly(c.q).catch(() => null);
-    const routed = pick?.tool === 'research';
-    const r = await research(String(pick?.args.topic ?? c.q), () => {}, undefined, {
-      ...defaultDeps,
-      enabled: () => true,
-    });
+    const t0 = Date.now();
+    const d = await decideRequest(c.q).catch(() => null);
+    const routed = d?.decision.kind === 'do' && d.decision.tool === 'research';
+    const pick = routed ? await fillTool(c.q, 'research').catch(() => null) : null;
+    const routeMs = Date.now() - t0;
+    const r = await research(
+      String(pick?.args.topic ?? c.q),
+      () => {},
+      undefined,
+      { ...defaultDeps, enabled: () => true },
+      pick?.args.news === true,
+    );
     const cov = coverage(r.text, c.expect);
     const cites = citationsOk(r.text, r.web.length);
     rows.push({ cov, ms: r.ms, routed, cites });
@@ -28,7 +35,7 @@ export async function runResearchBench(log: Log, only?: string): Promise<void> {
       `[research-bench] ${JSON.stringify({
         id: c.id,
         routed,
-        routeMs: pick?.ms,
+        routeMs,
         topic: pick?.args.topic,
         queries: r.queries,
         sources: r.web.map((w) => w.url),

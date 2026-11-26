@@ -16,7 +16,6 @@ import {
   transcriptText,
   type RecordingLine,
 } from '@/engine/shared-doc-logic';
-import { relevantTools } from '@/engine/tools-logic';
 
 jest.mock('react-native', () => ({ AppState: { addEventListener: () => ({ remove() {} }) } }));
 jest.mock('@/integrations/native', () => ({ integrationsNative: () => null }));
@@ -136,12 +135,5 @@ describe('web pages in the online queue', () => {
     expect(jobExpired(j, 2 * 86400_000)).toBe(false);
     expect(jobExpired(j, 4 * 86400_000)).toBe(true);
     expect(queuedLine('page')).toContain('online');
-  });
-});
-
-describe('"What did I miss?" is offered', () => {
-  it('for missed and unread notifications', () => {
-    for (const q of ['What did I miss?', 'catch me up', 'any unread notifications'])
-      expect(relevantTools(q).map((t) => t.name)).toContain('missed');
   });
 });
