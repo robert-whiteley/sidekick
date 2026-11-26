@@ -28,18 +28,17 @@ import {
   findNameCues,
   fullNameFromContacts,
   ADDRESS_WINDOW_MS,
+  type NameCue,
+  replySettled,
+  type Utterance,
 } from './names';
 import {
   addToCentroid,
-  canStartNewVoice,
+  chooseSpeaker,
   claimPending,
   cosine,
-  matchShortClip,
-  matchSpeaker,
   ownerCentroid,
-  ownerClaimHolds,
   type PendingClip,
-  RELIABLE_VOICE_MS,
   type Speaker,
 } from './voices';
 import { applyAutoName, assignLabel, collectPersonInfo, type KeptLine } from './people';
@@ -131,16 +130,11 @@ async function assignSpeaker(
   console.log(
     `[voice] ${owner ? 'owner clip' : 'clip'} sims: ${all.map((x) => `${x.id}${x.isOwner ? '*' : ''}=${cosine(voice, x.centroid).toFixed(2)}`).join(' ')}`,
   );
-  const known = all.find((x) => x.isOwner) ?? null;
-  if (!trusted && durationMs != null && durationMs < RELIABLE_VOICE_MS) {
-    // Too short to trust: nothing is learned. A short wake-word line stays the owner's as before
-    // (no voice); anyone else's only joins a clearly closest known voice.
-    if (owner) return { speaker: null, owner: true };
-    return { speaker: matchShortClip(voice, all), owner: false };
-  }
-  if (owner && !trusted && !ownerClaimHolds(voice, known)) owner = false;
-  let s = owner ? known : matchSpeaker(voice, all);
-  if (s) {
+  const choice = chooseSpeaker(voice, owner, durationMs, trusted, all);
+  if (choice.kind === 'none') return { speaker: null, owner: choice.owner };
+  if (choice.kind === 'join') {
+    const s = choice.speaker;
+    if (!choice.learn) return { speaker: s, owner: false };
     const c = addToCentroid(s, voice);
     await db.execute('UPDATE speakers SET centroid = ?, count = count + 1 WHERE id = ?', [
       JSON.stringify(c),
@@ -149,15 +143,12 @@ async function assignSpeaker(
     if (s.isOwner) pushOwnerVoice(c);
     return { speaker: s, owner: s.isOwner };
   }
-  if (!owner && !canStartNewVoice(durationMs)) {
-    // Too short to start a person: join a clearly closest known voice, else wait for one.
-    return { speaker: matchShortClip(voice, all), owner: false };
-  }
+  owner = choice.owner;
   const r = await db.execute('INSERT INTO speakers (is_owner, centroid) VALUES (?, ?)', [
     owner ? 1 : 0,
     JSON.stringify(voice),
   ]);
-  s = { id: r.insertId!, centroid: voice, count: 1, isOwner: owner };
+  const s: Speaker = { id: r.insertId!, centroid: voice, count: 1, isOwner: owner };
   if (owner) pushOwnerVoice(voice);
   // Every new voice is "Person N" right away, stable for that voice.
   if (!owner) {
@@ -291,37 +282,55 @@ async function ingestJournalNow(): Promise<number> {
 
 // --- Names ---
 
+/** "Sam, can you…" cues waiting for Sam's answer (in memory only; see replySettled). */
+let waitingCues: { line: KeptLine; cue: NameCue }[] = [];
+
+/** Voiced lines within the addressing window around [at]. */
+async function utterancesNear(at: number): Promise<Utterance[]> {
+  const db = await getDb();
+  const r = await db.execute(
+    'SELECT m.at, m.speaker_id, s.is_owner FROM moments m JOIN speakers s ON s.id = m.speaker_id WHERE m.at BETWEEN ? AND ?',
+    [at - ADDRESS_WINDOW_MS, at + ADDRESS_WINDOW_MS],
+  );
+  return r.rows.map((x) => ({
+    at: x.at as number,
+    speakerId: x.speaker_id as number,
+    isOwner: x.is_owner === 1,
+  }));
+}
+
+async function nameAddressee(line: KeptLine, cue: NameCue, nearby: Utterance[]) {
+  const target = addresseeOf(line, nearby, cue.replyExpected);
+  if (target != null) await suggestName(target, await expandName(cue.name));
+}
+
 /**
  * Looks for "I'm Sam" / "thanks, Sam" in newly kept lines: a strong self-introduction names the
- * voice automatically (marked auto); anything else is recorded as a suggestion.
+ * voice automatically (marked auto); anything else is recorded as a suggestion. "Sam, can you…"
+ * waits for the voice that answers (lines arrive one at a time, before the answer is heard).
  */
 async function suggestNamesFrom(lines: KeptLine[]) {
-  const db = await getDb();
   for (const line of lines) {
     for (const cue of findNameCues(line.text)) {
-      let target: number | null = null;
       if (cue.who === 'speaker') {
-        target = line.isOwner ? null : line.speakerId;
-      } else {
-        const r = await db.execute(
-          'SELECT m.at, m.speaker_id, s.is_owner FROM moments m JOIN speakers s ON s.id = m.speaker_id WHERE m.at BETWEEN ? AND ?',
-          [line.at - ADDRESS_WINDOW_MS, line.at + ADDRESS_WINDOW_MS],
-        );
-        target = addresseeOf(
-          line,
-          r.rows.map((x) => ({
-            at: x.at as number,
-            speakerId: x.speaker_id as number,
-            isOwner: x.is_owner === 1,
-          })),
-          cue.replyExpected,
-        );
-      }
-      if (target == null) continue;
-      const name = await expandName(cue.name);
-      if (!(cue.strong && (await applyAutoName(target, name)))) await suggestName(target, name);
+        const target = line.isOwner ? null : line.speakerId;
+        if (target == null) continue;
+        const name = await expandName(cue.name);
+        if (!(cue.strong && (await applyAutoName(target, name)))) await suggestName(target, name);
+      } else if (cue.replyExpected) waitingCues.push({ line, cue });
+      else await nameAddressee(line, cue, await utterancesNear(line.at));
     }
   }
+  if (!waitingCues.length) return;
+  // The newest line heard; a cue whose answer never comes is settled a minute later at most.
+  const newest = Math.max(Date.now() - 60_000, ...lines.map((l) => l.at));
+  const still: typeof waitingCues = [];
+  for (const w of waitingCues) {
+    const nearby = await utterancesNear(w.line.at);
+    if (replySettled(w.line, nearby, newest)) await nameAddressee(w.line, w.cue, nearby);
+    else still.push(w);
+  }
+  waitingCues = still;
 }
 
 /** "Sam" → "Sam Jones" when contacts are on and exactly one contact is called Sam. */
