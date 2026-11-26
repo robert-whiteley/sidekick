@@ -24,3 +24,8 @@ export function systemPrompt(os: Os = currentOs()): string {
 
 /** How Sidekick talks. Kept short: every token costs seconds on older phones. */
 export const SYSTEM_PROMPT = systemPrompt();
+
+/** The question line that ends every answer prompt (assistant.ts; the dev answers bench). */
+export function questionPart(asked: string, _now: Date = new Date()): string {
+  return `Question: ${asked}`;
+}

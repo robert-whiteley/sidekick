@@ -28,7 +28,7 @@ import {
 import { getSettings } from './settings';
 import { clearChatState, loadChatState, saveChatState } from '@/memory/chat-state';
 import { IPHONE, onIphone, platformText } from './platform-text';
-import { SYSTEM_PROMPT } from './prompts';
+import { questionPart, SYSTEM_PROMPT } from './prompts';
 import { keptFile } from '@/memory/media-files';
 import { speechClipFor } from './speech-clip';
 import type { Moment } from '@/memory/store';
@@ -199,6 +199,8 @@ export async function answer(
     routed?: boolean;
     /** A question kept until back online (online-queue.ts): look it up whatever the rules say. */
     forceLookup?: boolean;
+    /** Dev answers bench: a routed action is reported, never done (no draft, timer or reminder). */
+    dryActions?: boolean;
   },
 ): Promise<AnswerResult> {
   onText = trackAnswer(onText); // "repeat that"
@@ -248,6 +250,8 @@ export async function answer(
     };
   };
   const routed = async (o: RouteOutcome): Promise<AnswerResult | null> => {
+    if (opts?.dryActions && (o.kind === 'plan' || o.kind === 'rules'))
+      return done(`[dry] ${o.kind === 'rules' ? o.text : 'action'}`);
     switch (o.kind) {
       case 'reply':
         return done(o.text);
@@ -455,7 +459,7 @@ export async function answer(
     question,
     !!image,
     (webPart) =>
-      `${agenda}${person}${webPart}${notes}${seenText}${recallPart}Question: ${recall?.modelQuestion ?? withClipboard(question) ?? question}`,
+      `${agenda}${person}${webPart}${notes}${seenText}${recallPart}${questionPart(recall?.modelQuestion ?? withClipboard(question) ?? question)}`,
     async (prompt, t, o) => {
       const r = await askLlm(prompt, image, t, {
         system,
