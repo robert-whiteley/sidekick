@@ -304,3 +304,11 @@ Left out on iPhone, with why (users see the reason in Phone features, Connection
   The voice bench now scores names and descriptions together.
 - Rejected: 0.55 or 0.6 for "sound alike" when adding up short pieces (fewer people found, more
   "Someone"); kept 0.5.
+
+## Future option: separate profiles (owner, 26 Nov)
+
+- Fully separate spaces in the app (own chat, notes, people, memories), e.g. for a shared phone or
+  work vs home. Not built now: the one continuous chat should work well on its own, and the owner
+  doesn't want hard-coded splits. Revisit if users ask.
+- Separate chats were left out for the same reason; the assistant should find the right context
+  itself.
