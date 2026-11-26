@@ -279,3 +279,14 @@ Left out on iPhone, with why (users see the reason in Phone features, Connection
   audio keep periods. The privacy policy and changelog cover both phones and are unchanged.
 - **Download after the app is killed:** the background download continues while the app is
   suspended, but if the user force-quits Sidekick it restarts on the next open (no resume data kept).
+
+## Voices and transcription bench (26 Nov; details in docs/BENCH.md)
+
+- Built: lines are cut where the voice changes (pauses ≥ 0.25 s, 2 s blocks in non-stop speech,
+  cut when similarity < 0.4); reply-expected name cues wait for the reply; three more intro cues.
+- Rejected: same-voice threshold 0.6 (from 0.55). Slightly better in clean audio (named 45% → 50%)
+  but worse with room echo; kept 0.55.
+- Rejected: cutting at short pauses without word timing (each part transcribed alone). Splits people
+  as well, but words on cut parts got much worse (WER 7% → 18.5% in babble at 10 dB).
+- Left: similar voices merging across conversations, misheard unusual names, overlapping speech in
+  one line, and loud babble (5 dB and below) where words and voices both fall apart.
