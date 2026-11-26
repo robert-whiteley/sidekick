@@ -56,5 +56,12 @@ if [ -n "$text" ]; then
   fi
 fi
 
+# 4. No auto-loaded AI rule files (they slow every session); rules live in docs/RULES.md.
+rule_files=$(echo "$files" | grep -E '(^|/)(CLAUDE|CLAUDE\.local|AGENTS?|GEMINI)\.md$' || true)
+if [ -n "$rule_files" ]; then
+  echo "✗ auto-loaded rule files are not allowed (put rules in docs/RULES.md):" >&2
+  echo "$rule_files" >&2
+  fail=1
+fi
 
 exit "$fail"
