@@ -29,7 +29,7 @@ if (env.ASC_ENV_FILE) {
   );
   env = { ...file, ASC_KEY_PATH: path.resolve(dir, file.ASC_KEY_PATH) };
 }
-const key = env.ASC_KEY_P8 || fs.readFileSync(env.ASC_KEY_PATH, 'utf8');
+const privateKeyPem = env.ASC_KEY_P8 || fs.readFileSync(env.ASC_KEY_PATH, 'utf8'); // gitleaks:allow (variable name, not a key)
 const b64 = (o) => Buffer.from(JSON.stringify(o)).toString('base64url');
 const now = Math.floor(Date.now() / 1000);
 const un =
@@ -39,7 +39,9 @@ const un =
 const jwt =
   un +
   '.' +
-  crypto.sign('sha256', Buffer.from(un), { key, dsaEncoding: 'ieee-p1363' }).toString('base64url');
+  crypto
+    .sign('sha256', Buffer.from(un), { key: privateKeyPem, dsaEncoding: 'ieee-p1363' })
+    .toString('base64url');
 async function api(method, p, body) {
   const r = await fetch('https://api.appstoreconnect.apple.com' + p, {
     method,
