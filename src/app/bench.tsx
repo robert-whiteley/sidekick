@@ -1,5 +1,6 @@
 // ui-exception-file: developer speed-test screen (Advanced › Speed test), not part of the product UI
 import { Asset } from 'expo-asset';
+import { useLocalSearchParams } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import { Button, ScrollView, StyleSheet, Text, View } from 'react-native';
 
@@ -14,6 +15,13 @@ import { dataDir, modelsDir as modelsDirFn } from '@/engine/paths';
 import { downloadFile, modelPath } from '@/engine/downloads';
 import { EMBEDDER_FILE, MODEL_FILES, type ModelFile } from '@/engine/models';
 import { callIfExists, speedLine, wavSeconds, type SpeedResult } from '@/engine/bench-logic';
+import {
+  clearRecallData,
+  loadRecallData,
+  runAnswersBench,
+  runRecallBench,
+  runRecallSearchOnly,
+} from '@/engine/answers-bench';
 import { EMBED_DIMS } from '@/memory/db';
 import { cosine } from '@/memory/voices';
 
@@ -105,6 +113,38 @@ export default function BenchScreen() {
       setBusy(false);
     }
   };
+
+  // Answers, routing and recall bench (src/engine/answers-bench.ts): JSON lines on logcat.
+  // Started by deep link too: sidekick://bench?run=answers|recall-load|recall|recall-search|
+  // recall-clear [&only=<id prefixes>] [&size=<rows>].
+  const quiet = (line: string) => {
+    console.log(line);
+    setLog((l) => [...l.slice(-40), line.slice(0, 200)]);
+  };
+  const bench = (what: string, only?: string, size?: number) =>
+    run(what, async () => {
+      if (what === 'answers') await runAnswersBench(quiet, only);
+      else if (what === 'recall-load') await loadRecallData(size ?? 100, quiet);
+      else if (what === 'recall') await runRecallBench(quiet, only);
+      else if (what === 'recall-search') await runRecallSearchOnly(quiet);
+      else if (what === 'recall-clear') await clearRecallData(quiet);
+      quiet(`[bench] ${what} done`);
+    });
+  const params = useLocalSearchParams<{ run?: string; only?: string; size?: string; t?: string }>();
+  useEffect(() => {
+    // Links run only on a phone set up for testing: a `bench-links` file in the app's external
+    // files folder, which only adb or the app itself can write (any app can open a link).
+    const flag = `${device.externalFilesDir ?? device.filesDir}/bench-links`;
+    if (!params.run || !SidekickNative.fileExists(flag)) return;
+    const what = params.run;
+    const t = setTimeout(
+      () => void bench(what, params.only, params.size ? Number(params.size) : undefined),
+      500,
+    );
+    return () => clearTimeout(t);
+    // A new `t` re-runs the same request.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [params.run, params.only, params.size, params.t]);
 
   const download = (files: ModelFile[]) =>
     run('download', async () => {
@@ -418,6 +458,16 @@ export default function BenchScreen() {
         <Button title="Wake test" disabled={busy} onPress={wakeTest} />
         <Button title="Play wake" disabled={busy} onPress={playWake} />
         <Button title="Wake in 10 s" disabled={busy} onPress={playWakeLater} />
+      </View>
+      <View style={styles.row}>
+        <Button title="Answers bench" disabled={busy} onPress={() => bench('answers')} />
+        <Button
+          title="Recall: load 100"
+          disabled={busy}
+          onPress={() => bench('recall-load', undefined, 100)}
+        />
+        <Button title="Recall: ask" disabled={busy} onPress={() => bench('recall')} />
+        <Button title="Recall: remove" disabled={busy} onPress={() => bench('recall-clear')} />
       </View>
       <View style={styles.row}>
         <Button title="Conversation test" disabled={busy} onPress={conversationTest} />

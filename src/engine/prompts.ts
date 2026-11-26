@@ -1,4 +1,5 @@
 import { currentOs, type Os } from './platform-text';
+import { nowLine } from '@/integrations/date-answers';
 
 const BASE =
   'You are Sidekick, a private assistant running entirely on this phone. Answer in one to three ' +
@@ -24,3 +25,9 @@ export function systemPrompt(os: Os = currentOs()): string {
 
 /** How Sidekick talks. Kept short: every token costs seconds on older phones. */
 export const SYSTEM_PROMPT = systemPrompt();
+
+/** The question line that ends every answer prompt (assistant.ts; the dev answers bench). */
+export function questionPart(asked: string, now: Date = new Date()): string {
+  // The model doesn't know today's date: give it when the question is about dates or time.
+  return `${nowLine(asked, now)}Question: ${asked}`;
+}

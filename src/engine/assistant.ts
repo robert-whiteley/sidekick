@@ -5,6 +5,7 @@ import { postCodeCards, scanCodes } from './codes';
 import { codePromptLine } from './codes-logic';
 import { answerRecap } from './recap';
 import { recallContext } from '@/memory/recall';
+import { routineFirst } from './route-trace-logic';
 import { postRoutineCard, routineRequest } from './routines-store';
 import SidekickNative from '../../modules/sidekick-native';
 import {
@@ -28,7 +29,7 @@ import {
 import { getSettings } from './settings';
 import { clearChatState, loadChatState, saveChatState } from '@/memory/chat-state';
 import { IPHONE, onIphone, platformText } from './platform-text';
-import { SYSTEM_PROMPT } from './prompts';
+import { questionPart, SYSTEM_PROMPT } from './prompts';
 import { keptFile } from '@/memory/media-files';
 import { speechClipFor } from './speech-clip';
 import type { Moment } from '@/memory/store';
@@ -199,6 +200,8 @@ export async function answer(
     routed?: boolean;
     /** A question kept until back online (online-queue.ts): look it up whatever the rules say. */
     forceLookup?: boolean;
+    /** Dev answers bench: a routed action is reported, never done (no draft, timer or reminder). */
+    dryActions?: boolean;
   },
 ): Promise<AnswerResult> {
   onText = trackAnswer(onText); // "repeat that"
@@ -248,6 +251,8 @@ export async function answer(
     };
   };
   const routed = async (o: RouteOutcome): Promise<AnswerResult | null> => {
+    if (opts?.dryActions && (o.kind === 'plan' || o.kind === 'rules'))
+      return done(`[dry] ${o.kind === 'rules' ? o.text : 'action'}`);
     switch (o.kind) {
       case 'reply':
         return done(o.text);
@@ -261,8 +266,14 @@ export async function answer(
   };
   // Where am I / was I / did I park, "call this place the gym", the weather (location.ts).
   // Before "remember …" so "remember this place as …" names a place instead of saving a fact.
-  const loc = photoNow ? null : await answerLocation(question, { offRecord }).catch(() => null);
-  if (loc) {
+  // Not for a routine about them ("every Monday at 8 tell me the weather"): that's set up below.
+  const isRoutine = !photoNow && !opts?.routine && !offRecord && routineFirst(question, new Date());
+  const loc =
+    photoNow || isRoutine ? null : await answerLocation(question, { offRecord }).catch(() => null);
+  // Nothing in location history ("where did I park?", "where was I on Tuesday?"): the notes may
+  // still say ("parked on level 4"), so memory answers; the reason is given if it has nothing.
+  const noPlace = loc?.empty ? loc.text : null;
+  if (loc && !noPlace) {
     onText(loc.text);
     return {
       text: loc.text,
@@ -369,7 +380,7 @@ export async function answer(
 
   // No rule knew it: the model may pick a tool (any phrasing; tools-logic.ts). Plain questions
   // skip this and go straight to the answer below.
-  if (!photoNow && !opts?.routed) {
+  if (!photoNow && !opts?.routed && !noPlace) {
     const outcome = await routeWithTools(question, {
       routine: opts?.routine,
       offRecord,
@@ -398,6 +409,8 @@ export async function answer(
   } catch (e) {
     console.log(`[assistant] memory unavailable: ${String(e)}`);
   }
+
+  if (noPlace && !sources.length) return done(noPlace);
 
   let image = photoNow;
   if (!image && asksAboutSomethingSeen(question)) {
@@ -455,7 +468,7 @@ export async function answer(
     question,
     !!image,
     (webPart) =>
-      `${agenda}${person}${webPart}${notes}${seenText}${recallPart}Question: ${recall?.modelQuestion ?? withClipboard(question) ?? question}`,
+      `${agenda}${person}${webPart}${notes}${seenText}${recallPart}${questionPart(recall?.modelQuestion ?? withClipboard(question) ?? question)}`,
     async (prompt, t, o) => {
       const r = await askLlm(prompt, image, t, {
         system,

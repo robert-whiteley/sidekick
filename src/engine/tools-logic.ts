@@ -106,7 +106,7 @@ export const TOOLS: ToolSpec[] = [
     desc: 'phone someone',
     kind: 'action',
     args: { to: req('person or number') },
-    words: /\b(call|ring|phone|dial)\b/,
+    words: /\b(call|ring|dial)\b|^ phone\b|\bphone (him|her|them|mum|mom|dad|back|home|work)\b/,
   },
   {
     name: 'event',
@@ -120,7 +120,7 @@ export const TOOLS: ToolSpec[] = [
     desc: 'remind me later, or add a to-do',
     kind: 'action',
     args: { what: req('what to do'), when: s('time words, or empty for a to-do') },
-    words: /\b(remind|reminder|to-?do|don't let me forget|nudge|todo|task)\b/,
+    words: /\b(remind|reminder|to-?do|don't let me forget|nudge|todo|task|ping me)\b/,
   },
   {
     name: 'routine',
@@ -131,7 +131,7 @@ export const TOOLS: ToolSpec[] = [
       instruction: req('what to do then'),
     },
     words:
-      /\b(every|each|whenever|daily|weekly|routine|each time|any time|in (\d+|an?|one|two|three|five|ten|fifteen|twenty|thirty|half an) (minutes?|mins?|hours?|hrs?|hour))\b/,
+      /\b(every|each (day|morning|evening|night|week|month|hour|time|sunday|monday|tuesday|wednesday|thursday|friday|saturday)|whenever|daily|weekly|routine|any time|in (\d+|an?|one|two|three|five|ten|fifteen|twenty|thirty|half an) (minutes?|mins?|hours?|hrs?|hour))\b/,
   },
   {
     name: 'alarm',
@@ -145,7 +145,8 @@ export const TOOLS: ToolSpec[] = [
     desc: 'start a countdown timer',
     kind: 'action',
     args: { minutes: num(0.1, 1440, true), label: s() },
-    words: /\b(timer|countdown|minutes|seconds)\b/,
+    words:
+      /\b(timer|countdown|count down|minutes|seconds|quarter of an hour|half an hour|give me a shout|shout)\b/,
   },
   {
     name: 'navigate',
@@ -176,8 +177,7 @@ export const TOOLS: ToolSpec[] = [
       ),
       query: req(),
     },
-    words:
-      /\b(search|look up|find|youtube|spotify|amazon|play store|google|browse|shop|buy|video)\b/,
+    words: /\b(search|find|youtube|spotify|amazon|play store|google|browse|shop|buy|video)\b/,
   },
   {
     name: 'play',
@@ -301,7 +301,8 @@ export const TOOLS: ToolSpec[] = [
     desc: 'change how fast you speak',
     kind: 'action',
     args: { change: oneOf(['faster', 'slower', 'normal']), percent: num(50, 200) },
-    words: /\b(speak|talk|speed|slower|faster|slow down|speed up|quicker)\b/,
+    words:
+      /\b((speak|talk)(ing)? (a bit |a little )?(more )?(slow|slower|slowly|faster|quicker|quickly|up)|speed|slower|faster|slow down|speed up|quicker)\b/,
   },
   {
     name: 'listening',
@@ -381,17 +382,66 @@ const norm = (q: string) =>
     .replace(/\s+/g, ' ')
     .trim()} `;
 
+const QUESTION_START =
+  /^((at|in|on|for|by|from|to|of|until|till|since) (what|which|whom|how|when)|what|who|whom|whose|where|when|why|how|is|are|am|do|does|did|was|were|which|can i|could i|should|would|will|have|has|had)\b/;
+
+/**
+ * The part of [q] that is asked: the last sentence, without a leading "if …," ("Tom is taller
+ * than Sam. Who is the shortest?" → "who is the shortest").
+ */
+function askedPart(q: string): string {
+  const parts = q
+    .toLowerCase()
+    .split(/[.?!]+\s+/)
+    .map((p) => p.trim())
+    .filter(Boolean);
+  const last = parts[parts.length - 1] ?? '';
+  return norm(
+    last.replace(/^(so|and|then|ok|okay|now)\b,? ?/, '').replace(/^if [^,]{1,80}, ?/, ''),
+  ).trim();
+}
+
+/** A question (its asked part starts with a question word), not a request. */
+export function looksQuestion(q: string): boolean {
+  return QUESTION_START.test(askedPart(q));
+}
+
 /** An instruction ("text…", "turn…", "book…"), not a question. */
 export function looksImperative(q: string): boolean {
   const s = norm(q).trim();
-  if (
-    /^(what|who|whom|whose|where|when|why|how|is|are|am|do|does|did|was|were|which|can i|could i|should|would|will|have|has|had)\b/.test(
-      s,
-    )
-  )
-    return false;
+  if (QUESTION_START.test(s) || looksQuestion(q)) return false;
   return s.split(' ').length >= 2;
 }
+
+/**
+ * Requests for words, not actions: jokes, poems, tips, explanations. Answered by the model
+ * directly unless an action word is in them too ("in one minute, tell me a fun fact").
+ */
+const GENERATIVE =
+  /^(?:please )?(?:(?:can|could|would) you )?(tell me (?:a |an |some |another |one more )?(?:joke|story|fun fact|fact|riddle|poem|bit)s?\b|tell me (?:about|something)\b|(?:write|compose|make up|draft me) (?:me )?(?:a |an |some )?(?:short |little |funny )?(?:poem|story|limerick|haiku|song|joke|riddle|paragraph|essay|speech|toast)|give me (?:\d+|a|an|some|one|two|three|four|five|a few|ten) (?:\w+ )?(?:tips|ideas|reasons|ways|examples|facts|suggestions|names|words|synonyms)\b|explain\b|describe\b|define\b|summari[sz]e (?:the|this|what) (?:idea|concept|theory|history|plot)|suggest\b|recommend\b|look up\b|find out\b|list (?:\d+|some|a few|the)\b)/;
+
+/** Opinions and remarks ("I love the camera on this phone", "thanks"): nothing to do. */
+const REMARK =
+  /^(i (really |just |do )?(love|like|hate|enjoy|adore|dislike|liked|loved|hated)|that's|that was|it's (so|really|very|quite|too)|you're|you are|thanks|thank you|nice|cool|great|wow)\b/;
+
+/** Temperature words in science, cooking or health, not the weather. */
+const SCIENCE =
+  /\b(celsius|fahrenheit|kelvin|boil|boils|boiling|freeze|freezes|freezing point|melt|melts|oven|bake|body|fever|absolute zero)\b/;
+
+/** "What did I buy Kofi for his birthday?": a memory, not the contacts' birthdays. */
+const GIFT =
+  /\b(buy|bought|get|got|give|gave|make|made|send|sent) .*\bfor (his|her|their|your|my|the) birthday\b/;
+
+/** "How much does the plumber charge?": a price, not the battery. */
+const PRICE = /\b(how much|what) (do|does|did|will|would)\b.*\bcharge\b/;
+
+/** "Where did I leave my umbrella?": a lost thing, not the forecast. */
+const LOST_THING = /\b(where|left|leave|lost|find|found)\b.*\b(umbrella|coat)\b/;
+
+/** Sending or calling "me": there's no one to send to; the model answers instead. */
+const SELF_SEND =
+  /\b(text|message|msg|whatsapp|e-?mail|mail|call|ring|phone|send|ping) (me|myself|us)\b(?! (back|later|when|if|at|in|on|tomorrow|tonight))/;
+const SELF_SEND_TOOLS = new Set(['message', 'email', 'call']);
 
 /** Questions about general knowledge, opinions, or the scene: the plain answer path is best. */
 const PLAIN =
@@ -412,11 +462,27 @@ export function relevantTools(
       !(opts.routine && NOT_IN_ROUTINES.has(t.name)) &&
       !(opts.offRecord && NOT_OFF_RECORD.has(t.name)),
   );
-  const hits = usable.filter((t) => t.words.test(s));
+  const question = looksQuestion(q);
+  const selfSend = SELF_SEND.test(s);
+  const hits = usable.filter(
+    (t) =>
+      t.words.test(s) &&
+      !(t.name === 'weather' && (SCIENCE.test(s) || LOST_THING.test(s))) &&
+      !(t.name === 'phone_info' && PRICE.test(s)) &&
+      !(t.name === 'birthdays' && GIFT.test(s)) &&
+      // A question asks for an answer: "what language do people speak", "how many minutes in
+      // 3 hours" mustn't offer speech speed or timers. Requests ("can you…") aren't questions.
+      !(question && t.kind === 'action') &&
+      !(selfSend && SELF_SEND_TOOLS.has(t.name)),
+  );
   const imperative = looksImperative(q);
+  const t0 = s.trim();
   // A plain knowledge question with nothing but memory words in it: answer normally.
   const onlyMemory = hits.every((t) => t.kind === 'answer');
-  if (!imperative && (PLAIN.test(s.trim()) || onlyMemory)) return [];
+  if (!imperative && (PLAIN.test(t0) || onlyMemory)) return [];
+  // Jokes, poems, tips, explanations, remarks, "text me a joke": nothing to act on.
+  if (onlyMemory && (GENERATIVE.test(t0) || selfSend)) return [];
+  if (REMARK.test(t0)) return [];
   if (!hits.length) {
     // An instruction no rule knew and no word points at: offer everything (slower, rare).
     return imperative ? usable.slice(0, opts.max ?? usable.length) : [];

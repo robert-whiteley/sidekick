@@ -73,6 +73,8 @@ export function recapTopic(q: string): string | null {
   const t = m[1]
     .replace(/\b(with (me|you|us)|for me|please|so far|then)\b/g, ' ')
     .replace(/^(the|our|my|a) /, '')
+    // "What did I talk about with Hamid?": the topic is Hamid.
+    .replace(/^(with|to) /, '')
     .replace(/\s+/g, ' ')
     .trim();
   if (!t || t.length < 2 || EMPTY_TOPIC.test(t)) return null;
