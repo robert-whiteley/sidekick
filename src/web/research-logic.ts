@@ -164,7 +164,14 @@ export function parseWikipediaSearch(json: unknown, lang = 'en'): WebSource[] {
         name: 'Wikipedia',
         title,
         url: `https://${lang}.wikipedia.org/wiki/${encodeURIComponent(title.replace(/ /g, '_'))}`,
-        text: clipText(decodeEntities(snippet.replace(/<[^>]+>/g, '').replace(/[<>]/g, ''))),
+        text: clipText(
+          decodeEntities(
+            snippet
+              .replace(/<[^>]*>/g, ' ')
+              .replace(/\s+/g, ' ')
+              .trim(),
+          ),
+        ),
         licence: 'CC BY-SA 4.0',
       },
     ];
