@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { View } from 'react-native';
+import { Platform, View } from 'react-native';
 
 import {
   addToCalendar,
@@ -97,7 +97,7 @@ export function FollowupsSection({ part = 'both' }: { part?: 'settings' | 'list'
           }}
         />
       )}
-      {showSettings && (
+      {showSettings && Platform.OS !== 'ios' && (
         <NavRow
           label="Routines"
           hint='Things Sidekick does by itself at a time or when something happens, e.g. "every weekday at 8 brief me".'

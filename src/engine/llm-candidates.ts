@@ -1,3 +1,5 @@
+import { Platform } from 'react-native';
+
 import type { LlmCandidate } from '../../modules/sidekick-native';
 import {
   type ActiveChat,
@@ -30,8 +32,15 @@ function currentChat(): ActiveChat {
   }
 }
 
-function candidatesFor(id: ActiveChat['id'], soc: string, dir: string): LlmCandidate[] {
+function candidatesFor(
+  id: ActiveChat['id'],
+  soc: string,
+  dir: string,
+  ios: boolean,
+): LlmCandidate[] {
   const m = catalogModel(id);
+  // iPhone: CPU only for now (LiteRT-LM's iOS framework has no Metal accelerator yet, ADR 0006).
+  if (ios) return [{ modelPath: `${dir}/${m.generic.name}`, backend: 'cpu' }];
   const out: LlmCandidate[] = [];
   const gen = tensorGeneration(soc);
   const t = gen ? m.tensor[gen] : undefined;
@@ -50,11 +59,12 @@ export function llmCandidates(
   soc: string,
   modelsDir: string,
   chat: ActiveChat = currentChat(),
+  ios = Platform.OS === 'ios',
 ): LlmCandidate[] {
   const dir = modelsDir.replace(/\/$/, '');
-  const out = candidatesFor(chat.id, soc, dir);
+  const out = candidatesFor(chat.id, soc, dir, ios);
   if (chat.previous && chat.previous !== chat.id)
-    out.push(...candidatesFor(chat.previous, soc, dir));
+    out.push(...candidatesFor(chat.previous, soc, dir, ios));
   return out;
 }
 
@@ -69,8 +79,17 @@ export function setRequiredSpeechFiles(source: () => ModelFile[]) {
   speechFiles = source;
 }
 
-/** Everything the app downloads on first run: chat model, speech, memory search, photo text. */
-export function allRequiredFiles(soc: string, chat: ActiveChat = currentChat()): ModelFile[] {
+/**
+ * Everything the app downloads on first run: chat model, speech, memory search, photo text.
+ * The iPhone needs only the chat model and memory search: speech-to-text and photo text are
+ * built into iOS (Apple's on-device recognizer and Vision).
+ */
+export function allRequiredFiles(
+  soc: string,
+  chat: ActiveChat = currentChat(),
+  ios = Platform.OS === 'ios',
+): ModelFile[] {
+  if (ios) return [...requiredModelFiles(soc, chat), EMBEDDER_FILE];
   return [
     ...requiredModelFiles(soc, chat),
     ...speechFiles(),

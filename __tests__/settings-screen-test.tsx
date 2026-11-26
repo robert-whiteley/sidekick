@@ -1,4 +1,5 @@
 import { fireEvent, render, screen } from '@testing-library/react-native';
+import { Platform } from 'react-native';
 
 import MemoryScreen from '@/app/memory';
 import SettingsScreen from '@/app/settings';
@@ -82,16 +83,40 @@ test('settings home lists the sections', async () => {
 });
 
 test('assistant page shows voice with its Recommended value and follow-up settings', async () => {
+  Platform.OS = 'android';
+  try {
+    await render(<AssistantSettings />);
+    expect(screen.getByText('Natural voice (Recommended)')).toBeTruthy();
+    expect(screen.getByText('Routines')).toBeTruthy();
+    expect(screen.getByText('Wake word')).toBeTruthy();
+  } finally {
+    Platform.OS = 'ios';
+  }
+});
+
+test('on iPhone the assistant page has no wake word or Natural voice', async () => {
   await render(<AssistantSettings />);
-  expect(screen.getByText('Natural voice (Recommended)')).toBeTruthy();
-  expect(screen.getByText('Routines')).toBeTruthy();
-  expect(screen.getByText('Wake word')).toBeTruthy();
+  expect(screen.queryByText('Wake word')).toBeNull();
+  expect(screen.queryByText(/Natural voice/)).toBeNull();
+  expect(screen.queryByText('Routines')).toBeNull();
+  expect(screen.getByText('Speak answers')).toBeTruthy();
 });
 
 test('camera page marks Recommended values for this phone', async () => {
+  Platform.OS = 'android';
+  try {
+    await render(<CameraAudioSettings />);
+    expect(screen.getByText('0.5 (Recommended)')).toBeTruthy(); // Pixel 5: slower chip
+    expect(screen.getByText('3 days (Recommended)')).toBeTruthy();
+  } finally {
+    Platform.OS = 'ios';
+  }
+});
+
+test('on iPhone the camera page explains live camera memory needs Android', async () => {
   await render(<CameraAudioSettings />);
-  expect(screen.getByText('0.5 (Recommended)')).toBeTruthy(); // Pixel 5: slower chip
-  expect(screen.getByText('3 days (Recommended)')).toBeTruthy();
+  expect(screen.getByText(/Live camera memory needs Android/)).toBeTruthy();
+  expect(screen.getByText('Remember photos')).toBeTruthy();
 });
 
 test('privacy page has consent and delete', async () => {

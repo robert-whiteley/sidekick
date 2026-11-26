@@ -80,6 +80,11 @@ test('phone features say why something is unavailable', () => {
   const usb = ios.find((f) => f.id === 'usbCamera')!;
   expect(usb.available).toBe(false);
   expect(usb.why).toMatch(/iPhone/);
+  for (const id of ['listen', 'camera', 'pocketVoice', 'tile', 'widget', 'assistant'])
+    expect(ios.find((f) => f.id === id)).toMatchObject({ available: false });
+  const android = phoneFeatures(phone({}));
+  expect(android.find((f) => f.id === 'listen')!.available).toBe(true);
+  expect(android.find((f) => f.id === 'camera')!.available).toBe(true);
   const play = phoneFeatures(phone({}));
   expect(play.find((f) => f.id === 'directSms')).toMatchObject({ available: false });
   expect(play.find((f) => f.id === 'directSms')!.why).toMatch(/Google Play/);

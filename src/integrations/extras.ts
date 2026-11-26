@@ -25,7 +25,9 @@ import {
   type RideApp,
   searchLink,
   type StepSample,
+  stepsSentence,
   stepsToday,
+  stepWindow,
   stepsYesterday,
   uberLink,
   upcomingBirthdays,
@@ -65,6 +67,7 @@ export async function runExtra(e: Extra, now = new Date()): Promise<PlannedActio
       return reply(storageLine());
     case 'steps':
       if (!isOn('phoneInfo', 'steps')) return off('Steps');
+      if (Platform.OS === 'ios') return reply(await iosStepsLine(e.day, now.getTime()));
       return reply(await stepsLine(n, e.day, now.getTime()));
     case 'screenTime':
       if (!isOn('phoneInfo', 'screenTime')) return off('Screen time');
@@ -239,6 +242,27 @@ async function askActivity(): Promise<boolean> {
     'android.permission.ACTIVITY_RECOGNITION' as Parameters<typeof PermissionsAndroid.request>[0],
   );
   return r === PermissionsAndroid.RESULTS.GRANTED;
+}
+
+/**
+ * iPhone: the step count from Motion & Fitness (the last 7 days are kept by iOS, so no sampling
+ * is needed). expo-sensors is linked on iPhone only, so it is required lazily.
+ */
+async function iosStepsLine(day: 'today' | 'yesterday', now: number): Promise<string> {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { Pedometer } = require('expo-sensors') as typeof import('expo-sensors');
+    if (!(await Pedometer.isAvailableAsync())) return 'This phone has no step counter.';
+    const perm = await Pedometer.requestPermissionsAsync();
+    if (!perm.granted)
+      return 'I need Motion & Fitness access to count steps (iPhone Settings → Sidekick).';
+    const w = stepWindow(day, now);
+    const r = await Pedometer.getStepCountAsync(w.start, w.end);
+    return stepsSentence(r.steps, day);
+  } catch (e) {
+    console.log(`[steps] ${String(e)}`);
+    return 'The step counter didn’t answer. Try again in a moment.';
+  }
 }
 
 async function stepsLine(

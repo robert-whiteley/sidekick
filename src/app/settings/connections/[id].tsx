@@ -24,7 +24,9 @@ export default function ConnectionSettings() {
       </Page>
     );
   }
-  const a = integrationAvailability(item, readDeviceProfile());
+  const profile = readDeviceProfile();
+  const a = integrationAvailability(item, profile);
+  const needs = profile.platform === 'ios' ? (item.needsIphone ?? item.needs) : item.needs;
   return (
     <Page title={item.name}>
       <Section title={item.name}>
@@ -35,21 +37,23 @@ export default function ConnectionSettings() {
           </AppText>
         )}
         {a.available &&
-          item.switches.map((sw) => (
-            <Row
-              key={sw.id}
-              label={sw.label}
-              value={isOn(item.id, sw.id)}
-              onChange={(v) => {
-                // Google features ask Google's own consent for just that access first.
-                if (v && item.google) void connectGoogle(item.google);
-                else setSwitch(item.id, sw.id, v);
-              }}
-            />
-          ))}
-        {a.available && item.needs ? (
+          item.switches
+            .filter((sw) => !a.only || a.only.includes(sw.id))
+            .map((sw) => (
+              <Row
+                key={sw.id}
+                label={sw.label}
+                value={isOn(item.id, sw.id)}
+                onChange={(v) => {
+                  // Google features ask Google's own consent for just that access first.
+                  if (v && item.google) void connectGoogle(item.google);
+                  else setSwitch(item.id, sw.id, v);
+                }}
+              />
+            ))}
+        {a.available && needs ? (
           <AppText variant="bodySmall" tone="muted">
-            Needs: {item.needs}
+            Needs: {needs}
           </AppText>
         ) : null}
       </Section>

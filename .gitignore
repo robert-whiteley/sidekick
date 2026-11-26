@@ -56,3 +56,7 @@ fastlane/report.xml
 fastlane/Preview.html
 .bundle/
 vendor/bundle/
+
+# iPhone native module: LiteRT-LM framework and place pack, fetched/copied by the podspec
+modules/sidekick-native/ios/vendor/
+modules/sidekick-native/ios/Resources/

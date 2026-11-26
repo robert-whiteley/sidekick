@@ -905,20 +905,23 @@ export function AskScreen({
                   onCameraReady={() => setCameraReady(true)}
                 />
               )}
-              <Tappable
-                feedback="dim"
-                style={[styles.liveToggle, live && styles.liveToggleOn]}
-                onPress={() => void toggleLive()}
-                accessibilityRole="switch"
-                accessibilityState={{ checked: live }}
-                accessibilityLabel="Live camera memory"
-                hitSlop={12}
-              >
-                {live ? <View style={styles.liveDot} /> : null}
-                <AppText variant="badge" tone="onMedia">
-                  Live
-                </AppText>
-              </Tappable>
+              {/* Live camera memory films in the background: Android only (ADR 0006). */}
+              {Platform.OS !== 'ios' && (
+                <Tappable
+                  feedback="dim"
+                  style={[styles.liveToggle, live && styles.liveToggleOn]}
+                  onPress={() => void toggleLive()}
+                  accessibilityRole="switch"
+                  accessibilityState={{ checked: live }}
+                  accessibilityLabel="Live camera memory"
+                  hitSlop={12}
+                >
+                  {live ? <View style={styles.liveDot} /> : null}
+                  <AppText variant="badge" tone="onMedia">
+                    Live
+                  </AppText>
+                </Tappable>
+              )}
               <IconButton
                 name="close"
                 size={22}
