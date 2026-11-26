@@ -211,6 +211,15 @@ Read this before proposing any of these again. Each line says why.
 - Killing the app mid-answer loses that question. Rare; left.
 - A second send while answering isn't queued (text stays in the box). Left.
 - "Search the web in your browser" shows under every offline answer. Taste; left for the owner.
+- Offline hand-offs (26 Nov, limits bench): blocking every browser and app hand-off while Offline
+  was considered and rejected. It would overturn the link above and the offline WhatsApp/SMS
+  hand-offs (ADR 0008), which the user asks for or taps explicitly, and where the other app, not
+  Sidekick, does the network part. What changed instead: with Offline on, a web search (or a named
+  app that isn't installed, which would fall back to the browser, including Uber's web page) is no
+  longer opened by itself; the reply says so and shows the browser link, opened only on tap.
+  Installed apps the user names (YouTube, Maps, Spotify, rides, messages) still open. The case
+  that found it: a plain "give me a quick recipe for pancakes" was routed to app_search and opened
+  Chrome while Offline; requests for words now get no tools at all.
 - Reading incoming notifications and unplugging the USB camera mid-use were not tested on the
   owner's phone (privacy / needs a person there).
 - After the app gives up on a silent USB camera it isn't retried until replugged (retrying a dead

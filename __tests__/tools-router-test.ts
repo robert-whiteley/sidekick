@@ -59,6 +59,15 @@ describe('which tools are offered', () => {
     expect(names('sort out the thing for Jo').length).toBeGreaterThan(10);
     expect(names('is it nice')).toEqual([]);
   });
+  it('never offers an action for a general request with no action word (pancake case)', () => {
+    for (const q of [
+      'Give me a quick recipe for pancakes',
+      'Write one about autumn',
+      'Give me a packing checklist in five items',
+    ])
+      expect(relevantTools(q).some((t) => t.kind === 'action')).toBe(false);
+    expect(names('search the web for pancake recipes')).toContain('app_search');
+  });
   it('never offers reply first, nor routines in a routine or places off the record', () => {
     expect(names('sort out the thing for Jo')).not.toContain('reply');
     expect(names('every morning read my day', { routine: true })).not.toContain('routine');

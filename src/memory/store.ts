@@ -38,6 +38,7 @@ import {
   claimPending,
   cosine,
   ownerCentroid,
+  PENDING_CLIP_MS,
   type PendingClip,
   voiceFromPending,
   type Speaker,
@@ -47,6 +48,7 @@ import { CONVERSATION_GAP_MS, speakerLabel } from './people-logic';
 import { liveTranscript } from '@/engine/live-transcript';
 import { noteFix } from '@/engine/location-track';
 import { momentIdsAtNamedPlace } from './places-store';
+import { AckPolicy, takeJournal } from './journal-take';
 
 export type Moment = {
   id: number;
@@ -129,7 +131,13 @@ async function assignSpeaker(
   const db = await getDb();
   const all = await speakers();
   console.log(
-    `[voice] ${owner ? 'owner clip' : 'clip'} sims: ${all.map((x) => `${x.id}${x.isOwner ? '*' : ''}=${cosine(voice, x.centroid).toFixed(2)}`).join(' ')}`,
+    // The closest few only: one entry per voice ever heard made this line grow without end.
+    `[voice] ${owner ? 'owner clip' : 'clip'} sims (of ${all.length}): ${all
+      .map((x) => ({ x, sim: cosine(voice, x.centroid) }))
+      .sort((p, q) => q.sim - p.sim)
+      .slice(0, 5)
+      .map(({ x, sim }) => `${x.id}${x.isOwner ? '*' : ''}=${sim.toFixed(2)}`)
+      .join(' ')}`,
   );
   const choice = chooseSpeaker(voice, owner, durationMs, trusted, all);
   if (choice.kind === 'none') {
@@ -164,6 +172,12 @@ async function assignSpeaker(
 
 /** Short clips nobody matched yet (in memory only), re-checked when a new voice appears. */
 let pendingClips: PendingClip[] = [];
+
+/** Waits for a voice to claim it; ones past PENDING_CLIP_MS are dropped (only ever used within it). */
+function addPendingClip(c: PendingClip) {
+  pendingClips = pendingClips.filter((p) => c.at - p.at <= PENDING_CLIP_MS);
+  pendingClips.push(c);
+}
 
 /** Relabels earlier "Someone" lines that clearly belong to a voice that just became known. */
 async function claimWaitingClips(joined: Speaker, all: Speaker[]) {
@@ -242,12 +256,16 @@ export async function ingestJournal(): Promise<number> {
   }
 }
 
+const journalAcks = new AckPolicy();
+
 async function ingestJournalNow(): Promise<number> {
-  const lines = SidekickNative.journalDrain();
+  const batch = takeJournal(SidekickNative);
+  const lines = batch.lines;
   if (!lines.length) return 0;
   const db = await getDb();
   const consentMode = consentModeNow();
   let added = 0;
+  let failed = false;
   const kept: KeptLine[] = [];
   for (const line of lines) {
     let e: JournalEntry;
@@ -256,64 +274,85 @@ async function ingestJournalNow(): Promise<number> {
     } catch {
       continue;
     }
-    if (e.kind === 'location') {
-      // The location track (while listening); not a moment.
-      await noteFix(e).catch(() => false);
-      continue;
-    }
-    if (e.kind === 'answer') {
-      const r = await db.execute('INSERT INTO moments (kind, at, text) VALUES (?, ?, ?)', [
-        'answer',
-        e.at,
-        `Q: ${e.question}\nA: ${e.text}`,
-      ]);
-      await tagPlace(r.insertId!, entryPlace(e));
-      added++;
-      continue;
-    }
-    const { speaker: s, owner: isOwner } = await assignSpeaker(e.voice, e.owner, e.durationMs);
-    if (isOwner && isConsentQuestion(e.text)) lastConsentAsk = e.at;
-    if (!isOwner) {
-      let consented = false;
-      if (s) {
-        const row = await db.execute('SELECT consented_at FROM speakers WHERE id = ?', [s.id]);
-        consented = row.rows[0]?.consented_at != null;
-        if (!consented && e.at - lastConsentAsk < CONSENT_WINDOW_MS && isAgreement(e.text)) {
-          await db.execute('UPDATE speakers SET consented_at = ? WHERE id = ?', [e.at, s.id]);
-          consented = true;
-        }
+    try {
+      if (batch.replayed > 0 && e.kind !== 'location') {
+        // Handed out before (the app was killed or a write failed while saving): skip saved ones.
+        const seen = await db.execute('SELECT 1 FROM moments WHERE kind = ? AND at = ? LIMIT 1', [
+          e.kind,
+          e.at,
+        ]);
+        if (seen.rows.length) continue;
       }
-      if (!keepOtherSpeech({ consentMode, speakerConsented: consented })) {
-        // Not kept: nor is their voice recording.
-        if (e.audioPath) SidekickNative.deleteFile(e.audioPath);
-        if (!s && e.voice)
-          pendingClips.push({ at: e.at, voice: e.voice, momentId: null, durationMs: e.durationMs });
-        liveTranscript.put({
-          at: e.at,
-          text: e.text,
-          speakerId: s?.id ?? null,
-          isOwner,
-          saved: false,
-        });
+      if (e.kind === 'location') {
+        // The location track (while listening); not a moment.
+        await noteFix(e).catch(() => false);
         continue;
       }
-    }
-    const ins = await db.execute(
-      'INSERT INTO moments (kind, at, text, speaker_id, audio_path) VALUES (?, ?, ?, ?, ?)',
-      [e.kind, e.at, e.text, s?.id ?? null, e.audioPath ?? null],
-    );
-    await tagPlace(ins.insertId!, entryPlace(e));
-    if (!s && !isOwner && e.voice)
-      pendingClips.push({
+      if (e.kind === 'answer') {
+        const r = await db.execute('INSERT INTO moments (kind, at, text) VALUES (?, ?, ?)', [
+          'answer',
+          e.at,
+          `Q: ${e.question}\nA: ${e.text}`,
+        ]);
+        await tagPlace(r.insertId!, entryPlace(e));
+        added++;
+        continue;
+      }
+      const { speaker: s, owner: isOwner } = await assignSpeaker(e.voice, e.owner, e.durationMs);
+      if (isOwner && isConsentQuestion(e.text)) lastConsentAsk = e.at;
+      if (!isOwner) {
+        let consented = false;
+        if (s) {
+          const row = await db.execute('SELECT consented_at FROM speakers WHERE id = ?', [s.id]);
+          consented = row.rows[0]?.consented_at != null;
+          if (!consented && e.at - lastConsentAsk < CONSENT_WINDOW_MS && isAgreement(e.text)) {
+            await db.execute('UPDATE speakers SET consented_at = ? WHERE id = ?', [e.at, s.id]);
+            consented = true;
+          }
+        }
+        if (!keepOtherSpeech({ consentMode, speakerConsented: consented })) {
+          // Not kept: nor is their voice recording.
+          if (e.audioPath) SidekickNative.deleteFile(e.audioPath);
+          if (!s && e.voice)
+            addPendingClip({ at: e.at, voice: e.voice, momentId: null, durationMs: e.durationMs });
+          liveTranscript.put({
+            at: e.at,
+            text: e.text,
+            speakerId: s?.id ?? null,
+            isOwner,
+            saved: false,
+          });
+          continue;
+        }
+      }
+      const ins = await db.execute(
+        'INSERT INTO moments (kind, at, text, speaker_id, audio_path) VALUES (?, ?, ?, ?, ?)',
+        [e.kind, e.at, e.text, s?.id ?? null, e.audioPath ?? null],
+      );
+      await tagPlace(ins.insertId!, entryPlace(e));
+      if (!s && !isOwner && e.voice)
+        addPendingClip({
+          at: e.at,
+          voice: e.voice,
+          momentId: ins.insertId!,
+          durationMs: e.durationMs,
+        });
+      kept.push({ id: ins.insertId!, at: e.at, speakerId: s?.id ?? null, isOwner, text: e.text });
+      liveTranscript.put({
         at: e.at,
-        voice: e.voice,
-        momentId: ins.insertId!,
-        durationMs: e.durationMs,
+        text: e.text,
+        speakerId: s?.id ?? null,
+        isOwner,
+        saved: true,
       });
-    kept.push({ id: ins.insertId!, at: e.at, speakerId: s?.id ?? null, isOwner, text: e.text });
-    liveTranscript.put({ at: e.at, text: e.text, speakerId: s?.id ?? null, isOwner, saved: true });
-    added++;
+      added++;
+    } catch (err) {
+      // Kept on the phone and tried again at the next drain (a full disk, a locked database).
+      failed = true;
+      console.log(`[memory] journal line not saved: ${String(err)}`);
+    }
   }
+  if (journalAcks.done(failed)) batch.ack();
   try {
     await suggestNamesFrom(kept);
   } catch (err) {

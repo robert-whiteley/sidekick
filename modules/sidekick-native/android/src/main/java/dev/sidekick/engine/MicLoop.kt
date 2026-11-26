@@ -598,20 +598,62 @@ object Speech {
  * running. JS drains it into the encrypted memory database.
  */
 object Journal {
-  private fun file(ctx: Context) = File(ctx.filesDir, "data/journal.jsonl").apply { parentFile?.mkdirs() }
+  private fun dir(ctx: Context) = File(ctx.filesDir, "data")
+  private fun file(dir: File) = File(dir, "journal.jsonl").apply { parentFile?.mkdirs() }
+  private fun inflight(dir: File) = File(dir, "journal.inflight.jsonl")
 
   @Synchronized
-  fun append(ctx: Context, entry: JSONObject) {
-    file(ctx).appendText(entry.toString() + "\n")
+  fun append(ctx: Context, entry: JSONObject) = append(dir(ctx), entry.toString())
+
+  @Synchronized
+  fun append(dir: File, line: String) {
+    file(dir).appendText(line + "\n")
   }
 
-  /** Returns everything logged since the last drain and clears it. */
+  /** Returns everything logged since the last drain and clears it (Delete all data). */
   @Synchronized
   fun drain(ctx: Context): List<String> {
-    val f = file(ctx)
-    if (!f.exists()) return emptyList()
-    val lines = f.readLines().filter { it.isNotBlank() }
-    f.delete()
+    val d = dir(ctx)
+    val lines = take(d, Int.MAX_VALUE).lines
+    ack(d)
     return lines
   }
+
+  /**
+   * Like [drain], but the lines stay on disk until [ack]: if the app is killed (or the database
+   * write fails) while saving them, the next take hands them out again. [JournalTake.replayed] > 0
+   * means some lines may have been handed out before (JS skips any it already saved). At most
+   * [max] lines per take, so a backlog from days with the app closed comes in in pieces.
+   */
+  @Synchronized
+  fun take(ctx: Context, max: Int = TAKE_MAX): JournalTake = take(dir(ctx), max)
+
+  @Synchronized
+  fun take(dir: File, max: Int): JournalTake {
+    val held = inflight(dir)
+    val old = if (held.exists()) held.readLines().filter { it.isNotBlank() } else emptyList()
+    val f = file(dir)
+    val fresh = if (f.exists()) f.readLines().filter { it.isNotBlank() } else emptyList()
+    if (fresh.isEmpty() && old.size <= max) return JournalTake(old, old.size)
+    val all = old + fresh
+    val batch = all.take(max)
+    val rest = all.drop(max)
+    // Written before the journal is cut, so a kill in between only repeats lines (never loses any).
+    held.writeText(batch.joinToString("") { it + "\n" })
+    if (rest.isEmpty()) f.delete() else f.writeText(rest.joinToString("") { it + "\n" })
+    return JournalTake(batch, minOf(old.size, batch.size))
+  }
+
+  /** The last [take] is safely saved. */
+  @Synchronized
+  fun ack(ctx: Context) = ack(dir(ctx))
+
+  @Synchronized
+  fun ack(dir: File) {
+    inflight(dir).delete()
+  }
+
+  const val TAKE_MAX = 500
 }
+
+data class JournalTake(val lines: List<String>, val replayed: Int)

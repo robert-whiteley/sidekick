@@ -20,9 +20,11 @@ import {
   chatSystem,
   compact,
   type CompactReason,
+  fitQuestion,
   Conversation,
   historyBudgetTokens,
   IDLE_COMPACT_MS,
+  isContextFull,
   SUMMARY_MAX_TOKENS,
   SUMMARY_SYSTEM,
 } from './conversation';
@@ -92,6 +94,8 @@ export type AnswerResult = {
   readBackId?: string;
   /** Stored moments the answer is about (video clip or still), shown in the chat player. */
   media?: { momentAt: number; kind: 'video' | 'photo' | 'audio'; path?: string }[];
+  /** Offline search hand-off: show the browser link with these words (opened only on tap). */
+  browserQuery?: string;
   /** It needed the internet and there was none: kept for later (online-queue.ts). */
   waitingOnline?: boolean;
 };
@@ -248,6 +252,7 @@ export async function answer(
       local: true,
       draftId,
       readBackId,
+      browserQuery: plan.kind === 'reply' ? plan.browserQuery : undefined,
     };
   };
   const routed = async (o: RouteOutcome): Promise<AnswerResult | null> => {
@@ -468,14 +473,27 @@ export async function answer(
     question,
     !!image,
     (webPart) =>
-      `${agenda}${person}${webPart}${notes}${seenText}${recallPart}${questionPart(recall?.modelQuestion ?? withClipboard(question) ?? question)}`,
+      `${agenda}${person}${webPart}${notes}${seenText}${recallPart}${questionPart(fitQuestion(recall?.modelQuestion ?? withClipboard(question) ?? question))}`,
     async (prompt, t, o) => {
-      const r = await askLlm(prompt, image, t, {
-        system,
-        keepHistory: keep,
-        undoable: o?.undoable,
-        offRecord,
-      });
+      // Would overflow the model's chat (compaction kept being interrupted): start fresh from
+      // the summary and the last turns.
+      if (keep && !offRecord && conv.fitOrRestart(prompt.length)) {
+        console.log(`[chat] the model's chat is full: starting a fresh one`);
+        keep = false;
+      }
+      const ask = () =>
+        askLlm(prompt, image, t, { system, keepHistory: keep, undoable: o?.undoable, offRecord });
+      let r: Awaited<ReturnType<typeof ask>>;
+      try {
+        r = await ask();
+      } catch (e) {
+        // Fuller than estimated: once more in a fresh chat, or every later question would fail.
+        if (!keep || !isContextFull(e)) throw e;
+        console.log(`[chat] model chat full (${String(e)}); asking again in a fresh one`);
+        if (!offRecord) conv.restart();
+        keep = false;
+        r = await ask();
+      }
       // A second pass (after an online lookup) continues the same chat.
       if (!keep) {
         if (offRecord) offRecordStarted = true;

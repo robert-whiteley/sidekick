@@ -1,4 +1,5 @@
 import * as Clipboard from 'expo-clipboard';
+import { memo } from 'react';
 import { Share, StyleSheet, View } from 'react-native';
 
 import { AppText, radius, showDialog, space, Tappable } from '@/ui';
@@ -18,7 +19,11 @@ export function messageActions(text: string) {
   ]);
 }
 
-export function MessageBubble({
+/**
+ * One chat message. Memoised: while an answer streams only its own bubble re-renders, so a long
+ * chat doesn't slow every new word (each word used to re-render every bubble on screen).
+ */
+export const MessageBubble = memo(function MessageBubble({
   m,
   theme,
   speaking,
@@ -66,7 +71,7 @@ export function MessageBubble({
       ) : null}
     </View>
   );
-}
+});
 
 const styles = StyleSheet.create({
   row: { alignItems: 'flex-start', gap: space.sm },

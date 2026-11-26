@@ -728,8 +728,11 @@ export function AskScreen({
           text: r.text,
           pending: false,
           web: r.web ?? [],
-          webAsk:
-            imagePath || grab || r.local ? { question: '' } : { question: q, query: r.webQuery },
+          webAsk: r.browserQuery
+            ? { question: q, query: r.browserQuery }
+            : imagePath || grab || r.local
+              ? { question: '' }
+              : { question: q, query: r.webQuery },
           media: mediaForAnswer(r as typeof r & { media?: ChatMedia[] }),
           draftId: r.draftId,
         }),
@@ -741,6 +744,7 @@ export function AskScreen({
     } catch (e) {
       setSpeakingId(null);
       setMessages((m) => patchMessage(m, replyId, { pending: false }));
+      console.log(`[ask] failed: ${String(e)}`);
       setStatus(`Something went wrong: ${e instanceof Error ? e.message : String(e)}`);
     } finally {
       holdLiveCamera(false);
@@ -893,7 +897,7 @@ export function AskScreen({
                     m={it.m}
                     theme={theme}
                     speaking={speakingId === it.m.id}
-                    onMute={mute}
+                    onMute={speakingId === it.m.id ? mute : undefined}
                   />
                   {it.m.draftId ? <DraftCard id={it.m.draftId} theme={theme} /> : null}
                 </View>

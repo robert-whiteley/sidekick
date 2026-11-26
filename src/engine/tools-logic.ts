@@ -447,6 +447,10 @@ const SELF_SEND_TOOLS = new Set(['message', 'email', 'call']);
 const PLAIN =
   /^(what is|what are|what's|who is|who was|who are|why|explain|define|tell me (a joke|about (the|a|an) )|how (do|does|did|can|could|would|should) (you|i|we|it|they|people|a|an|the) (make|cook|work|fix|say|spell|pronounce|learn|become))\b/;
 
+/** Asks for text to be written or said: answered by the model, not a tool. */
+const ASKS_FOR_WORDS =
+  /^(give me|tell me|write|rewrite|list|suggest|explain|describe|summari[sz]e|shorten|translate|name|make it|make (me )?(a|an|up)|another|compose|come up with|think of|recommend|teach me|show me how|help me (write|think|plan|choose|decide))\b/;
+
 /**
  * The tools worth offering for [q], most relevant first, at most [max]; empty when the request is
  * plainly informational or no tool fits. `reply` is never offered first (only in chains).
@@ -484,8 +488,12 @@ export function relevantTools(
   if (onlyMemory && (GENERATIVE.test(t0) || selfSend)) return [];
   if (REMARK.test(t0)) return [];
   if (!hits.length) {
-    // An instruction no rule knew and no word points at: offer everything (slower, rare).
-    return imperative ? usable.slice(0, opts.max ?? usable.length) : [];
+    // An instruction no rule knew and no word points at: offer everything (slower, rare). Not
+    // for a request for words ("give me a recipe for pancakes", "write one about autumn"): that
+    // is an answer, and offering every action let Gemma open a web search in the browser for it
+    // (Pixel 5, 26 Nov), besides ~15 s of routing over 30 tools on each such turn.
+    if (!imperative || ASKS_FOR_WORDS.test(s.trim())) return [];
+    return usable.slice(0, opts.max ?? usable.length);
   }
   // Memory search stays available: a request that matched an action word may still be a recall.
   const memory = usable.find((t) => t.name === 'memory_search');
