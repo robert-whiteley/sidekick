@@ -317,6 +317,38 @@ class SidekickNativeModule : Module() {
       mapOf("text" to engine.transcribe(audio), "voice" to engine.voiceprint(audio)?.map { it.toDouble() })
     }
 
+    // --- Interpreter (src/engine/interpreter.ts) ---
+    // Push-to-talk for one side of an interpreted conversation (no live English words).
+    Function("interpretListen") { _: String -> MicLoop.startPtt(context, partials = false) }
+
+    // Ends it and transcribes with the side's model: "main" (the usual speech-to-text, for the
+    // owner's English), "parakeet" (v3 folder) or "whisper" (folder + language).
+    AsyncFunction("interpretHeard") { kind: String, dir: String, language: String ->
+      val audio = MicLoop.stopPtt()
+      if (audio.size < SAMPLE_RATE / 4) return@AsyncFunction ""
+      if (kind == "main") Speech.engine(context, MicLoop.wakeKeywords).transcribe(audio)
+      else InterpretAsr.transcribe(context, kind, dir, language, audio)
+    }
+
+    // Transcribes a WAV file the same way (bench: made-up test clips).
+    AsyncFunction("interpretHeardWav") { wavPath: String, kind: String, dir: String, language: String ->
+      val audio = Wav.read16kMono(java.io.File(wavPath))
+      val t0 = android.os.SystemClock.elapsedRealtime()
+      val text =
+        if (kind == "main") Speech.engine(context, MicLoop.wakeKeywords).transcribe(audio)
+        else InterpretAsr.transcribe(context, kind, dir, language, audio)
+      mapOf("text" to text, "ms" to (android.os.SystemClock.elapsedRealtime() - t0).toDouble())
+    }
+
+    // Frees the interpreter's speech model (the conversation ended).
+    AsyncFunction("interpretUnload") { InterpretAsr.unload() }
+
+    // Offline voice for a BCP-47 tag: "ready" | "download" | "missing" | "none".
+    AsyncFunction("ttsVoiceStatus") { tag: String -> InterpretVoices.status(context, tag) }
+
+    // Opens the speech engine's screen for downloading voices.
+    Function("ttsInstallVoices") { InterpretVoices.openInstall(context) }
+
     // Loads the speech models now (so the first push-to-talk isn't slow); throws if any are missing.
     AsyncFunction("speechWarmUp") { Speech.engine(context, MicLoop.wakeKeywords); true }
 

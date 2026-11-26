@@ -4,6 +4,7 @@ import { Platform } from 'react-native';
 import SidekickNative from '../../modules/sidekick-native';
 import { downloadFile, isDownloaded, wifiOnlyDownloads } from './downloads';
 import { setRequiredSpeechFiles } from './llm-candidates';
+import { interpretLanguage } from './interpreter-logic';
 import { type SpeechModelId, speechModelFor } from './language-logic';
 import { MODEL_FILES, type ModelFile, SPEECH_FILES, speechToTextFile } from './models';
 import { notices } from './notices';
@@ -86,9 +87,13 @@ async function switchSpeechModel(model: SpeechModelId) {
   if (!ok) return;
   // Free ~0.5 GB: the other build is no longer used.
   const other = speechToTextFile(model === 'parakeet-v2' ? 'parakeet-v3' : 'parakeet-v2');
+  // The interpreter hears European languages with v3: kept while it has one of them.
+  const interpreterNeedsV3 = (getSettings().interpreterLanguages ?? []).some(
+    (c) => interpretLanguage(c)?.stt === 'parakeet-v3',
+  );
   try {
     const d = new Directory(`file://${modelsDir()}/${dirOf(other)}`);
-    if (d.exists) d.delete();
+    if (d.exists && !(other === MODEL_FILES.speechToTextMulti && interpreterNeedsV3)) d.delete();
   } catch (e) {
     console.log(`[language] couldn't delete the unused speech model: ${String(e)}`);
   }

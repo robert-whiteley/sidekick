@@ -129,6 +129,29 @@ declare class SidekickNativeModule extends NativeModule<SidekickNativeModuleEven
   setMicPaused(paused: boolean): void;
   pttStart(): void;
   pttStop(): Promise<{ text: string; voice: number[] | null }>;
+  /** Interpreter: push-to-talk for one side ([tag] = that side's language; iPhone hears it). */
+  interpretListen?(tag: string): void;
+  /**
+   * Interpreter: ends the turn and transcribes it. Android: kind "main" (usual speech-to-text),
+   * "parakeet" (v3 folder) or "whisper" (folder + language). iPhone: Apple Speech in the tag's
+   * language (arguments ignored).
+   */
+  interpretHeard?(kind: string, dir: string, language: string): Promise<string>;
+  /** Android bench: the same on a 16 kHz WAV, with the time it took. */
+  interpretHeardWav?(
+    wav: string,
+    kind: string,
+    dir: string,
+    language: string,
+  ): Promise<{ text: string; ms: number }>;
+  /** Android: frees the interpreter's speech model. */
+  interpretUnload?(): Promise<void>;
+  /** iPhone: Apple's on-device speech hears this language (BCP-47) without the internet. */
+  interpretCanHear?(tag: string): boolean;
+  /** Android: an offline voice for this language: ready / download / missing / none. */
+  ttsVoiceStatus?(tag: string): Promise<'ready' | 'download' | 'missing' | 'none'>;
+  /** Android: opens the speech engine's voice downloads. */
+  ttsInstallVoices?(): boolean;
   speechWarmUp(): Promise<boolean>;
   /** iPhone: asks for Speech Recognition access (on-device only); true when allowed. */
   speechRequestAccess?(): Promise<boolean>;

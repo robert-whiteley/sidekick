@@ -136,6 +136,8 @@ export type Settings = {
   lastDriveBackupAt: number | null;
   /** Speech speed of spoken answers, 0.5–2 (null = normal, 1). "Speak slower / faster". */
   speechRate: number | null;
+  /** Languages the interpreter has downloaded speech-to-text for; that model is kept (null = none). */
+  interpreterLanguages: string[] | null;
   /** Measured silently in the background; refine the Recommended values (null = not yet). */
   measuredTokPerSec: number | null;
   measuredVoiceFirstSoundMs: number | null;
@@ -204,6 +206,7 @@ export const DEFAULTS: Settings = {
   conversationNotes: null,
   lastDriveBackupAt: null,
   speechRate: null,
+  interpreterLanguages: null,
   measuredTokPerSec: null,
   measuredVoiceFirstSoundMs: null,
 };

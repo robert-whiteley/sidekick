@@ -18,7 +18,11 @@ final class PushToTalk {
   /// Words so far while the user is still talking (onPartialTranscript).
   var onPartial: ((String) -> Void)?
 
-  static func recognizer() -> SFSpeechRecognizer? {
+  /// The interpreter's language for this turn (BCP-47, "es-ES"); nil = the usual English.
+  private var language: String?
+
+  static func recognizer(_ tag: String? = nil) -> SFSpeechRecognizer? {
+    if let tag = tag, !tag.hasPrefix("en") { return SFSpeechRecognizer(locale: Locale(identifier: tag)) }
     // The app speaks English for now; use the phone's English variant when it has one.
     let here = Locale.current.identifier
     let locale = here.hasPrefix("en") ? Locale(identifier: here) : Locale(identifier: "en-US")
@@ -26,8 +30,8 @@ final class PushToTalk {
   }
 
   /// True when speech can be turned into text on this phone without the internet.
-  static func availableOffline() -> Bool {
-    guard let r = recognizer() else { return false }
+  static func availableOffline(_ tag: String? = nil) -> Bool {
+    guard let r = recognizer(tag) else { return false }
     return r.supportsOnDeviceRecognition
   }
 
@@ -40,8 +44,12 @@ final class PushToTalk {
     }
   }
 
-  func start() {
-    queue.async { self.begin() }
+  /// [tag]: the interpreter's language for this turn; nil = English.
+  func start(_ tag: String? = nil) {
+    queue.async {
+      self.language = tag
+      self.begin()
+    }
   }
 
   private func begin() {
@@ -57,12 +65,15 @@ final class PushToTalk {
       PushToTalk.requestAccess { _ in }
       return
     }
-    guard let recognizer = PushToTalk.recognizer(), recognizer.isAvailable else {
+    guard let recognizer = PushToTalk.recognizer(language), recognizer.isAvailable else {
       startError = "Speech recognition isn't available right now. Type your question instead."
       return
     }
     guard recognizer.supportsOnDeviceRecognition else {
-      startError = "This iPhone can't turn speech into text offline. Type your question instead."
+      startError =
+        language == nil
+        ? "This iPhone can't turn speech into text offline. Type your question instead."
+        : "This iPhone can't hear this language offline."
       return
     }
     let session = AVAudioSession.sharedInstance()

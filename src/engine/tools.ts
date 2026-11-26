@@ -7,6 +7,7 @@
 import { Linking } from 'react-native';
 import { moveEventTo, planIntent, planTelephony, scheduleDraft } from './actions';
 import { feedbackIntent, supportEmail } from './feedback';
+import { openInterpreter } from './interpreter';
 import { askLlm } from './llm';
 import {
   parseRangeReply,
@@ -312,6 +313,8 @@ export async function runTool(
       return command({ type: 'camera', on: a.on === true });
     case 'camera_setting':
       return command({ type: 'cameraSetting', change: cameraChangeFor(a, question) });
+    case 'interpret':
+      return { kind: 'reply', text: openInterpreter(str(a.language)) };
     case 'feedback':
       return runFeedback(str(a.text));
     case 'calculate':

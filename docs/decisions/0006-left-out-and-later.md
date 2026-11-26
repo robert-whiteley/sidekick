@@ -157,8 +157,8 @@ Read this before proposing any of these again. Each line says why.
   locked (the phone-lock rule above still applies with the screen off).
 - Left out: changing the brightness without the "Modify system settings" permission (Android has
   no other way), relative volume steps for other streams (ring, alarm), opening apps by package
-  name or deep links inside apps, and an offline translation model (Gemma translates; quality is
-  lower for rare languages).
+  name or deep links inside apps. (A separate offline translation model was left out here too;
+  measured and still not used, see "Interpreter" below.)
 - Rejected: QUERY_ALL_PACKAGES (Play restricts it): the app list uses a launcher-intent query.
 - Google Drive backup has no restore inside Sidekick: the backup is the same zip as Export
   everything (JSON + photos), kept for the user; importing it back (merging speakers, vectors and
@@ -198,6 +198,44 @@ Read this before proposing any of these again. Each line says why.
   in the phone's language, and the "translate a command into English for the rules" pass (half
   the app stayed English: screens, confirmations, 13 of 24 languages without command words).
 
+## Interpreter (owner, 26 Nov: "useful abroad with no internet")
+
+- Decision changed: the app stays English, but Sidekick now interprets live between the owner
+  (English) and someone speaking another language, fully offline. Earlier "English-only" covered
+  the whole app; the owner overrode it for this feature because it is what a phone is for abroad.
+- Translation: **Gemma 4 E2B**, the model already on the phone. Measured against the best
+  commercial-safe dedicated model, Mozilla's Firefox Translations (Bergamot / Marian, MPL-2.0),
+  on 20 made-up travel turns in 7 languages (docs/BENCH.md "Interpreter"): Gemma chrF 70.2 into
+  the language / 75.9 into English vs 68.7 / 71.0; Bergamot reversed a medical line in Japanese
+  ("if the fever doesn't go down in three days" → "if you don't have a fever"), Gemma made no
+  meaning errors. Bergamot is ~10× faster but needs its own native engine on both phones
+  (bergamot-translator C++ with ruy, not built for iOS yet) and two ~40 MB downloads per language.
+  Kept as the option if turns feel slow on the phone.
+- Rejected translation models: NLLB-200 and M2M-100 / SeamlessM4T (CC BY-NC, non-commercial),
+  Opus-MT / Helsinki models (CC BY 4.0 weights but per-pair Marian builds and weaker than
+  Bergamot), Google ML Kit translation (closed source, Google Play services), slimt (GPL-2.0),
+  MADLAD-400 (too big for 4 GB phones).
+- Speech: European languages with Parakeet v3 (already in the app), the others with Whisper
+  small (MIT, 375 MB). Rejected: Moonshine non-English models (community licence with a revenue
+  cap), SenseVoice (FunASR model licence, attribution and use terms; only 5 languages), Whisper
+  base (twice the errors of small in every language measured), Whisper large / turbo (too big
+  and slow for a Pixel 5 CPU).
+- Japanese speech recognition is not verified: all three models (Whisper small / base,
+  SenseVoice) failed on the bench's generated Japanese voice (63–112% characters wrong), which
+  points at the made-up audio (Kokoro's Japanese voice) rather than the models; needs a real
+  speaker. Arabic and the other non-European languages: translation measured, hearing not.
+- The owner talking to Sidekick mid-conversation: asked inside the translation, Gemma translated
+  "stop interpreting" to the other person in 34 of 35 cases; a separate short call only when the
+  line has a word that could point that way, framed as "who is this said to (OTHER / END /
+  LANGUAGE)", was right on 57 of 60 (all 9 stops, 3 of 6 language changes, none of 45 ordinary
+  lines such as "please stop the car here" ended the session). The Done button always works.
+- Voices: the phone's own offline TTS (Android TextToSpeech / iOS AVSpeechSynthesizer), so no
+  download from Sidekick. Missing voices are shown with a button to the phone's voice downloads
+  (Android) or the Settings path (iPhone; apps can't install voices there).
+- Left out: other languages for the owner (the owner's side is English, like the app), the
+  interpreter in the background or with the screen off, saving the conversation (nothing is
+  kept), languages neither model hears (Persian, Urdu, Swahili, …), choosing the voice.
+
 ## Later: full localisation
 
 - Possible now: the 25 Parakeet v3 languages: English, Bulgarian, Croatian, Czech, Danish, Dutch,
@@ -217,7 +255,8 @@ Read this before proposing any of these again. Each line says why.
   at 5 dB noise, laptop, 73 LibriSpeech clips), so English users keep v2. Auto-detecting the
   spoken language (one model for everyone) needs v3 or a language-ID model in front of v2.
 - No commercial-safe on-device speech model checked for: Chinese, Japanese, Korean, Arabic, Hindi
-  and other Indian languages, Turkish, Norwegian, Hebrew, Thai, Vietnamese, Indonesian.
+  and other Indian languages, Turkish, Norwegian, Hebrew, Thai, Vietnamese, Indonesian. (The
+  interpreter uses Whisper small (MIT) for these; see "Interpreter".)
 
 ## Break-it test leftovers (25 Nov, Pixel 5; details in docs/LIMITS.md)
 

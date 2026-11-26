@@ -35,6 +35,7 @@ object MicLoop {
   @Volatile private var ptt: MutableList<FloatArray>? = null
   /** Live words while the user talks (push-to-talk, or a spoken question): see Partials. */
   @Volatile var partialsEnabled = true
+  @Volatile private var pttWantsPartials = true
   private var pttSamples = 0
   private val pttPartials = PartialPolicy()
   private val questionPartials = PartialPolicy()
@@ -141,8 +142,10 @@ object MicLoop {
     stopIfIdle()
   }
 
-  fun startPtt(ctx: Context) {
+  /** Push-to-talk; [partials] = live words while talking (off for the interpreter's other languages). */
+  fun startPtt(ctx: Context, partials: Boolean = true) {
     Partials.next()
+    pttWantsPartials = partials
     pttSamples = 0
     pttPartials.reset()
     ptt = mutableListOf()
@@ -252,7 +255,7 @@ object MicLoop {
         ptt?.add(samples)
         val nowMs = System.currentTimeMillis()
         val pttList = ptt
-        if (pttList != null && partialsEnabled) {
+        if (pttList != null && partialsEnabled && pttWantsPartials) {
           pttSamples += samples.size
           if (pttPartials.due(nowMs, pttSamples, Partials.isBusy)) {
             pttPartials.started(nowMs, pttSamples)

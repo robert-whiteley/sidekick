@@ -11,6 +11,7 @@ import { forgetRanges, parseTimeRange } from '@/memory/time-range';
 
 // jest hoists these above the imports.
 jest.mock('@/engine/llm', () => ({ askLlm: jest.fn() }));
+jest.mock('@/engine/interpreter', () => ({ openInterpreter: jest.fn(() => 'Interpreting') }));
 jest.mock('@/engine/actions', () => ({
   planIntent: jest.fn(),
   planTelephony: jest.fn(),

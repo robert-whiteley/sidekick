@@ -455,6 +455,12 @@ export const TOOLS: ToolSpec[] = [
     args: { text: s('the text, or empty for the text in the photo'), to: req('language') },
   },
   {
+    name: 'interpret',
+    desc: 'live two-way spoken interpreting with someone who speaks another language (a conversation between two people, not translating a text)',
+    kind: 'action',
+    args: { language: req("the other person's language, in English, e.g. Spanish") },
+  },
+  {
     name: 'repeat',
     desc: 'say the last answer again',
     kind: 'action',
@@ -519,6 +525,7 @@ export const NOT_IN_ROUTINES = new Set([
   'call_back',
   'move_event',
   'clipboard',
+  'interpret',
 ]);
 const norm = (q: string) =>
   ` ${q
