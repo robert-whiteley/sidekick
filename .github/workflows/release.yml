@@ -1,15 +1,10 @@
 name: Release
 # Builds in the EAS cloud and uploads to the stores, so releases work from any session (cloud or
-# laptop): `gh workflow run release.yml -f platform=all -f track=alpha`.
-# Production ("store") only after the owner says go.
+# laptop): `gh workflow run release.yml -f track=alpha`. Always both stores from the same commit, and
+# it waits for the owner's approval in GitHub (environment "stores") before building.
 on:
   workflow_dispatch:
     inputs:
-      platform:
-        description: android, ios or all
-        type: choice
-        options: [all, android, ios]
-        default: all
       track:
         description: Play track (iOS always goes to TestFlight)
         type: choice
@@ -21,6 +16,7 @@ concurrency: release
 jobs:
   release:
     runs-on: ubuntu-latest
+    environment: stores
     timeout-minutes: 120
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -34,21 +30,18 @@ jobs:
           token: ${{ secrets.EXPO_TOKEN }}
       - run: npm ci
       - name: Play upload key
-        if: inputs.platform != 'ios'
         env:
           KEY: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
         run: |
           [ -n "$KEY" ] || { echo "GOOGLE_SERVICE_ACCOUNT_JSON secret missing (docs/RELEASE.md)"; exit 1; }
           printf '%s' "$KEY" > google-service-account.json
       - name: Build
-        run: eas build --platform ${{ inputs.platform }} --profile production --non-interactive --wait
+        run: eas build --platform all --profile production --non-interactive --wait
       - name: Upload to Play
-        if: inputs.platform != 'ios'
         run: >-
           eas submit --platform android --latest --non-interactive
           --profile ${{ inputs.track == 'internal' && 'production' || (inputs.track == 'beta' && 'open' || (inputs.track == 'store' && 'store' || 'closed')) }}
       - name: Upload to TestFlight
-        if: inputs.platform != 'android'
         run: eas submit --platform ios --latest --non-interactive --profile production
       - if: always()
         run: rm -f google-service-account.json
