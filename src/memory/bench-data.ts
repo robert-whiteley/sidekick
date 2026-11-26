@@ -35,9 +35,10 @@ export async function storeCounts(): Promise<StoreCounts> {
   );
   const own: Record<string, number> = {};
   for (const r of kinds.rows) own[r.kind as string] = Number(r.n);
-  const pages = Number((await d.execute('PRAGMA page_count')).rows[0]?.page_count ?? 0);
-  const free = Number((await d.execute('PRAGMA freelist_count')).rows[0]?.freelist_count ?? 0);
-  const size = Number((await d.execute('PRAGMA page_size')).rows[0]?.page_size ?? 0);
+  // Table-valued pragmas: plain "PRAGMA page_count" rows came back without the named column.
+  const pages = n(await d.execute('SELECT page_count AS n FROM pragma_page_count()'));
+  const free = n(await d.execute('SELECT freelist_count AS n FROM pragma_freelist_count()'));
+  const size = n(await d.execute('SELECT page_size AS n FROM pragma_page_size()'));
   return {
     own,
     ownTotal: Object.values(own).reduce((a, b) => a + b, 0),

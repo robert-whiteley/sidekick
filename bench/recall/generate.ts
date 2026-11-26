@@ -296,7 +296,7 @@ const QUESTIONS: [id: string, q: string, any: string[], keys: string[]][] = [
   [
     'boiler-when',
     'When is the engineer coming to look at the boiler?',
-    ['monday'],
+    ['monday', '30 november', 'november 30', 'between 8', 'between eight'],
     ['priya-boiler'],
   ],
   [
@@ -401,7 +401,7 @@ const QUESTIONS: [id: string, q: string, any: string[], keys: string[]][] = [
   [
     'ticket-expiry',
     'What time did the parking ticket expire?',
-    ['16:45', '4:45', 'quarter to five'],
+    ['16:45', '4:45', 'quarter to five', 'forty-five', 'forty five'],
     ['ticket-photo'],
   ],
   [

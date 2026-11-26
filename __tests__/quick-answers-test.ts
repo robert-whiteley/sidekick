@@ -51,3 +51,12 @@ test('quickAnswer tries each and formats numbers', () => {
   expect(formatNumber(1234567.891)).toBe('1,234,568');
   expect(formatNumber(0.5)).toBe('0.5');
 });
+
+test('fractions of a number and "how many X is/are in N Y" (answers bench)', () => {
+  expect(quickAnswer("What's half of 87?")).toBe('43.5');
+  expect(quickAnswer('double 12')).toBe('24');
+  expect(quickAnswer('How many pounds is 2 kg?')).toMatch(/^2 kilograms is 4\.40925 pounds/);
+  expect(quickAnswer('How many millilitres are in 2.5 litres?')).toMatch(/2,500 millilitres/);
+  expect(quickAnswer('How many feet in a mile?')).toMatch(/5,280 feet/);
+  expect(quickAnswer('How many people live in Paris?')).toBeNull();
+});

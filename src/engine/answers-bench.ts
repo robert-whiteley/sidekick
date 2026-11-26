@@ -165,6 +165,7 @@ export async function runRecallBench(log: Log, only?: string): Promise<void> {
     let firstMs = 0;
     let totalMs = 0;
     let ownInContext = false;
+    let ctx: string[] = [];
     if (['answer', 'router', 'recap', 'location', 'weather'].includes(trace.stage)) {
       leaveOffTheRecord();
       const a0 = Date.now();
@@ -179,7 +180,12 @@ export async function runRecallBench(log: Log, only?: string): Promise<void> {
       totalMs = Date.now() - a0;
       text = r.text;
       const srcKeys = await benchKeys(r.sources.map((m) => m.id));
-      ownInContext = [...srcKeys.values()].some((k) => k === null) || !!r.usedPhoto;
+      ctx = [...srcKeys.values()].map((k) => k ?? 'own');
+      // Recaps and location answers don't list what they read: they may hold the owner's own.
+      ownInContext =
+        ctx.includes('own') ||
+        !!r.usedPhoto ||
+        (!r.sources.length && ['recap', 'location'].includes(trace.stage));
     }
     const ok = rq.any.some((re) => new RegExp(re, 'i').test(text));
     if (ok) correct++;
@@ -192,6 +198,12 @@ export async function runRecallBench(log: Log, only?: string): Promise<void> {
         rank,
         ranked: ranked.slice(0, 6),
         searchMs: ms,
+        // The notes the model saw (test keys; the owner's as "own"), and whether it said it
+        // didn't know: enough to tell a retrieval miss from a model miss without the text.
+        ctx,
+        unknown: /\b(don't|do not|not sure|no (information|record|notes?)|can't|cannot)\b/i.test(
+          text,
+        ),
         firstMs,
         totalMs,
         text: ownInContext
