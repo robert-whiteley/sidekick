@@ -730,9 +730,9 @@ export function AskScreen({
           web: r.web ?? [],
           webAsk: r.browserQuery
             ? { question: q, query: r.browserQuery }
-            : imagePath || grab || r.local
-              ? { question: '' }
-              : { question: q, query: r.webQuery },
+            : r.webLink && !imagePath && !grab
+              ? { question: q, query: r.webQuery }
+              : { question: '' },
           media: mediaForAnswer(r as typeof r & { media?: ChatMedia[] }),
           draftId: r.draftId,
         }),

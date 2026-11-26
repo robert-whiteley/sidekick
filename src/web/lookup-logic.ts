@@ -49,6 +49,19 @@ const CURRENT =
 const ENCYCLOPEDIC =
   /^(who (is|was|were|are|invented|founded|wrote|discovered|painted|won)|what (is|are|was|were) (a |an |the )?\w|when (is|was|were|did)|where (is|are|was) (the )?\w|which \w+ (is|was|has)|how (many|much|old|tall|big|far|long|deep|high|large) (is|are|was|were|did|does|do)|tell me about|define|what does \S+ mean)\b/i;
 
+/**
+ * With online lookup off: does the answer need the web, so the "Search the web in your browser"
+ * link is worth showing? Only for explicit search requests and news / latest / current questions
+ * (the model's own knowledge is stale there); never for questions about the user's own life.
+ */
+export function webLinkWanted(question: string): boolean {
+  const q = question.trim();
+  if (!q) return false;
+  if (EXPLICIT.test(q)) return true;
+  if (PERSONAL.test(q) || NOT_WEB.test(q)) return false;
+  return CURRENT.test(q);
+}
+
 const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 /** Known names in the question (whole words, any case). */

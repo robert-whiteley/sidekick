@@ -210,7 +210,11 @@ Read this before proposing any of these again. Each line says why.
   talking to their own phone doesn't hit this. Left.
 - Killing the app mid-answer loses that question. Rare; left.
 - A second send while answering isn't queued (text stays in the box). Left.
-- "Search the web in your browser" shows under every offline answer. Taste; left for the owner.
+- "Search the web in your browser" no longer shows under every answer (owner, 26 Nov: "under every
+  answer seems bad"). With online lookup on, Sidekick already decides by itself when to look
+  things up (rules, then Gemma can ask for a lookup); the link shows only when a lookup found
+  nothing. With it off, the link shows only for explicit searches and news / latest / current
+  questions (`webLinkWanted`), never for jokes, recipes, explanations or the user's own life.
 - Offline hand-offs (26 Nov, limits bench): blocking every browser and app hand-off while Offline
   was considered and rejected. It would overturn the link above and the offline WhatsApp/SMS
   hand-offs (ADR 0008), which the user asks for or taps explicitly, and where the other app, not
