@@ -224,38 +224,94 @@ object PhoneExtras {
     return start(ctx, activity, i)
   }
 
-  // --- Shared into Sidekick (share sheet) ---
+  // --- Shared into Sidekick (share sheet, text selection menu) ---
 
   private var pending: JSONObject? = null
 
+  /** Biggest shared file copied in (a few hours of a compressed recording). */
+  private const val MAX_FILE_BYTES = 400L * 1024 * 1024
+
+  /** Sent by [ProcessTextActivity] to the main activity with the selected text. */
+  const val ACTION_PROCESS_TEXT = "dev.sidekick.PROCESS_TEXT"
+
   /**
-   * Reads an ACTION_SEND intent: text, subject and the first image (copied into the app cache
-   * now, because the read grant ends with the sending app's task). Kept until JS takes it.
+   * Reads an ACTION_SEND intent: text, subject and the first file (a picture, PDF, text document
+   * or audio recording; copied into the app cache now, because the read grant ends with the
+   * sending app's task), or text selected in another app ([ACTION_PROCESS_TEXT]). Kept until JS
+   * takes it.
    */
   fun noteIntent(ctx: Context, intent: Intent?): Boolean {
-    if (intent == null || intent.action != Intent.ACTION_SEND) return false
+    if (intent == null) return false
     val o = JSONObject().put("at", System.currentTimeMillis())
+    if (intent.action == ACTION_PROCESS_TEXT) {
+      val text = intent.getStringExtra(Intent.EXTRA_PROCESS_TEXT) ?: return false
+      o.put("selection", text.take(20_000))
+      o.put("readonly", intent.getBooleanExtra(Intent.EXTRA_PROCESS_TEXT_READONLY, true))
+      pending = o
+      intent.action = Intent.ACTION_MAIN
+      return true
+    }
+    if (intent.action != Intent.ACTION_SEND) return false
     intent.getStringExtra(Intent.EXTRA_TEXT)?.let { o.put("text", it.take(20_000)) }
     intent.getStringExtra(Intent.EXTRA_SUBJECT)?.let { o.put("subject", it.take(500)) }
     val type = intent.type ?: ""
-    if (type.startsWith("image/")) {
-      @Suppress("DEPRECATION")
-      val uri = if (Build.VERSION.SDK_INT >= 33) intent.getParcelableExtra(Intent.EXTRA_STREAM, Uri::class.java)
-      else intent.getParcelableExtra(Intent.EXTRA_STREAM) as? Uri
-      if (uri != null) copyImage(ctx, uri)?.let { o.put("imagePath", it) }
+    @Suppress("DEPRECATION")
+    val uri = if (Build.VERSION.SDK_INT >= 33) intent.getParcelableExtra(Intent.EXTRA_STREAM, Uri::class.java)
+    else intent.getParcelableExtra(Intent.EXTRA_STREAM) as? Uri
+    if (uri != null) {
+      val name = displayName(ctx, uri)
+      val mime = (ctx.contentResolver.getType(uri) ?: type).lowercase()
+      if (mime.startsWith("image/") || (type.startsWith("image/") && !mime.contains('/'))) {
+        copyShared(ctx, uri, "jpg", 40L * 1024 * 1024)?.let { o.put("imagePath", it) }
+      } else {
+        val ext = name?.substringAfterLast('.', "")?.lowercase()?.takeIf { it.length in 1..5 } ?: extFor(mime)
+        val path = copyShared(ctx, uri, ext, MAX_FILE_BYTES)
+        if (path != null) {
+          o.put("filePath", path)
+          o.put("mime", mime)
+          o.put("fileName", name ?: "shared.$ext")
+        } else {
+          o.put("fileError", name ?: "the file")
+        }
+      }
     }
-    if (!o.has("text") && !o.has("imagePath")) return false
+    if (!o.has("text") && !o.has("imagePath") && !o.has("filePath") && !o.has("fileError")) return false
     pending = o
     // Handled: a re-delivery (rotation, relaunch from recents) must not share it again.
     intent.action = Intent.ACTION_MAIN
     return true
   }
 
-  private fun copyImage(ctx: Context, uri: Uri): String? =
+  private fun extFor(mime: String): String =
+    when {
+      mime == "application/pdf" -> "pdf"
+      mime.startsWith("text/") -> "txt"
+      mime == "audio/mp4" || mime == "audio/x-m4a" || mime == "audio/m4a" || mime == "audio/aac" -> "m4a"
+      mime == "audio/mpeg" -> "mp3"
+      mime.startsWith("audio/ogg") || mime == "audio/opus" -> "ogg"
+      mime == "audio/wav" || mime == "audio/x-wav" -> "wav"
+      mime.startsWith("audio/") -> "audio"
+      else -> "bin"
+    }
+
+  private fun displayName(ctx: Context, uri: Uri): String? =
     try {
-      val dir = File(ctx.cacheDir, "shared").apply { mkdirs() }
-      dir.listFiles()?.filter { System.currentTimeMillis() - it.lastModified() > 86_400_000 }?.forEach { it.delete() }
-      val f = File(dir, "share-${System.currentTimeMillis()}.jpg")
+      ctx.contentResolver.query(uri, arrayOf(android.provider.OpenableColumns.DISPLAY_NAME), null, null, null)?.use { c ->
+        if (c.moveToFirst()) c.getString(0) else null
+      } ?: uri.lastPathSegment
+    } catch (e: Exception) {
+      uri.lastPathSegment
+    }
+
+  /**
+   * Copies a shared file into the app cache (at most [max] bytes). Shared files older than two
+   * days are removed first (a long recording may still be being read a day later).
+   */
+  private fun copyShared(ctx: Context, uri: Uri, ext: String, max: Long): String? {
+    val dir = File(ctx.cacheDir, "shared").apply { mkdirs() }
+    dir.listFiles()?.filter { System.currentTimeMillis() - it.lastModified() > 2 * 86_400_000L }?.forEach { it.delete() }
+    val f = File(dir, "share-${System.currentTimeMillis()}.$ext")
+    return try {
       ctx.contentResolver.openInputStream(uri)?.use { input ->
         f.outputStream().use { out ->
           val buf = ByteArray(64 * 1024)
@@ -264,15 +320,17 @@ object PhoneExtras {
             val n = input.read(buf)
             if (n < 0) break
             total += n
-            if (total > 40L * 1024 * 1024) throw IllegalStateException("too big")
+            if (total > max) throw IllegalStateException("too big")
             out.write(buf, 0, n)
           }
         }
       } ?: return null
       f.absolutePath
     } catch (e: Exception) {
+      f.delete()
       null
     }
+  }
 
   fun takeShared(): String? {
     val p = pending ?: return null

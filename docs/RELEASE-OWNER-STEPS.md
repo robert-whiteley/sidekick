@@ -62,6 +62,8 @@ Short service isn't listed and needs nothing.
       `While Listening or Live camera is running (started by the user in the app), Sidekick tags each saved moment with the town it was in, using a place list built into the app, so the user can ask "what did I see in Bristol?". It starts immediately with the user-started capture and stops with it; it cannot be paused or restarted separately because each moment must be tagged as it is saved. Location is read only while that service runs and never leaves the phone.`
 - [x] **Microphone** → tick **Background audio input** → video link. (If a description box appears:
       `When the user turns on Listening, Sidekick keeps hearing for its wake word and transcribes conversations on the device, including with the screen off or another app open. It must start immediately because the user is speaking now, and pausing or restarting would lose what is said. A notification with a Stop button shows the whole time; audio never leaves the phone.`)
+- [ ] **Data sync** (new with share-in) → tick **Other** → video link → description:
+      `When the user shares a recording into Sidekick from another app, Sidekick turns it into text on the phone (who said what) so they can ask for a summary or action points. A long recording takes several minutes, so the work continues if the user leaves the app, with a progress notification until it is done. It starts immediately because the user just shared the file and is waiting for it; it stops on its own when the recording is read. The audio and text never leave the phone.`
 - [x] **Save**.
 
 Not needed now: SMS and Call Log declaration (release 2; see the end), background location (not used).

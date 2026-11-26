@@ -57,7 +57,7 @@ class IntegrationsModule : Module() {
     }.runOnQueue(expo.modules.kotlin.functions.Queues.MAIN)
 
     // Phone extras (PhoneExtras.kt): status, steps, screen time, clipboard, find my phone, links, share-in.
-    Events("onShared")
+    Events("onShared", "onRecording")
     Function("chargeTimeRemaining") { PhoneExtras.chargeTimeRemaining(context) }
     Function("bootAt") { PhoneExtras.bootAt().toDouble() }
     Function("hasStepCounter") { PhoneExtras.hasStepCounter(context) }
@@ -79,6 +79,18 @@ class IntegrationsModule : Module() {
     OnNewIntent { intent ->
       if (PhoneExtras.noteIntent(context, intent)) sendEvent("onShared", mapOf<String, Any>())
     }
+    // Text selection menu (ProcessTextActivity): is the app still waiting for new text, and give it back.
+    Function("processTextWaiting") { ProcessTextActivity.waiting() }
+    Function("finishProcessText") { text: String? -> ProcessTextActivity.complete(text, activity) }
+
+    // Shared recordings (Recordings.kt): transcribed on the phone in the background.
+    OnCreate { dev.sidekick.engine.Recordings.onProgress = { sendEvent("onRecording", it) } }
+    Function("recordingStart") { id: String, path: String -> dev.sidekick.engine.Recordings.start(context, id, path) }
+    Function("recordingStatus") { id: String -> dev.sidekick.engine.Recordings.status(context, id) }
+    Function("recordingLines") { id: String -> dev.sidekick.engine.Recordings.lines(context, id) }
+    Function("recordingCancel") { id: String -> dev.sidekick.engine.Recordings.cancel(id) }
+    Function("recordingForget") { id: String -> dev.sidekick.engine.Recordings.forget(context, id) }
+    Function("recordingsUnfinished") { dev.sidekick.engine.Recordings.unfinished(context) }
 
     Function("notificationAccess") { NotificationCapture.accessGranted(context) }
     Function("openNotificationAccess") { NotificationCapture.openAccessSettings(context) }

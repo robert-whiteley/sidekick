@@ -103,6 +103,11 @@ const entryPlace = (e: { lat?: number; lon?: number }) =>
 const pushOwnerVoice = (centroid: number[] | null) =>
   SidekickNative.listenSetOwnerVoice?.(centroid);
 
+/** The owner's learned voice (null until it has been heard), e.g. to mark "You" in a recording. */
+export async function ownerVoice(): Promise<number[] | null> {
+  return ownerCentroid(await speakers());
+}
+
 /** Sends the owner's current voice to the native listener (at start and after deletions). */
 export async function syncOwnerVoice() {
   pushOwnerVoice(ownerCentroid(await speakers()));

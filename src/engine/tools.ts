@@ -207,6 +207,8 @@ async function runTool(
       });
     case 'find_phone':
       return extra({ type: 'findPhone' });
+    case 'missed':
+      return intent({ type: 'missed' });
     case 'weather': {
       const place = str(a.place);
       return rules(`what's the weather${place ? ` in ${place}` : ''} ${str(a.day)}`);

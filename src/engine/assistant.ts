@@ -61,6 +61,8 @@ import { addFollowup, listFollowups } from '@/memory/followups';
 import { repeatLabel } from '@/memory/repeat-logic';
 import { personPromptContext } from '@/memory/people';
 import { queueOnline } from '@/engine/online-queue';
+import { answerAboutPage } from './shared-doc';
+import { firstUrl } from './shared-doc-logic';
 import { askWithLookup, type WebSource } from '@/web/lookup';
 import { webLinkWanted } from '@/web/lookup-logic';
 import { answerLocation } from './location';
@@ -387,6 +389,24 @@ export async function answer(
   if (local) {
     onText(local);
     return { text: local, usedPhoto: null, sources: [], ms: 0, ttftMs: 0, local: true };
+  }
+
+  // A link in the question ("summarise https://…"): that one page is read (Online on) and the
+  // answer comes from it, with the page shown as the source; offline it waits (shared-doc.ts).
+  const pageUrl = photoNow ? null : firstUrl(question);
+  if (pageUrl) {
+    const r = await answerAboutPage(pageUrl, question, onText, status, offRecord);
+    if (!offRecord && !r.waitingOnline) await rememberExchange(question, r.text).catch(() => {});
+    return {
+      text: r.text,
+      usedPhoto: null,
+      sources: [],
+      ms: r.ms,
+      ttftMs: 0,
+      web: r.web,
+      waitingOnline: r.waitingOnline,
+      local: !r.web,
+    };
   }
 
   // No rule knew it: the model may pick a tool (any phrasing; tools-logic.ts). Plain questions

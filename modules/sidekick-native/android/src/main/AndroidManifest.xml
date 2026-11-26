@@ -5,6 +5,9 @@
   <!-- Live camera memory runs in the listening service while the camera is on. -->
   <uses-permission android:name="android.permission.CAMERA" />
   <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CAMERA" />
+  <!-- A shared recording is turned into text on the phone (local file processing) while the
+       progress notification shows; it can take a while for a long meeting. -->
+  <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
   <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
   <!-- Offline place names for memories, and auto-pause at places you choose. Optional. -->
   <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
@@ -61,6 +64,24 @@
       android:name="dev.sidekick.engine.ListenService"
       android:exported="false"
       android:foregroundServiceType="microphone|location|camera" />
+    <!-- Shared recordings (Recordings.kt): keeps the app alive while one is turned into text. -->
+    <service
+      android:name="dev.sidekick.engine.RecordingService"
+      android:exported="false"
+      android:foregroundServiceType="dataSync" />
+    <!-- "Sidekick" in other apps' text selection menu: proofread, rewrite, summarise, reply. -->
+    <activity
+      android:name="dev.sidekick.engine.integrations.ProcessTextActivity"
+      android:exported="true"
+      android:label="Sidekick"
+      android:excludeFromRecents="true"
+      android:theme="@android:style/Theme.Translucent.NoTitleBar">
+      <intent-filter>
+        <action android:name="android.intent.action.PROCESS_TEXT" />
+        <category android:name="android.intent.category.DEFAULT" />
+        <data android:mimeType="text/plain" />
+      </intent-filter>
+    </activity>
     <!-- Data source "notifications": bound only after the user allows Notification access. -->
     <service
       android:name="dev.sidekick.engine.SidekickNotificationListener"

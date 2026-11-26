@@ -24,6 +24,8 @@ export type ChatMessage = {
   offRecord?: boolean;
   /** The answer is still being written. */
   pending?: boolean;
+  /** An answer about text selected in another app: Replace in the app / Copy / Share under it. */
+  textResult?: boolean;
 };
 
 /** How many past exchanges the chat shows when it opens. */
