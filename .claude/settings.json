@@ -25,6 +25,16 @@
             "timeout": 5
           }
         ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/scripts/block-store-builds.sh",
+            "timeout": 5
+          }
+        ]
       }
     ]
   }
