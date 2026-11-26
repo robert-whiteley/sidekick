@@ -48,7 +48,7 @@ export function OnlineBadge({ used }: { used: boolean }) {
 /** "Source: GDELT — Headline · reuters.com · 2026-11-23". */
 export function sourceLabel(s: WebSource): string {
   const extra = [s.domain, s.date].filter(Boolean).join(' · ');
-  return `Source: ${s.name} — ${s.title}${extra ? ` · ${extra}` : ''}${s.licence ? ` (${s.licence})` : ''}`;
+  return `${s.ref ? `[${s.ref}] ` : ''}Source: ${s.name} — ${s.title}${extra ? ` · ${extra}` : ''}${s.licence ? ` (${s.licence})` : ''}`;
 }
 
 /** Links to the pages an answer used, with their licence (Wikipedia: CC BY-SA 4.0). */

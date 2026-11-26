@@ -17,6 +17,8 @@ const ALLOWED = [
   'src/engine/quick-fixes.ts', // "Get quick fixes" switch
   'src/web/lookup.ts', // Online lookup (off by default)
   'src/web/page.ts', // Reads a web link the user shared or pasted (that page only)
+  'src/web/rate-limit.ts', // Online lookup: the request wrapper (Wikimedia budget, one retry)
+  'src/web/research.ts', // Online lookup (off by default): research reads result pages
   'src/web/weather.ts', // Online lookup (off by default)
   'src/integrations/google.ts', // Google connections the user signs in to
   'src/integrations/gmail.ts',

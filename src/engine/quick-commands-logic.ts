@@ -241,6 +241,8 @@ export function helpText(on: {
     );
   else if (on.iphone) can.push('look at a photo you take with the camera button');
   else can.push('look at a photo ("what am I looking at?")');
+  if (!on.iphone)
+    can.push('edit a photo you send me ("make the background white", "crop it square")');
   if (on.memory)
     can.push(
       on.iphone
@@ -252,7 +254,7 @@ export function helpText(on: {
   if (on.messages) can.push('read and reply to messages');
   if (on.email) can.push('send emails');
   if (on.location) can.push('say where you were');
-  if (on.online) can.push('look things up online');
+  if (on.online) can.push('look things up online, or research a topic and write a short report');
   const off: string[] = [];
   if (!on.listening && !on.iphone) off.push('Listen');
   if (!on.online) off.push('Online lookup');

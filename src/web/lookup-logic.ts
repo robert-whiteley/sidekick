@@ -16,6 +16,8 @@ export type WebSource = {
   /** News items: the publisher's site and the day (YYYY-MM-DD). */
   domain?: string;
   date?: string;
+  /** A research report's source number ("[2]" in the text). */
+  ref?: number;
 };
 
 /**
@@ -30,8 +32,12 @@ export const LOOKUP_TIMEOUT_MS = 4000;
  * "busy" on every try, so waiting longer added ~5 s to each news question for nothing.
  */
 export const NEWS_TIMEOUT_MS = LOOKUP_TIMEOUT_MS;
-/** Wikimedia asks for a descriptive User-Agent; this one names the app only (no personal info). */
-export const USER_AGENT = 'SidekickApp/1.0 (on-device assistant app; online lookup)';
+/**
+ * Names the app only: no URL, email or username, so nothing points at a person. Wikimedia counts
+ * such a client as unidentified (10 requests a minute per IP, 2026 limits); every Wikimedia
+ * request goes through one per-minute window that keeps under that (rate-limit.ts).
+ */
+export const USER_AGENT = 'SidekickApp/1.0 (on-device assistant app)';
 /** Each source's text in the prompt; every prompt token delays the first word on a phone. */
 export const SOURCE_CHARS = 360;
 export const MAX_SOURCES = 3;

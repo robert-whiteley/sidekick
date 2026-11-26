@@ -400,3 +400,42 @@ and the idle chat model. Tests: `RobustnessTest.kt` (levels, what is freed), `js
 Stopping at the floor, well before the disk is full, keeps room for the database's own writes, so
 it can't be left half-written; heard lines and camera frames wait on the phone and are saved once
 space is back. A notice says what is paused. Tests: `robustness-fixes-test.ts`, `StorageGuardTest`.
+
+- When space is short only video stops; keyframes and database writes go on.
+- No reaction to Android's low-memory signal: both models stay loaded until Android kills the app.
+- Voices that haven't consented: a voice centroid row is stored for them (`speakers`), which may go
+  against SPEC 4 ("not stored"). Flagged only.
+
+## Lite features (26 Nov 2026)
+
+**How.** Research and photo edits: the app built from this branch on the Pixel 5 (CPU only,
+8 GB, Wi-Fi), run through the bench links (`bench/README.md`) with made-up requests and a made-up
+photo (generated, no real person). Image generation: stable-diffusion.cpp (MIT) built for
+Android and run over adb from a temporary folder, files deleted after. Licences and decisions:
+ADR 0006 "Lite versions of cloud-app features".
+
+### Image generation (trial, not in the app)
+
+| 512×512 on the Pixel 5, 6 CPU threads   | Time per image (5 prompts)               | Peak memory | Download |
+| --------------------------------------- | ---------------------------------------- | ----------- | -------- |
+| SDXS-512, 1 step, 8-bit, TAESD decoder  | 37–43 s (model step ~26 s, decode ~12 s) | 1.1 GB      | 693 MB   |
+| SDXS-512, same, 4 threads               | 46 s                                     | 1.1 GB      | 693 MB   |
+| SDXS-512, 16-bit weights                | 50 s                                     | 1.1 GB      | 893 MB   |
+| SD 1.5 8-bit + LCM-LoRA, 4 steps, TAESD | 240 s (56 s per step)                    | 2.0 GB      | 1.9 GB   |
+
+- Quality (sample images judged by eye: a bicycle, a cartoon fox, a mountain lake, a portrait
+  with a dog, a birthday card, coffee cups): SDXS gives clean, pleasant pictures in all styles;
+  hands and small objects are sometimes odd (a bicycle with merged wheels) and any text in the
+  picture is gibberish. SD 1.5 + LCM is a little more accurate but 6× slower.
+- Faster phones: CPU-only ≈ 12–15 s with SDXS on a Snapdragon 8 Gen 2 / A15-class phone (2.5–3×
+  the Pixel 5 per core, estimated); a few seconds with Core ML or a recent NPU (published).
+- Verdict: usable on phones with ≥ 6 GB RAM as an optional download; not built yet because the
+  licence terms must go into the app's terms (owner decision, ADR 0006).
+
+### Photo edits: background model
+
+| Background cut-out model (laptop, 4 threads, 4 made-up images) | Size   | Time per photo | Masks                                   |
+| -------------------------------------------------------------- | ------ | -------------- | --------------------------------------- |
+| U²-Netp (chosen)                                               | 4.6 MB | 0.8–1.1 s      | Clean on people, a dog, cups, a bicycle |
+| Silueta                                                        | 44 MB  | 1.3–1.8 s      | About the same                          |
+| ISNet general                                                  | 179 MB | 5–7 s          | Worse with the same preprocessing       |

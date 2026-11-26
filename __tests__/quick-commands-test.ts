@@ -96,7 +96,8 @@ describe('helpText', () => {
     expect(t).toMatch(/More with Listen and Online lookup in Settings/);
     const all = helpText({ ...base, listening: true, calendar: true, online: true });
     expect(all).toMatch(/calendar/);
-    expect(all).toMatch(/look things up online/);
+    expect(all).toMatch(/look things up online, or research a topic/);
+    expect(all).toMatch(/edit a photo/);
     expect(all).not.toMatch(/More with/);
   });
 });
@@ -132,6 +133,7 @@ describe('help on iPhone', () => {
     const t = helpText({ ...on, iphone: true });
     expect(t).not.toMatch(/alarms|timers|Listen/);
     expect(t).toMatch(/set reminders/);
+    expect(t).not.toMatch(/edit a photo/);
     expect(t).toMatch(/More with Online lookup in Settings/);
   });
   it('Android still offers them', () => {

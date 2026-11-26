@@ -5,8 +5,12 @@
  */
 
 export const MET_URL = 'https://api.met.no/weatherapi/locationforecast/2.0/compact';
-/** MET requires an identifying User-Agent with a website (no personal details). */
-export const MET_USER_AGENT = 'Sidekick/1.0 https://robert-whiteley.github.io/sidekick-site';
+/**
+ * MET's terms: requests must name the application; a contact email or website is recommended
+ * ("should"), not required. The app's name only: nothing points at a person. Checked 26 Nov 2026
+ * (api.met.no/doc/TermsOfService); this exact header got a 200.
+ */
+export const MET_USER_AGENT = 'SidekickApp/1.0 (on-device assistant app)';
 export const MET_CREDIT = 'Based on data from MET Norway';
 export const MET_SOURCE_URL = 'https://api.met.no/';
 

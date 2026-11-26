@@ -154,6 +154,17 @@ export const OCR_FILES = {
   },
 } satisfies Record<string, ModelFile>;
 
+/**
+ * Photo background edits: U²-Netp (Apache-2.0, Qin et al.), the 4.6 MB ONNX export rembg (MIT)
+ * publishes. Downloaded the first time a background edit is asked for. Must match PhotoEdit.kt.
+ */
+export const PHOTO_SEG_FILE: ModelFile = {
+  name: 'u2netp.onnx',
+  url: 'https://github.com/danielgatis/rembg/releases/download/v0.0.0/u2netp.onnx',
+  sha256: '309c8469258dda742793dce0ebea8e6dd393174f89934733ecc8b14c76f4ddd8',
+  bytes: 4574861,
+};
+
 /** "1.2 / 2.6 GB (46%)" */
 export function formatProgress(bytes: number, total: number): string {
   const gb = (n: number) => (n / 1e9).toFixed(1);

@@ -45,8 +45,12 @@ import {
   parseGdelt,
   topicWords,
 } from './news-logic';
+import { politeFetch } from './rate-limit';
 
 export type { WebSource };
+
+/** Time kept for the request itself when waiting for a Wikimedia slot or a retry. */
+const REQUEST_ROOM_MS = 1000;
 
 /** Requests that got an answer from a server / that never reached one (network error, timeout). */
 const net = { reached: 0, failed: 0 };
@@ -60,18 +64,24 @@ export async function fetchJson(
   const ctl = new AbortController();
   const timer = setTimeout(() => ctl.abort(), timeoutMs);
   try {
-    const res = await doFetch(url, {
-      signal: ctl.signal,
-      headers: {
-        Accept: 'application/json',
-        'User-Agent': USER_AGENT,
-        'Api-User-Agent': USER_AGENT,
+    const res = await politeFetch(
+      doFetch,
+      url,
+      {
+        signal: ctl.signal,
+        headers: {
+          Accept: 'application/json',
+          'User-Agent': USER_AGENT,
+          'Api-User-Agent': USER_AGENT,
+        },
+        credentials: 'omit',
       },
-      credentials: 'omit',
-    }).catch((e: unknown) => {
+      { deadline: Date.now() + timeoutMs - REQUEST_ROOM_MS },
+    ).catch((e: unknown) => {
       net.failed++;
       throw e;
     });
+    if (!res) return null; // over the Wikimedia budget for now: no result, nothing sent
     net.reached++;
     if (!res.ok) return null;
     return await res.json();
@@ -94,17 +104,23 @@ export async function fetchText(
   const ctl = new AbortController();
   const timer = setTimeout(() => ctl.abort(), timeoutMs);
   try {
-    const res = await doFetch(url, {
-      signal: ctl.signal,
-      headers: {
-        Accept: 'application/rss+xml, application/atom+xml, application/xml, text/xml',
-        'User-Agent': USER_AGENT,
+    const res = await politeFetch(
+      doFetch,
+      url,
+      {
+        signal: ctl.signal,
+        headers: {
+          Accept: 'application/rss+xml, application/atom+xml, application/xml, text/xml',
+          'User-Agent': USER_AGENT,
+        },
+        credentials: 'omit',
       },
-      credentials: 'omit',
-    }).catch((e: unknown) => {
+      { deadline: Date.now() + timeoutMs - REQUEST_ROOM_MS },
+    ).catch((e: unknown) => {
       net.failed++;
       throw e;
     });
+    if (!res) return null;
     net.reached++;
     if (!res.ok || (res.url && !res.url.startsWith('https://'))) return null;
     if (Number(res.headers?.get?.('content-length') ?? 0) > MAX_FEED_BYTES) return null;

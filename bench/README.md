@@ -110,6 +110,18 @@ plus filler up to any size, and 50 questions with the expected answer words.
 - Remove: "Recall: remove" / `run=recall-clear` deletes every `bench:` row. Counts of the owner's
   own memories are logged before and after (`[recall] counts …`), never their content.
 
+## Research and photo edits (`bench/research/cases.ts`, `src/engine/photo-edit-bench.ts`)
+
+- Research: `sidekick://bench?run=research[&only=<ids>]` — 10 made-up research requests: does the
+  router pick research, then the full research (runs as if Online were on, the setting is
+  untouched), with coverage of expected points, valid citations and timings per step.
+- Photo edits: push a made-up photo to the app's external files folder as `bench-photo.jpg`, then
+  `run=photo-edit` — 10 edit requests and 2 questions; copies of the results are written next to
+  it as `bench-edit-N.jpg|png` for a look. Delete all of them afterwards.
+- Image generation trial (not in the app): stable-diffusion.cpp (MIT) built for Android with the
+  NDK, run from `/data/local/tmp` over adb with SDXS-512 and SD 1.5 + LCM-LoRA; files removed
+  after. Results in docs/BENCH.md "Lite features".
+
 ### adb deep links
 
 Deep links run only when the file `bench-links` exists in the app's external files folder

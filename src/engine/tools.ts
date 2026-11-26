@@ -49,7 +49,9 @@ export type RouteOutcome =
   /** Run this canonical request through the rules (reminders, routines, location, weather). */
   | { kind: 'rules'; text: string }
   /** The normal answer path (memory search, recaps), with any time span already remembered. */
-  | { kind: 'answer' };
+  | { kind: 'answer' }
+  /** Several web searches and a short report with sources (src/web/research.ts). */
+  | { kind: 'research'; topic: string };
 
 export type RouteContext = {
   routine?: boolean;
@@ -123,6 +125,8 @@ async function runTool(
         rememberRange([question], { from, to, label: 'that time' });
       return { kind: 'answer' };
     }
+    case 'research':
+      return { kind: 'research', topic: str(a.topic) || question };
     case 'message':
       return intent({
         type: 'message',
@@ -306,6 +310,8 @@ async function resultText(o: RouteOutcome, ctx: RouteContext, question: string):
       return o.plan.kind === 'reply' ? o.plan.text : `${o.plan.draft.title} (card shown)`;
     case 'rules':
       return (await ctx.viaRules?.(o.text)) ?? '';
+    case 'research':
+      return '';
     case 'answer': {
       const hits = await searchMemory(question, 4).catch(() => []);
       return hits.length
@@ -344,8 +350,15 @@ export async function routeWithTools(
     });
     if (!outcome) return step ? lastOutcome(steps) : null;
     const spec = tools.find((x) => x.name === call.tool);
-    // Done unless an info result feeds a compound request's next step.
-    if (!compound || call.tool === 'reply' || spec?.kind === 'action') return outcome;
+    // Done unless an info result feeds a compound request's next step. Research is a whole
+    // answer of its own (minutes on a slow phone), never a step in a chain.
+    if (
+      !compound ||
+      call.tool === 'reply' ||
+      spec?.kind === 'action' ||
+      outcome.kind === 'research'
+    )
+      return outcome;
     steps.push({ tool: call.tool, args: v.args, result: await resultText(outcome, ctx, question) });
   }
   return lastOutcome(steps);
