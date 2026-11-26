@@ -1,5 +1,5 @@
 // Writes the website (home, privacy, support, delete-data pages) (repo robert-whiteley/sidekick-site, served at
-// https://sidekick.sashy.ai/privacy) from docs/privacy-policy.md, the same text the app shows.
+// https://robert-whiteley.github.io/sidekick-site/privacy) from docs/privacy-policy.md, the same text the app shows.
 // Run after editing the policy: node scripts/build-site.mjs [path to sidekick-site]
 // (default ../sidekick-site), then commit and push the site repo; GitHub Pages redeploys it.
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
@@ -80,11 +80,11 @@ export function page(title, body) {
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${esc(title)}</title>
-<link rel="stylesheet" href="/style.css">
+<link rel="stylesheet" href="/sidekick-site/style.css">
 </head>
 <body>
-<header><a href="/" class="brand">Sidekick</a>
-<nav><a href="/privacy/">Privacy</a> <a href="/support/">Support</a> <a href="/delete-data/">Delete data</a></nav></header>
+<header><a href="/sidekick-site/" class="brand">Sidekick</a>
+<nav><a href="/sidekick-site/privacy/">Privacy</a> <a href="/sidekick-site/support/">Support</a> <a href="/sidekick-site/delete-data/">Delete data</a></nav></header>
 <main>
 ${body}
 </main>
@@ -95,7 +95,7 @@ ${body}
 }
 
 const HOME = `<h1>Sidekick</h1>
-<p class="lead">An AI helper that runs entirely on your Android phone. It sees and hears what you
+<p class="lead">An AI assistant that runs entirely on your Android phone. It sees and hears what you
 choose, remembers it, and answers your questions, without sending your life to the cloud.</p>
 <h2>What it does</h2>
 <ul>
@@ -115,8 +115,8 @@ servers that receive your data.</li>
 (online lookup, weather, Gmail, Google Tasks, Google Drive backup).</li>
 </ul>
 <p>Get Sidekick on Google Play (link coming soon).</p>
-<p><a href="/privacy/">Privacy policy</a> · <a href="/support/">Support</a> ·
-<a href="/delete-data/">Delete your data</a></p>`;
+<p><a href="/sidekick-site/privacy/">Privacy policy</a> · <a href="/sidekick-site/support/">Support</a> ·
+<a href="/sidekick-site/delete-data/">Delete your data</a></p>`;
 
 const SUPPORT = `<h1>Support</h1>
 <p>Questions, problems or ideas: email <a href="mailto:info@sashy.ai">info@sashy.ai</a>.</p>
@@ -145,7 +145,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   const site = resolve(process.argv[2] ?? join(root, '..', 'sidekick-site'));
   const md = readFileSync(join(root, 'docs/privacy-policy.md'), 'utf8');
   const pages = [
-    ['index.html', 'Sidekick: a private AI helper on your phone', HOME],
+    ['index.html', 'Sidekick: a private AI assistant on your phone', HOME],
     ['privacy/index.html', 'Sidekick privacy policy', markdownToHtml(md)],
     ['support/index.html', 'Sidekick support', SUPPORT],
     ['delete-data/index.html', 'Delete your Sidekick data', DELETE],

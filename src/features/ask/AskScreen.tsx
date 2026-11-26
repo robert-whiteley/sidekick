@@ -233,6 +233,25 @@ export function AskScreen({
 
   // "Stop listening" / "start listening" said to Sidekick.
   useEffect(() => onListeningByVoice(setListening), []);
+  // Listening can stop outside this screen (Stop in the notification, Android ending the service):
+  // re-read the real state when the app comes back and every few seconds while it is open, so the
+  // button never shows "on" for a microphone that is off. A cheap synchronous native read.
+  useEffect(() => {
+    const sync = () => {
+      const on = isListening();
+      setListening((was) => {
+        // Stopped elsewhere: drop the "Listening for …" line too.
+        if (was && !on) setStatus((st) => (st.startsWith('Listening for') ? '' : st));
+        return on;
+      });
+    };
+    const sub = AppState.addEventListener('change', (st) => st === 'active' && sync());
+    const timer = setInterval(() => AppState.currentState !== 'background' && sync(), 3000);
+    return () => {
+      sub.remove();
+      clearInterval(timer);
+    };
+  }, []);
 
   // Listening stays on across the app being killed and reopened.
   useEffect(() => {

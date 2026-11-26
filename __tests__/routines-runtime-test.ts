@@ -62,7 +62,7 @@ const T = (h: number, m = 0, day = 25) => new Date(2026, 10, day, h, m).getTime(
 
 it('sets one up from the chat and plans its alarm', async () => {
   const r = routineRequest('every day at 6pm give me a recap of my day', new Date(T(12)));
-  expect(r?.text).toMatch(/^OK\. Every day at 18:00, I'll: give me a recap of my day/);
+  expect(r?.text).toMatch(/^OK\. Every day at 18:00, I'll give you a recap of your day\./);
   await syncPlan(T(12));
   const plan = JSON.parse(plans.at(-1)!);
   expect(plan.alarms).toEqual([{ id: listRoutines()[0].id, at: T(18) }]);

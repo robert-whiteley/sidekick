@@ -240,7 +240,13 @@ export function routineRequest(
   if (p.when.type === 'once' && parseIntent(p.action, now)) return null;
   const r = addRoutine(question.trim(), p.when, p.action, now.getTime());
   if (!r.ok) return { text: r.reason };
-  return { text: confirmation(r.routine, now), routineId: r.routine.id };
+  // Without "Alarms & reminders" Android delays the alarm (a minute up to ~10 in Doze); say so,
+  // and the card below offers the switch.
+  const late =
+    isSchedule(p.when) && !exactRoutinesAllowed()
+      ? ' With the app closed it may run a few minutes late until you allow on-time alarms.'
+      : '';
+  return { text: confirmation(r.routine, now) + late, routineId: r.routine.id };
 }
 
 /** The chat card after setting one up: Undo or change it in Settings. */
@@ -257,10 +263,14 @@ export function postRoutineCard(id: string) {
       actions: [
         { label: 'Undo', id: 'undo' },
         { label: 'Change', id: 'edit' },
+        ...(isSchedule(r.when) && !exactRoutinesAllowed()
+          ? [{ label: 'Allow on time', id: 'exact' }]
+          : []),
       ],
     },
     (action: string) => {
       if (action === 'undo') deleteRoutine(id);
+      else if (action === 'exact') openExactRoutineSettings();
       else {
         // eslint-disable-next-line @typescript-eslint/no-require-imports
         require('expo-router').router.push('/settings/routines');

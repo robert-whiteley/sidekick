@@ -1,4 +1,8 @@
-import { planCameraChange, type CameraState } from '../src/engine/camera-settings-logic';
+import {
+  parseFrames,
+  planCameraChange,
+  type CameraState,
+} from '../src/engine/camera-settings-logic';
 import { NOT_IN_ROUTINES, relevantTools, validateCall } from '../src/engine/tools-logic';
 
 const OPTIONS = [0.5, 1, 2];
@@ -69,6 +73,15 @@ describe('the camera_setting tool', () => {
     });
     expect(ok).toMatchObject({ ok: true, args: { lens: 'front' } });
     expect(ok.ok && 'detail' in ok.args).toBe(false);
-    expect(validateCall({ tool: 'camera_setting', args: { fps: 99 } }).ok).toBe(false);
+  });
+
+  test('one frame-rate argument takes words or numbers (small models mix them up)', () => {
+    expect(parseFrames('lower')).toEqual({ frames: 'fewer' });
+    expect(parseFrames('more')).toEqual({ frames: 'more' });
+    expect(parseFrames('default')).toEqual({ frames: 'normal' });
+    expect(parseFrames('2 fps')).toEqual({ fps: 2 });
+    expect(parseFrames(0.5)).toEqual({ fps: 0.5 });
+    expect(parseFrames('sideways')).toEqual({});
+    expect(parseFrames(undefined)).toEqual({});
   });
 });

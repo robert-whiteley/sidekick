@@ -114,7 +114,7 @@ describe('the router loop', () => {
     expect(runParsedCommand).toHaveBeenCalledWith(
       {
         type: 'cameraSetting',
-        change: { frames: 'more', fps: undefined, lens: 'front', detail: undefined },
+        change: { frames: 'more', lens: 'front', detail: undefined },
       },
       'switch to the selfie camera and film more',
       null,

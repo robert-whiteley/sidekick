@@ -91,7 +91,8 @@ export const TOOLS: ToolSpec[] = [
       app: oneOf(['whatsapp', 'sms', 'telegram', 'signal', 'auto']),
     },
     words:
-      /\b(text|message|whatsapp|telegram|signal|sms|tell|let .+ know|ask (him|her|them|\w+) |reply|send)\b/,
+      // "tell me …" is a request to Sidekick, never a message (that needs someone else).
+      /\b(text|message|whatsapp|telegram|signal|sms|tell (?!me\b|us\b)|let .+ know|ask (him|her|them|\w+) |reply|send)\b/,
   },
   {
     name: 'email',
@@ -123,13 +124,14 @@ export const TOOLS: ToolSpec[] = [
   },
   {
     name: 'routine',
-    desc: 'repeat an instruction on a schedule or when something happens',
+    desc: 'do an instruction later (once) or repeat it on a schedule or when something happens',
     kind: 'action',
     args: {
-      when: req('e.g. every day at 6pm, every Monday, whenever Sam messages me'),
-      instruction: req('what to do each time'),
+      when: req('e.g. in 10 minutes, at 5pm, every day at 6pm, whenever Sam messages me'),
+      instruction: req('what to do then'),
     },
-    words: /\b(every|each|whenever|daily|weekly|routine|each time|any time)\b/,
+    words:
+      /\b(every|each|whenever|daily|weekly|routine|each time|any time|in (\d+|an?|one|two|three|five|ten|fifteen|twenty|thirty|half an) (minutes?|mins?|hours?|hrs?|hour))\b/,
   },
   {
     name: 'alarm',
@@ -320,8 +322,7 @@ export const TOOLS: ToolSpec[] = [
     desc: 'change the live camera: frame rate, front or back camera, image detail / resolution',
     kind: 'action',
     args: {
-      frames: oneOf(['more', 'fewer', 'normal']),
-      fps: num(0.1, 10, false, 'frames per second, if a number is said'),
+      frames: s('frame rate: more, fewer, normal, or a number per second'),
       lens: oneOf(['front', 'back', 'flip']),
       detail: oneOf(['low', 'medium', 'high', 'higher', 'lower', 'normal']),
     },
@@ -526,7 +527,10 @@ export function validateCall(call: ToolCall, tools: ToolSpec[] = TOOLS): Validat
     switch (a.type) {
       case 'string':
         if (typeof v === 'number' || typeof v === 'boolean') v = String(v);
-        if (typeof v !== 'string') return { ok: false, error: `${name} not text` };
+        if (typeof v !== 'string') {
+          if (a.required) return { ok: false, error: `${name} not text` };
+          continue;
+        }
         if (a.values) {
           const lower = v.toLowerCase();
           if (!a.values.includes(lower)) {
@@ -539,10 +543,14 @@ export function validateCall(call: ToolCall, tools: ToolSpec[] = TOOLS): Validat
         break;
       case 'number': {
         const n = typeof v === 'string' ? Number(v.replace(/%$/, '')) : v;
-        if (typeof n !== 'number' || !Number.isFinite(n))
-          return { ok: false, error: `${name} not a number` };
-        if ((a.min !== undefined && n < a.min) || (a.max !== undefined && n > a.max))
-          return { ok: false, error: `${name} out of range` };
+        if (typeof n !== 'number' || !Number.isFinite(n)) {
+          if (a.required) return { ok: false, error: `${name} not a number` };
+          continue;
+        }
+        if ((a.min !== undefined && n < a.min) || (a.max !== undefined && n > a.max)) {
+          if (a.required) return { ok: false, error: `${name} out of range` };
+          continue;
+        }
         v = n;
         break;
       }
@@ -551,18 +559,34 @@ export function validateCall(call: ToolCall, tools: ToolSpec[] = TOOLS): Validat
           if (/^(true|yes|on|1)$/i.test(v)) v = true;
           else if (/^(false|no|off|0)$/i.test(v)) v = false;
         }
-        if (typeof v !== 'boolean') return { ok: false, error: `${name} not true/false` };
+        if (typeof v !== 'boolean') {
+          if (a.required) return { ok: false, error: `${name} not true/false` };
+          continue;
+        }
         break;
       case 'datetime': {
-        if (typeof v !== 'string') return { ok: false, error: `${name} not a time` };
+        if (typeof v !== 'string') {
+          if (a.required) return { ok: false, error: `${name} not a time` };
+          continue;
+        }
         const t = parseLocalIso(v);
-        if (t === null) return { ok: false, error: `${name} not a time` };
+        if (t === null) {
+          if (a.required) return { ok: false, error: `${name} not a time` };
+          continue;
+        }
         v = t;
         break;
       }
     }
     out[name] = v;
   }
+  // A message to the user themselves is a mix-up ("tell me a fact"): answer instead.
+  if (
+    (call.tool === 'message' || call.tool === 'email' || call.tool === 'call') &&
+    typeof out.to === 'string' &&
+    /^(me|myself|us|i|user|the user)$/i.test(out.to)
+  )
+    return { ok: false, error: 'to is the user' };
   return { ok: true, args: out };
 }
 

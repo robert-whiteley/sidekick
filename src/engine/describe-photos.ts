@@ -10,7 +10,7 @@ import {
   shouldDescribeNow,
 } from '@/memory/photo-text';
 import { nextUncaptionedFrame, nextUndescribedPhoto, savePhotoDescription } from '@/memory/store';
-import { batteryState } from './battery';
+import { batteryState, chargerFallingBehind } from './battery';
 import { askLlmInBackground, cancelLlm, ensureLlm } from './llm';
 import { getSettings } from './settings';
 
@@ -78,6 +78,7 @@ export async function captionOneFrame(busy: boolean): Promise<boolean> {
     mode: captionMode(getSettings().captionFrames),
     charging: battery.charging,
     batteryLevel: battery.batteryLevel,
+    drainingOnCharger: chargerFallingBehind(),
     lowPowerMode: battery.lowPowerMode,
     busy,
     sinceActiveMs: Date.now() - lastActiveAt,

@@ -110,6 +110,8 @@ export function frameCaptionPlan(s: {
   charging: boolean;
   /** 0..1, or -1 when unknown */
   batteryLevel: number;
+  /** On a charger that can't keep up (battery falling anyway). */
+  drainingOnCharger?: boolean;
   lowPowerMode: boolean;
   busy: boolean;
   /** ms since the owner last opened the app or asked something */
@@ -122,6 +124,7 @@ export function frameCaptionPlan(s: {
   thermalStatus: number;
 }): 'skip' | 'loaded' | 'load' {
   if (s.mode === 'off' || s.lowPowerMode || s.busy) return 'skip';
+  if (s.charging && s.drainingOnCharger) return 'skip';
   if (!s.charging && (s.mode !== 'always' || s.batteryLevel < CAPTION_MIN_BATTERY)) return 'skip';
   if (s.sinceActiveMs < FRAME_CAPTION_QUIET_MS) return 'skip';
   if (s.doneThisCharge >= FRAME_CAPTIONS_PER_CHARGE) return 'skip';

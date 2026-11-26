@@ -2,7 +2,7 @@
 
 Last updated: 25 November 2026
 
-Sidekick is an AI helper that runs entirely on your phone. This policy explains what it does with your information. In short: **we don't collect anything.** There are no accounts, no analytics, no ads and no tracking, and we have no servers that receive your data.
+Sidekick is an AI assistant that runs entirely on your phone. This policy explains what it does with your information. In short: **we don't collect anything.** There are no accounts, no analytics, no ads and no tracking, and we have no servers that receive your data.
 
 ## What stays on your phone
 
@@ -61,4 +61,4 @@ If this policy changes, the new version will be posted at the same address, with
 
 Questions? Email **info@sashy.ai**, or use **Settings → About → Send feedback** in the app.
 
-This policy is published at https://sidekick.sashy.ai/privacy.
+This policy is published at https://robert-whiteley.github.io/sidekick-site/privacy.

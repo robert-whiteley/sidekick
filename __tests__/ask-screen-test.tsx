@@ -48,9 +48,10 @@ jest.mock('@/engine/name-inference', () => ({
   stopNameInference: async () => {},
 }));
 jest.mock('@/engine/followup-notify', () => ({ startFollowupNotifications: jest.fn() }));
+const mockListening = { on: false };
 jest.mock('@/engine/listen', () => ({
   configureListening: jest.fn(),
-  isListening: () => false,
+  isListening: () => mockListening.on,
   askMicPermission: async () => true,
   startListening: async () => null,
   stopListening: jest.fn(),
@@ -157,4 +158,24 @@ test('opening the chat turns listening back on if it was on before the app was k
   resumeListening.mockClear();
   await render(<AskScreen />);
   expect(resumeListening).toHaveBeenCalledTimes(1);
+});
+
+test('the Listen button follows the real microphone when it is stopped from the notification', async () => {
+  jest.useFakeTimers();
+  try {
+    mockListening.on = true;
+    await render(<AskScreen />);
+    expect(await screen.findByText('Level 2, by the lift.')).toBeTruthy();
+    const on = () =>
+      screen.getByLabelText('Listen in the background').props.accessibilityState?.checked;
+    expect(on()).toBe(true);
+    mockListening.on = false; // Stop pressed in the notification
+    await act(async () => {
+      jest.advanceTimersByTime(3500);
+    });
+    expect(on()).toBe(false);
+  } finally {
+    mockListening.on = false;
+    jest.useRealTimers();
+  }
 });

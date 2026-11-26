@@ -26,6 +26,22 @@ export type CameraPatch = {
   cameraLens?: CameraLens;
 };
 
+/**
+ * The router's one frame-rate argument as a change: a number ("5", 0.5, "2 fps") is an exact
+ * rate; words give a direction ("lower", "less", "faster", "default"). Anything else: no change.
+ */
+export function parseFrames(v: unknown): Pick<CameraChange, 'frames' | 'fps'> {
+  if (typeof v === 'number') return Number.isFinite(v) && v > 0 ? { fps: v } : {};
+  if (typeof v !== 'string') return {};
+  const t = v.trim().toLowerCase();
+  const n = parseFloat(t);
+  if (Number.isFinite(n) && n > 0) return { fps: n };
+  if (/\b(more|higher|up|faster|increase|raise|smoother)\b/.test(t)) return { frames: 'more' };
+  if (/\b(fewer|less|lower|down|slower|decrease|reduce)\b/.test(t)) return { frames: 'fewer' };
+  if (/\b(normal|default|reset|recommended|usual|standard)\b/.test(t)) return { frames: 'normal' };
+  return {};
+}
+
 const DETAILS: ImageDetail[] = ['low', 'medium', 'high'];
 
 const rateWords = (fps: number) =>

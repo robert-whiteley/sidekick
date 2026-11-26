@@ -72,7 +72,10 @@ describe('captionOneFrame', () => {
     frame = { id: 7, photoPath: '/f/7.jpg' };
     jest.doMock('react-native', () => ({ Platform: { OS: 'android' } }));
     jest.doMock('../modules/sidekick-native', () => ({ __esModule: true, default: native }));
-    jest.doMock('@/engine/battery', () => ({ batteryState: async () => battery }));
+    jest.doMock('@/engine/battery', () => ({
+      batteryState: async () => battery,
+      chargerFallingBehind: () => false,
+    }));
     jest.doMock('@/engine/llm', () => ({
       askLlmInBackground: ask,
       cancelLlm: jest.fn(),
@@ -164,4 +167,29 @@ test('slow photo work runs on the charger, on battery only when chosen, never wh
     false,
   );
   expect(photoWorkAllowed({ ...b, mode: 'off' })).toBe(true);
+});
+
+test('a charger that cannot keep up pauses slow photo work', () => {
+  const { drainingOnCharger, photoWorkAllowed } = jest.requireActual('@/memory/embed-policy');
+  const t = 1_000_000;
+  const falling = [
+    { at: t, level: 0.13, charging: true },
+    { at: t + 5 * 60_000, level: 0.1, charging: true },
+  ];
+  expect(drainingOnCharger(falling, t + 5 * 60_000)).toBe(true);
+  const rising = [
+    { at: t, level: 0.3, charging: true },
+    { at: t + 5 * 60_000, level: 0.32, charging: true },
+  ];
+  expect(drainingOnCharger(rising, t + 5 * 60_000)).toBe(false);
+  expect(drainingOnCharger(falling.slice(0, 1), t)).toBe(false);
+  const b = {
+    mode: 'charging',
+    charging: true,
+    batteryLevel: 0.1,
+    lowPowerMode: false,
+    thermalStatus: 0,
+  };
+  expect(photoWorkAllowed({ ...b, drainingOnCharger: true })).toBe(false);
+  expect(frameCaptionPlan({ ...base, drainingOnCharger: true })).toBe('skip');
 });

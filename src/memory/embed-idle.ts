@@ -1,5 +1,5 @@
 import SidekickNative from '../../modules/sidekick-native';
-import { batteryState } from '@/engine/battery';
+import { batteryState, chargerFallingBehind } from '@/engine/battery';
 import { getSettings } from '@/engine/settings';
 import { LOW_RAM_MB, photoWorkAllowed, shouldEmbedNow } from './embed-policy';
 import { captionMode } from './photo-text';
@@ -40,6 +40,7 @@ export async function embedWhenIdle(
     batteryLevel,
     lowPowerMode,
     thermalStatus,
+    drainingOnCharger: chargerFallingBehind(),
   });
   let total = 0;
   for (let i = 0; i < maxBatches && !isBusy(); i++) {

@@ -1,4 +1,4 @@
-Sidekick is an AI helper that runs entirely on your phone. It sees what your camera sees, hears what you say, and remembers it for you — without sending any of it anywhere.
+Sidekick is an AI assistant that runs entirely on your phone. It sees what your camera sees, hears what you say, and remembers it for you — without sending any of it anywhere.
 
 PRIVATE BY DESIGN
 • No account, no sign-up, no ads, no tracking.

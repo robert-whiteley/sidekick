@@ -122,7 +122,7 @@ Owner steps needed later (not blocking the build):
       languages, translated to English on the phone). Full localisation: ADR 0006 "Later".
 - [x] Updates: Play builds plus Expo quick fixes (Settings → Advanced, on; Wi-Fi only) while under
       1,000 monthly users; then builds only or a self-hosted server (docs/RELEASE.md).
-- [x] Open source: Apache-2.0; website on GitHub Pages (sidekick.sashy.ai); support info@sashy.ai.
+- [x] Open source: Apache-2.0; website on GitHub Pages (robert-whiteley.github.io/sidekick-site); support info@sashy.ai.
 - [ ] Phone verification of all of the above (tester, sk46) → docs/LIMITS.md. Partly done: sk44–sk45 results in docs/LIMITS.md; the rest → ROADMAP Release 1.
 - Owner steps: the complete list is docs/RELEASE-OWNER-STEPS.md (single source).
 - Research and future: docs/research/*.md, docs/FUTURE-wearables.md, ADR 0006.

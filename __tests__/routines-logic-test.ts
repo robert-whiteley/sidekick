@@ -1,6 +1,9 @@
 import {
   type Routine,
   briefingRoutine,
+  confirmation,
+  inMinutes,
+  inReplyVoice,
   describeWhen,
   dueRoutines,
   isBriefing,
@@ -252,4 +255,41 @@ describe('words', () => {
       action: 'brief me',
     });
   });
+});
+
+describe('one-off in N minutes (phone: "in one minute, tell me a fun fact" went to messaging)', () => {
+  const now = new Date(2026, 10, 26, 23, 58, 0);
+  test('leading and trailing relative times become one-off routines', () => {
+    const a = parseRoutine('in one minute, tell me a fun fact', now);
+    expect(a).toEqual({
+      ok: true,
+      when: { type: 'once', at: now.getTime() + 60_000 },
+      action: 'tell me a fun fact',
+    });
+    const b = parseRoutine('check the weather in half an hour', now);
+    expect(b).toMatchObject({ ok: true, when: { type: 'once', at: now.getTime() + 30 * 60_000 } });
+    expect(parseRoutine('in 2 hours remind me to stretch', now)).toBeNull(); // reminders elsewhere
+  });
+  test('a question with a time in it stays a question', () => {
+    expect(parseRoutine('what will the weather be in 2 hours', now)).toBeNull();
+    expect(parseRoutine('in 5 minutes what is the time', now)).toBeNull();
+  });
+  test('minutes in a phrase', () => {
+    expect(inMinutes('an hour')).toBe(60);
+    expect(inMinutes('forty-five minutes')).toBe(45);
+    expect(inMinutes('3 hrs')).toBe(180);
+    expect(inMinutes('30 hours')).toBeNull();
+  });
+});
+
+test("confirmation says the instruction back in Sidekick's voice", () => {
+  expect(inReplyVoice('tell me a fun fact')).toBe('tell you a fun fact');
+  expect(inReplyVoice('recap my day and remind me what I said')).toBe(
+    'recap your day and remind you what you said',
+  );
+  const c = confirmation(
+    { when: { type: 'daily', hour: 23, minute: 59 }, action: 'tell me a fun fact' },
+    new Date(2026, 10, 26, 12),
+  );
+  expect(c).toMatch(/^OK\. Every day at 23:59, I'll tell you a fun fact\./);
 });

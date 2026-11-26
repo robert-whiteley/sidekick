@@ -12,7 +12,7 @@ Current phase details: `docs/PLAN-v2.md`. Left out or rejected on purpose: ADR 0
 
 ## Release 1 (launch)
 
-- Owner steps in `docs/RELEASE-OWNER-STEPS.md`: Play Console app and first upload, website DNS (sidekick.sashy.ai), store declarations (data safety, content rating, foreground services, health), Google OAuth verification (Gmail send, Tasks, Drive), store screenshots, production AAB and "go".
+- Owner steps in `docs/RELEASE-OWNER-STEPS.md`: Play Console app and first upload, website DNS (robert-whiteley.github.io/sidekick-site), store declarations (data safety, content rating, foreground services, health), Google OAuth verification (Gmail send, Tasks, Drive), store screenshots, production AAB and "go".
 - Finish phone verification of the plan v2 work (build sk46; `docs/LIMITS.md` covers sk44–sk45).
 
 ## Release 2

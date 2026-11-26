@@ -1,3 +1,4 @@
+import { oneRunAtATime } from './one-run';
 import { isStaleSuggestion, isTemplate } from './fact-extraction';
 import SidekickNative, { type JournalEntry } from '../../modules/sidekick-native';
 import { isDownloaded, modelPath } from '@/engine/downloads';
@@ -675,6 +676,21 @@ async function embedPendingPhotos(
 export async function embedPending(
   limit = 64,
   opts: { photos?: boolean; isBusy?: () => boolean } = {},
+): Promise<number> {
+  // One run at a time: overlapping runs picked the same rows and embedded each photo 2-3 times,
+  // queueing on the embedder (slow questions, battery drain). Idle-time callers skip when a run
+  // is going; a question's text-only catch-up waits for it (photo runs yield to questions).
+  return (await embedOnce(opts.photos !== false, limit, opts)) ?? 0;
+}
+
+const embedOnce = oneRunAtATime(
+  (limit: number, opts: { photos?: boolean; isBusy?: () => boolean }) =>
+    embedPendingNow(limit, opts),
+);
+
+async function embedPendingNow(
+  limit: number,
+  opts: { photos?: boolean; isBusy?: () => boolean },
 ): Promise<number> {
   const photosToo = opts.photos ?? true;
   if (photosToo) await readPendingPhotoText().catch(() => 0);

@@ -43,8 +43,27 @@ export function photoWorkAllowed(s: {
   lowPowerMode: boolean;
   /** Android PowerManager.THERMAL_STATUS_* (2 = moderate) */
   thermalStatus: number;
+  /** On a charger that can't keep up (battery falling anyway). */
+  drainingOnCharger?: boolean;
 }): boolean {
   if (s.thermalStatus >= 2) return false;
-  if (s.charging) return true;
+  if (s.charging) return !s.drainingOnCharger;
   return s.mode === 'always' && !s.lowPowerMode && s.batteryLevel >= CAPTION_MIN_BATTERY;
+}
+
+/** A battery reading: level 0..1 at a time (ms). */
+export type BatterySample = { at: number; level: number; charging: boolean };
+
+/** How far back to look when deciding whether a charger keeps up. */
+export const DRAIN_WINDOW_MS = 10 * 60_000;
+
+/**
+ * True when the phone is on a charger but the battery still fell over the last few minutes (a weak
+ * charger, a PC port or a wireless pad that can't keep up with heavy model work). Slow background
+ * work pauses then, so plugging in never means draining.
+ */
+export function drainingOnCharger(samples: BatterySample[], now: number): boolean {
+  const recent = samples.filter((x) => x.charging && x.level >= 0 && now - x.at <= DRAIN_WINDOW_MS);
+  if (recent.length < 2) return false;
+  return recent[recent.length - 1].level < recent[0].level - 0.005;
 }

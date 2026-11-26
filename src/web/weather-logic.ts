@@ -6,7 +6,7 @@
 
 export const MET_URL = 'https://api.met.no/weatherapi/locationforecast/2.0/compact';
 /** MET requires an identifying User-Agent with a website (no personal details). */
-export const MET_USER_AGENT = 'Sidekick/1.0 https://sidekick.sashy.ai';
+export const MET_USER_AGENT = 'Sidekick/1.0 https://robert-whiteley.github.io/sidekick-site';
 export const MET_CREDIT = 'Based on data from MET Norway';
 export const MET_SOURCE_URL = 'https://api.met.no/';
 

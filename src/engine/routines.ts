@@ -25,10 +25,12 @@ import {
   routineLabel,
   routineQuestion,
   triggerAllowed,
+  upcoming,
 } from './routines-logic';
 import {
   listRoutines,
   migrateBriefing,
+  onRoutinesChange,
   plannedEventAlarms,
   setPlannedEventAlarms,
   syncPlan,
@@ -285,7 +287,25 @@ async function runOne(
 }
 
 let started = false;
-let tick: ReturnType<typeof setInterval> | null = null;
+let tick: ReturnType<typeof setTimeout> | null = null;
+
+/**
+ * While the app is open, wakes at the next routine's exact time (at most a minute apart), so a
+ * routine due at 23:59 runs at 23:59, not at the next whole-minute check. With the app closed the
+ * native alarm does this.
+ */
+function armTick() {
+  if (tick) clearTimeout(tick);
+  const now = Date.now();
+  const next = upcoming(listRoutines(), now)[0]?.at;
+  const wait = next != null ? Math.min(Math.max(next - now + 250, 250), 60_000) : 60_000;
+  tick = setTimeout(() => {
+    tick = null;
+    if (!started) return;
+    if (AppState.currentState === 'active') void handleRoutineEvent({ type: 'time' });
+    armTick();
+  }, wait);
+}
 
 /** At app start: migrate the old briefing, plan alarms, catch up, and check each minute while open. */
 export function startRoutines(): () => void {
@@ -297,17 +317,22 @@ export function startRoutines(): () => void {
     console.log(`[routines] migrate: ${String(e)}`);
   }
   void handleRoutineEvent({ type: 'time' });
-  tick = setInterval(() => {
-    if (AppState.currentState === 'active') void handleRoutineEvent({ type: 'time' });
-  }, 60_000);
+  armTick();
+  // A routine added or changed ("in one minute, …") re-arms the timer for its time.
+  const offChange = onRoutinesChange(() => armTick());
   const sub = AppState.addEventListener('change', (s) => {
-    if (s === 'active') void handleRoutineEvent({ type: 'time' });
+    if (s === 'active') {
+      void handleRoutineEvent({ type: 'time' });
+      armTick();
+    }
   });
   const offPlace = onPlaceChange((e) => void onPlace(e.type, e.place.name, e.at));
   return () => {
     started = false;
-    if (tick) clearInterval(tick);
+    if (tick) clearTimeout(tick);
+    tick = null;
     sub.remove();
+    offChange();
     offPlace();
   };
 }

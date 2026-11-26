@@ -25,6 +25,7 @@ import {
   wantsModelRange,
 } from './tools-logic';
 import { runParsedCommand } from './quick-commands';
+import { parseFrames } from './camera-settings-logic';
 import { runExtra } from '@/integrations/extras';
 import type { Extra, RideApp, SearchApp } from '@/integrations/extras-logic';
 import { runControl } from '@/integrations/phone-controls';
@@ -237,8 +238,7 @@ async function runTool(
       return command({
         type: 'cameraSetting',
         change: {
-          frames: pick(a.frames),
-          fps: typeof a.fps === 'number' ? a.fps : undefined,
+          ...parseFrames(a.frames),
           lens: pick(a.lens),
           detail: pick(a.detail),
         },
