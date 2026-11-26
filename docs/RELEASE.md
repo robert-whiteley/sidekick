@@ -49,7 +49,7 @@ Nothing here costs money. EAS free plan: up to 15 Android cloud builds (expo.dev
    - `scripts/release.sh promote --from alpha --to production --rollout 0.2 --real` (20% staged), then `--rollout 1`.
 6. Listing text changes: edit `fastlane/metadata/android/en-GB/*.txt`, run `node scripts/check-store-text.mjs`, then `scripts/release.sh metadata --real`. Add `--images` once the images exist.
 
-Rules: never publish to production without the owner's go-ahead. Never pay. Never commit `google-service-account.json`, keystores or `.env`. fastlane needs Ruby and `bundle install` once (`Gemfile`).
+Production releases and quick fixes need the owner's go-ahead (the session hook asks); secret files can't be committed (`scripts/check-privacy.sh`). fastlane needs Ruby and `bundle install` once (`Gemfile`).
 
 ## E. iPhone (App Store)
 
@@ -96,7 +96,7 @@ third-party content). An empty extra draft submission sits in App Store Connect;
 Future sessions run in the cloud, which has no local key files and no phone. Everything that ships
 goes through GitHub Actions instead, so it works the same from the cloud or the laptop:
 
-- **Store builds and uploads:** `gh workflow run release.yml -f track=alpha`: both stores from one commit; starting it shows the owner an approval prompt in the chat. Direct EAS store builds are blocked (`scripts/block-store-builds.sh`).
+- **Store builds and uploads:** `gh workflow run release.yml -f track=alpha`: both stores from one commit; starting it shows the owner an approval prompt in the chat. Direct EAS store builds and `scripts/release.sh ship --real` are blocked, and production promotions and quick fixes ask the owner (`scripts/claude-guard.py`).
   (`.github/workflows/release.yml`): EAS builds Android and iOS, uploads the AAB to Play (track
   `alpha` = closed test; `internal`, `beta`, `store` = production only after the owner's go) and the
   iOS build to TestFlight. Watch with `gh run watch`.

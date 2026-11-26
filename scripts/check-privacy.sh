@@ -14,10 +14,10 @@ fi
 [ -z "$files" ] && exit 0
 fail=0
 
-# 1. Generated, binary or secret files never belong in the repo.
+# 1. Generated (ios/, android/: prebuild), binary or secret files never belong in the repo.
 bad_paths=$(echo "$files" | grep -E \
-  '(^|/)(build|\.gradle|\.cxx|\.kotlin|node_modules|\.expo|coverage)/|\.(apk|aab|keystore|jks|p12|p8|pem|key|wav|mp4|ogg)$|(^|/)(google-service-account\.json|local\.properties|client_secret[^/]*\.json|\.env)$' \
-  | grep -vE '^assets/' || true)
+  '^(ios|android)/|(^|/)(build|\.gradle|\.cxx|\.kotlin|node_modules|\.expo|coverage)/|\.(apk|aab|keystore|jks|p12|p8|pem|key|mobileprovision|wav|mp4|ogg)$|(^|/)(google-service-account\.json|google-services\.json|GoogleService-Info\.plist|local\.properties|client_secret[^/]*\.json|\.env(\.[A-Za-z0-9_.-]+)?)$' \
+  | grep -vE '^assets/|(^|/)\.env\.example$' || true)
 if [ -n "$bad_paths" ]; then
   echo "✗ generated/secret files must not be committed:" >&2
   echo "$bad_paths" | head -20 >&2
@@ -45,7 +45,7 @@ if [ -n "$text" ]; then
     -e '/Users/[A-Za-z][A-Za-z0-9._-]+/' \
     -e '[Cc]:\\\\?Users\\\\?[A-Za-z]' \
     -e '/mnt/c/Users/' \
-    -e '\b(192\.168|10\.[0-9]{1,3})\.[0-9]{1,3}\.[0-9]{1,3}\b' \
+    -e '\b(192\.168|10\.[0-9]{1,3}|172\.(1[6-9]|2[0-9]|3[01]))\.[0-9]{1,3}\.[0-9]{1,3}\b' \
     -e '[A-Za-z0-9._%+-]+@(gmail|googlemail|outlook|hotmail|yahoo|icloud)\.com' \
     2>/dev/null | grep -v 'privacy-allow' || true)
   if [ -n "$hits" ]; then
@@ -56,10 +56,10 @@ if [ -n "$text" ]; then
   fi
 fi
 
-# 4. No auto-loaded AI rule files (they slow every session); rules live in docs/RULES.md.
-rule_files=$(echo "$files" | grep -E '(^|/)(CLAUDE|CLAUDE\.local|AGENTS?|GEMINI)\.md$' || true)
+# 4. No auto-loaded AI rule files: checkable rules are scripts (scripts/claude-guard.py, this file).
+rule_files=$(echo "$files" | grep -E '(^|/)(CLAUDE|CLAUDE\.local|AGENTS?|GEMINI)\.md$|(^|/)\.(claude|cursor)/rules/|(^|/)(\.cursorrules|\.windsurfrules|copilot-instructions\.md)$' || true)
 if [ -n "$rule_files" ]; then
-  echo "✗ auto-loaded rule files are not allowed (put rules in docs/RULES.md):" >&2
+  echo "✗ auto-loaded rule files are not allowed (make the rule a check script or hook):" >&2
   echo "$rule_files" >&2
   fail=1
 fi

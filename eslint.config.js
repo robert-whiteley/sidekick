@@ -6,4 +6,21 @@ module.exports = defineConfig([
   expoConfig,
   eslintPluginPrettierRecommended,
   { ignores: ['dist/*', 'android/*', 'ios/*', 'coverage/*', '.claude/*'] },
+  {
+    // Navigation goes through Expo Router.
+    files: ['src/**'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              group: ['@react-navigation/*'],
+              message: 'Use expo-router (Link, router, useLocalSearchParams) instead.',
+            },
+          ],
+        },
+      ],
+    },
+  },
 ]);

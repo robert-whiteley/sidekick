@@ -79,8 +79,10 @@ Integrations now (each with its own switches in Connections):
 - Offline: actions needing the internet wait in an outbox shown in the chat and go when online.
 - Automations and voice: every action is available by voice and in typed chat.
 
-Dev tooling (owner): auto-memory off for this repo; facts live in repo docs (this file,
-docs/RULES.md, ADRs), searched when needed. No CLAUDE.md/AGENTS.md: a hook and CI block them.
+Dev tooling (owner): no rules for AI to read. Checkable rules are silent scripts (commit hook,
+CI, `scripts/claude-guard.py` session hook; list in CONTRIBUTING.md); the rest are notes in the
+product docs (this file, SPEC, ARCHITECTURE, ADRs). Auto-memory off; no CLAUDE.md/AGENTS.md (the
+hook and CI block them); the only other hook fast-forwards `main` at session start.
 
 Owner steps needed later (not blocking the build):
 

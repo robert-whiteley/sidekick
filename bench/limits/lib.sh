@@ -45,9 +45,11 @@ if m: n=list(map(int,m[-1])); print((n[0]+n[2])//2,(n[1]+n[3])//2)"
 front() { a shell dumpsys window | grep "mCurrentFocus" | grep -q "$PKG/"; }
 # A brief focus loss (a system popup) is waited out for a few seconds; nothing is sent meanwhile.
 guard() { local i; for i in 1 2 3 4; do front && return 0; sleep 2; done; a shell dumpsys window | grep mCurrentFocus >&2; echo "STOP: Sidekick is not in front" >&2; exit 3; }
-tap() { guard; "$ADB" shell input tap "$1" "$2"; }
+# Input goes through scripts/phone-input.sh (foreground, status bar and battery checks).
+INPUT="$(dirname "${BASH_SOURCE[0]}")/../../scripts/phone-input.sh"
+tap() { guard; "$INPUT" tap "$1" "$2" || exit 3; }
 # Types text into the focused field (spaces as %s; only plain characters).
-typetext() { guard; "$ADB" shell input text "$(printf '%s' "$1" | sed 's/ /%s/g')"; }
+typetext() { guard; "$INPUT" text "$1" || exit 3; }
 pidof_app() { a shell pidof "$PKG"; }
 # Total PSS of the app process, MB.
 pss_mb() { a shell dumpsys meminfo "$PKG" | awk '/TOTAL PSS:/{print int($3/1024); exit} /^ *TOTAL /{print int($2/1024); exit}'; }

@@ -1,7 +1,7 @@
 name: Release
 # Builds in the EAS cloud and uploads to the stores, so releases work from any session (cloud or
 # laptop): `gh workflow run release.yml -f track=alpha`. Always both stores from the same commit;
-# starting it shows the owner an approval prompt in the chat (scripts/block-store-builds.sh).
+# starting it shows the owner an approval prompt in the chat (scripts/claude-guard.py).
 on:
   workflow_dispatch:
     inputs:

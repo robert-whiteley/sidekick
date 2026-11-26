@@ -19,6 +19,7 @@ jobs:
           cache: npm
       - run: npm ci
       - run: scripts/check-privacy.sh
+      - run: node scripts/check-licences.mjs
       - run: npm run lint
       - run: npm run typecheck
       - run: npm run format:check
@@ -79,6 +80,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
+      - run: scripts/check-commit-emails.sh --history
       - name: Scan full history with gitleaks
         env:
           GITLEAKS_VERSION: 8.30.1

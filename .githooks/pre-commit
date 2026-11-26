@@ -1,6 +1,17 @@
 #!/usr/bin/env bash
-# Fast checks on staged files only. Tests run in CI.
+# Checks on the commit about to be made. Silent when fine; full checks run again in CI.
 set -euo pipefail
+cd "$(git rev-parse --show-toplevel)"
+
+# Use the Node from .nvmrc when the shell's default is older (nvm installs).
+want=$(tr -d 'v \n' <.nvmrc | cut -d. -f1)
+have=$(node -p 'process.versions.node.split(".")[0]' 2>/dev/null || echo 0)
+if [ "$have" -lt "$want" ]; then
+  for d in "$HOME"/.nvm/versions/node/v"$want".*/bin; do [ -x "$d/node" ] && PATH="$d:$PATH"; done
+fi
+
+# Public repo: GitHub noreply addresses only.
+scripts/check-commit-emails.sh
 
 files=$(git diff --cached --name-only --diff-filter=ACMR)
 [ -z "$files" ] && exit 0
@@ -9,20 +20,30 @@ if grep -nE '^(<<<<<<<|>>>>>>>)( |$)|^=======$' $(echo "$files" | grep -vE '\.(p
   echo "✗ conflict markers found" >&2; exit 1
 fi
 
-code=$(echo "$files" | grep -E '\.(js|jsx|ts|tsx)$' || true)
-if [ -n "$code" ]; then
-  npx --no-install eslint --max-warnings=0 $code
-fi
-fmt=$(echo "$files" | grep -E '\.(js|jsx|ts|tsx|json|md|yml|yaml)$' || true)
-if [ -n "$fmt" ]; then
-  npx --no-install prettier --check --ignore-unknown $fmt
-fi
-
-# Personal details, home paths, build output, big files: never committed (also run in CI).
+# Personal details, home paths, generated folders (ios/, android/), secrets, big files, rule files.
 scripts/check-privacy.sh --staged
 
+# Prints its output only when it fails.
+quiet() { local out; out=$("$@" 2>&1) || { echo "$out" >&2; return 1; }; }
+
+code=$(echo "$files" | grep -E '\.(js|jsx|ts|tsx|mjs)$' || true)
+if [ -n "$code" ]; then
+  npx --no-install eslint --max-warnings=0 $code
+  quiet npx --no-install tsc --noEmit
+  # Tests touching the changed files.
+  quiet npx --no-install jest --silent --findRelatedTests --passWithNoTests $code
+fi
+fmt=$(echo "$files" | grep -E '\.(js|jsx|ts|tsx|mjs|json|md|yml|yaml)$' || true)
+if [ -n "$fmt" ]; then
+  quiet npx --no-install prettier --check --ignore-unknown $fmt
+fi
+
+# New dependencies: commercial-safe licence and named in THIRD_PARTY_NOTICES.md.
+if echo "$files" | grep -qE '^(package(-lock)?\.json|THIRD_PARTY_NOTICES\.md|modules/sidekick-native/android/build\.gradle)$'; then
+  node scripts/check-licences.mjs
+fi
+
+# Secret scan (CI scans the full history too).
 if command -v gitleaks >/dev/null; then
-  gitleaks git --staged --no-banner --redact
-else
-  echo "⚠ gitleaks not installed — secret scan skipped (CI still runs it)" >&2
+  quiet gitleaks git --staged --no-banner --redact
 fi

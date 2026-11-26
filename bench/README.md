@@ -58,6 +58,7 @@ checks that Sidekick is the app in front; the script stops otherwise.
 
 ```bash
 export ADB=/path/to/adb OUT=/tmp/sk-limits
+scripts/phone-lock.sh take my-name   # taps and text go through scripts/phone-input.sh, which needs it
 bash bench/limits/chat-run.sh bench/limits/long-chat.txt 2
 bash bench/limits/long-input.sh 12000
 bash bench/limits/mode-power.sh listen 25
