@@ -10,7 +10,7 @@ import type { HandsFreeMode } from '@/engine/hands-free-logic';
 import { formatMinutes } from '@/engine/place-logic';
 import type { ReadBackMode } from '@/engine/readback-logic';
 import type { SmartDefault } from '@/engine/settings';
-import { MAX_RATE, MIN_RATE } from '@/engine/voice-commands-logic';
+import { MAX_RATE, MIN_RATE } from '@/engine/quick-commands-logic';
 import { SliderRow } from '@/ui';
 
 const MODEL_TIER_LABEL = { small: 'Small and fast', standard: 'Standard', large: 'Large' };

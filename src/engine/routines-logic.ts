@@ -170,7 +170,37 @@ function parseScheduled(t: string, now: Date): ParseResult {
     if (d.getTime() <= now.getTime()) return { ok: false, reason: 'That time has already passed.' };
     return { ok: true, when: { type: 'once', at: d.getTime() }, action };
   }
+  // One-off, relative: "in 10 minutes, tell me a fun fact", "check the oven in half an hour".
+  // Only an instruction ("tell …", "check …"), so "what will the weather be in 2 hours" stays a
+  // question.
+  const rel = new RegExp(`^in\\s+${IN_TIME}\\b[,\\s]+(.+)$`, 'i').exec(t);
+  const relEnd = rel ? null : new RegExp(`^(.+?)[,\\s]+in\\s+${IN_TIME}[\\s.!]*$`, 'i').exec(t);
+  if (rel || relEnd) {
+    const mins = rel ? inMinutes(rel[1]) : inMinutes(relEnd![2]);
+    const action = cleanAction(rel ? rel[2] : relEnd![1]);
+    if (mins == null || !action || !new RegExp(`^${VERBS}\\b`, 'i').test(action)) return null;
+    return { ok: true, when: { type: 'once', at: now.getTime() + mins * 60_000 }, action };
+  }
   return null;
+}
+
+/** "10 minutes", "an hour", "half an hour", "two hours" (the time after "in"). */
+const IN_TIME =
+  '(half an hour|an hour and a half|(?:\\d+|an?|one|two|three|four|five|six|seven|eight|nine|ten|fifteen|twenty|thirty|forty|forty-five|sixty|ninety)\\s+(?:minutes?|mins?|hours?|hrs?))';
+
+const IN_WORDS: Record<string, number> = { a: 1, an: 1, one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10, fifteen: 15, twenty: 20, thirty: 30, forty: 40, 'forty-five': 45, sixty: 60, ninety: 90 }; // prettier-ignore
+
+/** Minutes in an IN_TIME phrase (at most a day), or null. */
+export function inMinutes(phrase: string): number | null {
+  const p = phrase.toLowerCase().trim();
+  if (p === 'half an hour') return 30;
+  if (p === 'an hour and a half') return 90;
+  const m = /^(\S+)\s+(minutes?|mins?|hours?|hrs?)$/.exec(p);
+  if (!m) return null;
+  const n = IN_WORDS[m[1]] ?? parseInt(m[1], 10);
+  if (!Number.isFinite(n) || n <= 0) return null;
+  const mins = /^h/.test(m[2]) ? n * 60 : n;
+  return mins <= 24 * 60 ? mins : null;
 }
 
 /** Words that start the action after a trigger with no comma ("when I get home remind me …"). */
@@ -470,10 +500,22 @@ function appLabel(a: string): string {
   return L[a] ?? a.charAt(0).toUpperCase() + a.slice(1);
 }
 
+/** An instruction in the user's words, as Sidekick says it back: "tell me" → "tell you". */
+export function inReplyVoice(action: string): string {
+  return action
+    .replace(/\bI'm\b/g, "you're")
+    .replace(/\bI am\b/g, 'you are')
+    .replace(/\bmyself\b/gi, 'yourself')
+    .replace(/\bmine\b/gi, 'yours')
+    .replace(/\bmy\b/gi, 'your')
+    .replace(/\bme\b/gi, 'you')
+    .replace(/\bI\b/g, 'you');
+}
+
 /** The reply after setting one up. */
 export function confirmation(r: Pick<Routine, 'when' | 'action'>, now = new Date()): string {
   const w = describeWhen(r.when, now);
-  return `OK. ${w}, I'll: ${r.action}. Change or pause it in Settings → Assistant → Routines.`;
+  return `OK. ${w}, I'll ${inReplyVoice(r.action)}. Change or pause it in Settings → Assistant → Routines.`;
 }
 
 /** "Brief me" and friends: the built-in briefing, no model needed. */

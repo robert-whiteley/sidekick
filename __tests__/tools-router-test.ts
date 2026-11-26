@@ -14,7 +14,7 @@ import { forgetRanges, parseTimeRange } from '@/memory/time-range';
 // jest hoists these above the imports.
 jest.mock('@/engine/llm', () => ({ askLlm: jest.fn() }));
 jest.mock('@/engine/actions', () => ({ planIntent: jest.fn() }));
-jest.mock('@/engine/voice-commands', () => ({ runParsedCommand: jest.fn() }));
+jest.mock('@/engine/quick-commands', () => ({ runParsedCommand: jest.fn() }));
 jest.mock('@/integrations/extras', () => ({ runExtra: jest.fn() }));
 jest.mock('@/integrations/phone-controls', () => ({ runControl: jest.fn() }));
 jest.mock('@/integrations/prefs', () => ({ isOn: jest.fn(() => true) }));
@@ -100,6 +100,26 @@ describe('checking a call', () => {
 });
 
 describe('the router loop', () => {
+  it('turns a camera-setting call into the camera command', async () => {
+    const { runParsedCommand } = jest.requireMock('@/engine/quick-commands') as {
+      runParsedCommand: jest.Mock;
+    };
+    runParsedCommand.mockResolvedValue('Using the front camera.');
+    const ask = replies('{"tool":"camera_setting","args":{"lens":"front","frames":"more"}}');
+    const out = await routeWithTools('switch to the selfie camera and film more', {
+      ...quiet,
+      ask,
+    });
+    expect(out).toEqual({ kind: 'reply', text: 'Using the front camera.' });
+    expect(runParsedCommand).toHaveBeenCalledWith(
+      {
+        type: 'cameraSetting',
+        change: { frames: 'more', lens: 'front', detail: undefined },
+      },
+      'switch to the selfie camera and film more',
+      null,
+    );
+  });
   it('runs one action through the normal draft path', async () => {
     const plan = { kind: 'reply', text: 'Timer set for 5 minutes.' };
     jest.mocked(planIntent).mockResolvedValue(plan as never);

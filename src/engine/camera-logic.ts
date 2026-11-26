@@ -9,9 +9,11 @@ const HEIGHT = { low: 480, medium: 720, high: 1080 } as const;
 export function cameraConfigFor(
   t: Pick<Tuning, 'fps' | 'imageDetail' | 'videoKeepHours'>,
   whileLocked = true,
+  lens: 'back' | 'front' = 'back',
 ) {
   return {
     source: 'auto',
+    lens,
     sampleFps: t.fps,
     videoHeight: HEIGHT[t.imageDetail],
     keepVideoHours: t.videoKeepHours,

@@ -187,3 +187,97 @@ Bugs:
 - Unplugging the USB camera mid-use: needs someone at the phone.
 - Sending, calls, real calendar/alarms/contacts: never done on the owner's phone; only the
   "Ask me first" draft card is checked.
+
+## Round 5 phone checks (25 Nov, installed build sk56)
+
+Stopped early: the phone fell from 33% to 10% battery in about 13 minutes (Live camera, Listen,
+background photo work, phone at 38.8 °C, Android thermal status "severe") and Android offered
+Extreme Battery Saver. Not run for that reason: place naming (fake GPS), locked "resume the camera"
+repeats, the full camera speed run.
+
+- **Offline queue, partly:** with airplane mode on, "what's the weather in Banbury tomorrow" showed
+  "Offline · no internet" but no "I'll get the forecast when you're back online" line; the answer
+  was still "…" after 30 s, then "Thinking…" more than 3 minutes after the internet came back.
+  Likely cause: the question waits for the embedder, which was busy with a run of background photo
+  vectors taking 74–79 s each on the hot phone ("[embed] 2 items, 86336 ms" for the question's own
+  text). Questions jump the model queue (llm-queue.ts) but not the embedder queue. To fix: questions
+  that don't need memory (weather, timers) shouldn't wait for the embedder, and background photo
+  vectors should stop for a question and when the phone is hot.
+- **When hot:** the camera slowed to 1 frame a second, then 1 frame every 2 seconds with video
+  recording paused, and said so in the chat.
+- **Text reading (OCR):** 1.0–2.9 s per frame (about 1.0 s cool, 1.1–2.9 s hot).
+- **Photo vectors:** 74–79 s per photo when hot (normally a few seconds).
+- **Free space:** 12 GB of 109 GB. The bigger Gemma (E4B, about 3 GB) would fit, but would go
+  below Sidekick's own reserve rule (keep 10% free, about 11 GB here). Don't download it on this
+  phone.
+- **Two mics at once:** the phone lists Bluetooth headset, wired headset and USB mics on one shared
+  input (only one at a time), but USB mics also have their own separate "hifi" input. So a headset
+  mic plus the USB camera's mic together looks possible but isn't proven; it needs a test with both
+  plugged in.
+
+## Round 5b (25 Nov, sk58, partial)
+
+- Typed "switch to the front camera": worked in ~11 s (router 9.9 s), reply "Using the front camera.
+  Switched from the USB camera to the phone camera." Settings → Phone camera then shows Front; the
+  Camera input row still showed the USB camera (display may lag the switch; not confirmed).
+- Typed "lower the frame rate": **failed**. The router picked camera_setting but the model filled the
+  optional `fps` with a non-number, the whole call was rejected ("fps not a number") and the chat
+  answered "I cannot lower the frame rate…". Cause: an invalid _optional_ number rejects the call,
+  while an invalid optional choice is skipped (`tools-logic.ts` argument check).
+- New Camera & audio rows (Phone camera Back/Front, Describe camera frames) render correctly in dark
+  mode.
+- Offline queue retest: started (airplane mode on for ~95 s, self-restoring, question asked from the
+  phone), but Wireless debugging switches itself off when Wi-Fi drops, so the phone could not be
+  reached afterwards and the result was not read. Offline tests need a USB cable for adb.
+
+## Round 5c (25 Nov, sk59, Pixel 5 on a wireless charger)
+
+- Installed sk59. Phone camera set back to Back; camera input was already the Arducam (Recommended).
+- **Photo vectors run several times over.** With Listen on and the phone charging, logcat shows the
+  same photo embedded 2–3 times (e.g. photo 805 three times, 809 three times): several idle-time
+  embedding runs overlap and pick the same rows. Each photo takes ~6.5 s alone, but the logged time
+  grows to 33–40 s because the runs queue on the embedder.
+- **Question speed with that running:** "What can you do?" (quick command) ~instant; "Give me three
+  tips for better sleep" 69 s to the first text (router step 57 s, waiting behind the photo runs);
+  "How many days are in a leap year" a few seconds, once the backlog had cleared.
+- **Wrong answer:** "A leap year has thirty-six days and an extra day" (model error).
+- **Battery fell while charging:** 12% → 5% in about 15 minutes on the wireless charger (max
+  charging current 110 mA, heat status moderate). Testing stopped there; offline queue, locked
+  "resume", place naming, frame-rate commands, light mode and the store videos were not done.
+- Store screenshots taken (demo-mode status bar, nothing personal): chat, Settings, Camera & audio,
+  Privacy, Storage → `fastlane/metadata/android/en-GB/images/phoneScreenshots/phone-1…5.png`.
+- Restored: Online lookup off, demo mode off, test files deleted. Listen left on (as found).
+
+## Round 5d (26 Nov, sk60, Pixel 5 on USB at 450 mA)
+
+- **Play foreground-service video recorded** (one file, 1 min 43 s, kept out of the repo in the
+  owner's Downloads as `sidekick-play-video.mp4`). It shows: Listen on → "Sidekick is listening"
+  notification with Stop (microphone); Live camera on → "Sidekick is watching and listening" with
+  Pause camera / Stop camera / Stop, service type camera + location + microphone (0xC8), the phone
+  locked and unlocked with the camera still running (camera); Privacy → Location "Remember where I
+  was" on while the service runs (location); a routine created by typing, firing from the home screen
+  with "Running a routine" (short service); Stop from the notification ends everything. Demo-mode
+  status bar; an earlier town name in the chat and the lock-screen carrier name were covered.
+- **"in one minute, tell me a fun fact" goes to the message tool**, not a reminder: it asked for
+  contacts permission (denied, 106 s to the reply), then drafted "Message to me" (cancelled, never
+  sent). One-off "in N minutes" reminders aren't understood; only repeating routines work
+  ("every day at 23:59 tell me a fun fact" worked).
+- **Routine confirmation wording:** "OK. Every day at 23:59, I'll: tell me a fun fact." (should read
+  "I'll tell you a fun fact").
+- **Routine timing:** the 23:59 routine ran at 00:00:05, about 1 minute late (exact alarms not
+  allowed on this phone; Routines settings already says so).
+- **Listen button goes stale after Stop in the notification.** The microphone and service stop, but
+  the chat screen's Listen button and "Listening for 'Hey Sidekick'" line still show on, even after
+  leaving and reopening the app; one tap then does nothing visible (it "turns off" what is already
+  off). Cause: `AskScreen` sets its `listening` state only at start-up, on a tap and on a voice
+  command; nothing re-reads `isListening()` when the native service is stopped from the notification
+  or when the app returns to the front.
+- **Privacy → "Look things up online"**: the description text shows a strikethrough line across
+  "search Wikipedia" (rendering glitch, seen on the video frames).
+- Not done (battery reached 15%): question speed with Live + Listen and the single-run embedding
+  check, offline queue, typed frame-rate and lens commands, place naming with a test GPS provider,
+  locked "resume the camera".
+- Restored: Live camera off, Listen on (as found), Show conversation on, Online lookup off, demo mode
+  off, contacts permission back to "ask", test routine and video files deleted from the phone.
+  Do Not Disturb left on. A routine "tell me a fun fact about otters" (daily 17:27, from an earlier
+  test) is still on the phone.

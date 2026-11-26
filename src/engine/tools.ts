@@ -24,7 +24,8 @@ import {
   validateCall,
   wantsModelRange,
 } from './tools-logic';
-import { runParsedCommand } from './voice-commands';
+import { runParsedCommand } from './quick-commands';
+import { parseFrames } from './camera-settings-logic';
 import { runExtra } from '@/integrations/extras';
 import type { Extra, RideApp, SearchApp } from '@/integrations/extras-logic';
 import { runControl } from '@/integrations/phone-controls';
@@ -232,6 +233,17 @@ async function runTool(
       return command({ type: 'listening', on: a.on === true });
     case 'camera':
       return command({ type: 'camera', on: a.on === true });
+    case 'camera_setting': {
+      const pick = <T extends string>(v: unknown) => (str(v) || undefined) as T | undefined;
+      return command({
+        type: 'cameraSetting',
+        change: {
+          ...parseFrames(a.frames),
+          lens: pick(a.lens),
+          detail: pick(a.detail),
+        },
+      });
+    }
     case 'feedback':
       return runFeedback(str(a.text));
     case 'reply':

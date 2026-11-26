@@ -68,7 +68,11 @@ function config() {
   const ocr =
     isDownloaded(OCR_FILES.det) && isDownloaded(OCR_FILES.rec) && isDownloaded(OCR_FILES.dict);
   return {
-    ...cameraConfigFor(currentTuning(), getSettings().cameraWhileLocked !== false),
+    ...cameraConfigFor(
+      currentTuning(),
+      getSettings().cameraWhileLocked !== false,
+      getSettings().cameraLens === 'front' ? 'front' : 'back',
+    ),
     embedModelPath: isDownloaded(EMBEDDER_FILE) ? modelPath(EMBEDDER_FILE) : null,
     dims: EMBED_DIMS,
     ocrDetPath: ocr ? modelPath(OCR_FILES.det) : null,

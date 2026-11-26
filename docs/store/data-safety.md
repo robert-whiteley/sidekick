@@ -4,11 +4,11 @@ Play Console → App content → Data safety. Google's definitions: data is **co
 
 ## Overview questions
 
-| Question                                                              | Answer                                                                                                                        |
-| --------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
-| Does your app collect or share any of the required user data types?   | **No**                                                                                                                        |
-| Is all of the user data collected by your app encrypted in transit?   | (not asked when "No"; all connections are HTTPS anyway)                                                                       |
-| Do you provide a way for users to request that their data is deleted? | Not asked when "No". In-app: Settings → Privacy → Delete; uninstall deletes everything; https://sidekick.sashy.ai/delete-data |
+| Question                                                              | Answer                                                                                                                                              |
+| --------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Does your app collect or share any of the required user data types?   | **No**                                                                                                                                              |
+| Is all of the user data collected by your app encrypted in transit?   | (not asked when "No"; all connections are HTTPS anyway)                                                                                             |
+| Do you provide a way for users to request that their data is deleted? | Not asked when "No". In-app: Settings → Privacy → Delete; uninstall deletes everything; https://robert-whiteley.github.io/sidekick-site/delete-data |
 
 Why "No" is correct:
 

@@ -1,4 +1,4 @@
-Sidekick is an AI helper that runs entirely on your phone. It sees what your camera sees, hears what you say, and remembers it for you — without sending any of it anywhere.
+Sidekick is an AI assistant that runs entirely on your phone. It sees what your camera sees, hears what you say, and remembers it for you — without sending any of it anywhere.
 
 PRIVATE BY DESIGN
 • No account, no sign-up, no ads, no tracking.
@@ -16,7 +16,8 @@ REMEMBERS FOR YOU
 • Remembers what you've seen and heard, so you can ask later: "What did that sign say this morning?"
 • Search your memory by meaning, person, place or date.
 • Keeps notes on the people you talk to, with facts you approve.
-• Summaries of what you talked about today or this week.
+• Recaps of any time or topic: "recap what we worked on this week".
+• Live notes of a conversation, updated as it goes.
 
 GETS THINGS DONE — ALWAYS WITH YOUR OK
 • Suggests reminders, to-dos and events from what you say; nothing is added until you approve it.
@@ -24,6 +25,8 @@ GETS THINGS DONE — ALWAYS WITH YOUR OK
 • Drafts messages and emails in the chat; reads them back before sending, so you can change them.
 • Schedule a message for later.
 • Can read new messages aloud when you choose.
+• Routines: "every day at 6 pm, recap my day", or when you arrive somewhere.
+• "Navigate me to the station" opens directions straight away.
 • Quiet at night: it won't speak out loud while you sleep or in Do Not Disturb.
 
 CAMERA AND CONVERSATIONS

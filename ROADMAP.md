@@ -12,7 +12,7 @@ Current phase details: `docs/PLAN-v2.md`. Left out or rejected on purpose: ADR 0
 
 ## Release 1 (launch)
 
-- Owner steps in `docs/RELEASE-OWNER-STEPS.md`: Play Console app and first upload, website DNS (sidekick.sashy.ai), store declarations (data safety, content rating, foreground services, health), Google OAuth verification (Gmail send, Tasks, Drive), store screenshots, production AAB and "go".
+- Owner steps in `docs/RELEASE-OWNER-STEPS.md`: Play Console app and first upload, website DNS (robert-whiteley.github.io/sidekick-site), store declarations (data safety, content rating, foreground services, health), Google OAuth verification (Gmail send, Tasks, Drive), store screenshots, production AAB and "go".
 - Finish phone verification of the plan v2 work (build sk46; `docs/LIMITS.md` covers sk44–sk45).
 
 ## Release 2
@@ -36,8 +36,6 @@ Current phase details: `docs/PLAN-v2.md`. Left out or rejected on purpose: ADR 0
 - **Speech speed kept by the background service:** the speed set in the app isn't yet used for answers spoken from the service.
 - **Bigger model on newer phones** (Gemma E4B, GPU): too slow and too big for the Pixel 5; smarter on phones with ≥ 8 GB and a fast GPU.
 - **Split audio** (headset mic for commands, camera mic for conversation): only a probe exists; needs a phone that records two inputs at once, untested.
-- **Voice control of camera settings** (frame rate, flip, resolution): speed, repeat, help and pause are done; the rest wasn't needed yet.
-- **Idle-time captions for camera frames** (rich descriptions for counting questions): photos are described; frames are left out to save CPU and battery.
 - **Model comparison on a graded set** (E2B vs E4B, int4 vs int8, frames per question): waits for a newer test phone; the Pixel 5 runs only E2B on CPU.
 - **Camera pipeline measurements** (frames per second embedded, OCR per frame, video encoder load): not measured yet.
 - **Recommend a better phone** when a feature is missing or slow on this one: not built.

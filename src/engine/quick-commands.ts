@@ -1,8 +1,12 @@
 import { Platform } from 'react-native';
 
 import SidekickNative from '../../modules/sidekick-native';
+import { planCameraChange } from './camera-settings-logic';
 import { postCodeCards, scanCodes } from './codes';
 import { describeCode } from './codes-logic';
+import { listInputs, setCamera } from './devices';
+import { PHONE_CAMERA } from './devices-logic';
+import { currentTuning, FPS_OPTIONS, recommended } from './device-profile';
 import { addWatch, currentWatches, removeWatches } from './focus-watch';
 import { listWatches, looksLikeName, matchWatches } from './focus-logic';
 import { isListening, startListening, stopListening } from './listen';
@@ -15,12 +19,12 @@ import {
   parseVoiceCommand,
   rateReply,
   type VoiceCommand,
-} from './voice-commands-logic';
+} from './quick-commands-logic';
 import { latestFramePaths } from '@/memory/frames';
 import { isOn } from '@/integrations/prefs';
 
 /**
- * Runs the short commands of voice-commands-logic.ts (no model): speech speed, repeat, help,
+ * Runs the short commands of quick-commands-logic.ts (no model): speech speed, repeat, help,
  * listening and camera on/off, camera watches and "scan this". The reply is
  * shown and, when the question was spoken, said like any answer.
  */
@@ -56,7 +60,7 @@ export function applySpeechRate() {
  * The reply for a command in [question], or null when it isn't one. [photoNow]: the photo taken
  * with the question (used by "scan this").
  */
-export async function runVoiceCommand(
+export async function runQuickCommand(
   question: string,
   photoNow: string | null,
 ): Promise<string | null> {
@@ -126,6 +130,28 @@ async function execute(
       }
       return startLiveCamera() ? 'Camera on.' : 'Tap the camera button to turn it on.';
     }
+    case 'cameraSetting': {
+      if (Platform.OS !== 'android') return 'Changing camera settings needs Android.';
+      const t = currentTuning();
+      const r = recommended();
+      const lens = getSettings().cameraLens === 'front' ? 'front' : 'back';
+      const plan = planCameraChange(
+        { fps: t.fps, imageDetail: t.imageDetail, lens },
+        { fps: r.fps, imageDetail: r.imageDetail },
+        cmd.change,
+        FPS_OPTIONS,
+      );
+      if (!plan) return null;
+      // Saved settings reach the running camera by themselves (live-camera.ts follows them).
+      updateSettings(plan.patch);
+      let reply = plan.reply;
+      // A lens is a phone camera: leave a USB camera for the phone's own one.
+      if (plan.patch.cameraLens && safe(usbActive)) {
+        setCamera(PHONE_CAMERA);
+        reply += ' Switched from the USB camera to the phone camera.';
+      }
+      return reply;
+    }
     case 'watch': {
       const original = originalWords(question, cmd.what);
       if (looksLikeName(original))
@@ -167,4 +193,8 @@ function safe(f: () => boolean): boolean {
 function originalWords(question: string, what: string): string {
   const i = question.toLowerCase().lastIndexOf(what);
   return i >= 0 ? question.slice(i, i + what.length) : what;
+}
+
+function usbActive(): boolean {
+  return listInputs().cameras.some((c) => c.active && c.key.startsWith('usb:'));
 }

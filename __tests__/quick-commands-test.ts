@@ -5,7 +5,7 @@ import {
   nextRate,
   parseVoiceCommand as p,
   rateReply,
-} from '../src/engine/voice-commands-logic';
+} from '../src/engine/quick-commands-logic';
 
 describe('parseVoiceCommand', () => {
   it('speech speed', () => {

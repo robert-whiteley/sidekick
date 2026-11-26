@@ -13,7 +13,7 @@ No **restricted** scopes (`gmail.readonly`, `gmail.modify`, full `drive`), so th
 ## Consent screen (Google Cloud Console → Google Auth Platform)
 
 - App name: Sidekick. Logo: the app icon (512 px). Support email: info@sashy.ai.
-- App home page: https://sidekick.sashy.ai. Privacy policy: https://sidekick.sashy.ai/privacy (same as Play). Authorised domain: sashy.ai (verify it in Google Search Console first). The home page describes the app and links to the policy.
+- App home page: https://robert-whiteley.github.io/sidekick-site. Privacy policy: https://robert-whiteley.github.io/sidekick-site/privacy (same as Play). Authorised domain: sashy.ai (verify it in Google Search Console first). The home page describes the app and links to the policy.
 - Publishing status: In production (submit for verification).
 - Android OAuth client: package `app.ondevice.sidekick` with the **Play App Signing** SHA-1 (Play Console → Test and release → App integrity), not only the upload key's SHA-1. Without it, sign-in fails in Play-installed builds. Add both fingerprints.
 

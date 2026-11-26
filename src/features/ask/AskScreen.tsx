@@ -1,4 +1,4 @@
-import { onListeningByVoice } from '@/engine/voice-commands';
+import { onListeningByVoice } from '@/engine/quick-commands';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { useFocusEffect } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
@@ -48,7 +48,12 @@ import {
 } from '@/engine/live-camera';
 import { notices } from '@/engine/notices';
 import { takeIntroMessage } from '@/features/onboarding/after-setup';
-import { describeOnePhoto, yieldToQuestion } from '@/engine/describe-photos';
+import {
+  captionOneFrame,
+  describeOnePhoto,
+  noteUserActive,
+  yieldToQuestion,
+} from '@/engine/describe-photos';
 import {
   ASSIST_KEY,
   entryReady,
@@ -228,6 +233,25 @@ export function AskScreen({
 
   // "Stop listening" / "start listening" said to Sidekick.
   useEffect(() => onListeningByVoice(setListening), []);
+  // Listening can stop outside this screen (Stop in the notification, Android ending the service):
+  // re-read the real state when the app comes back and every few seconds while it is open, so the
+  // button never shows "on" for a microphone that is off. A cheap synchronous native read.
+  useEffect(() => {
+    const sync = () => {
+      const on = isListening();
+      setListening((was) => {
+        // Stopped elsewhere: drop the "Listening for …" line too.
+        if (was && !on) setStatus((st) => (st.startsWith('Listening for') ? '' : st));
+        return on;
+      });
+    };
+    const sub = AppState.addEventListener('change', (st) => st === 'active' && sync());
+    const timer = setInterval(() => AppState.currentState !== 'background' && sync(), 3000);
+    return () => {
+      sub.remove();
+      clearInterval(timer);
+    };
+  }, []);
 
   // Listening stays on across the app being killed and reopened.
   useEffect(() => {
@@ -370,7 +394,11 @@ export function AskScreen({
         // New memories get vectors in batches, sooner while charging.
         await embedWhenIdle(() => busyRef.current);
         // Idle: read one saved photo's text into memory (only if the model is already loaded).
-        void describeOnePhoto(busyRef.current);
+        // Else, charging and idle: caption one stored camera frame (a question or opening the app
+        // stops it).
+        void describeOnePhoto(busyRef.current).then((did) =>
+          did || busyRef.current ? false : captionOneFrame(busyRef.current),
+        );
         // Uses the model only if it is already loaded; a question cancels it.
         if (!busyRef.current) await inferFactsIfIdle();
         if (!busyRef.current) await inferFollowupsIfIdle();
@@ -383,9 +411,14 @@ export function AskScreen({
       }
     };
     const timer = setInterval(tick, 30_000);
+    // Opening the app pauses frame captions for a while, so the phone is quick when picked up.
+    const appState = AppState.addEventListener('change', (st) => {
+      if (st === 'active') noteUserActive();
+    });
     void tick();
     return () => {
       subs.forEach((s) => s.remove());
+      appState.remove();
       clearInterval(timer);
     };
   }, []);

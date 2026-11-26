@@ -2,7 +2,7 @@ import { Platform } from 'react-native';
 
 import SidekickNative from '../../modules/sidekick-native';
 import { startFocusWatches } from './focus-watch';
-import { applySpeechRate } from './voice-commands';
+import { applySpeechRate } from './quick-commands';
 
 /**
  * Start-up for camera watches (saved ones carry on), the speech speed and the long-press app icon

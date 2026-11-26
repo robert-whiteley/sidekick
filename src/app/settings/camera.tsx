@@ -1,3 +1,4 @@
+import { captionMode } from '@/memory/photo-text';
 import {
   AUDIO_KEEP_OPTIONS,
   FPS_OPTIONS,
@@ -19,6 +20,17 @@ export default function CameraAudioSettings() {
     <Page title="Camera & audio">
       <DevicesSection />
       <Section title="Camera memory">
+        <ChoiceRow<'back' | 'front'>
+          label="Phone camera"
+          hint='Which side of the phone films. Also by voice: "use the front camera".'
+          options={[
+            { value: 'back', label: 'Back' },
+            { value: 'front', label: 'Front' },
+          ]}
+          value={s.cameraLens === 'front' ? 'front' : null}
+          recommended="back"
+          onChange={(v) => set({ cameraLens: v ?? 'back' })}
+        />
         <ChoiceRow
           label="Frames per second"
           hint="More frames catch more, but use more battery and warm the phone. Lowered by itself when hot, with a note."
@@ -52,6 +64,18 @@ export default function CameraAudioSettings() {
           hint="Recommended: on, so Sidekick still remembers with the screen off (phone or USB camera). Off pauses the camera until you unlock. Pause or stop it any time from the notification."
           value={s.cameraWhileLocked !== false}
           onChange={(v) => set({ cameraWhileLocked: v })}
+        />
+        <ChoiceRow
+          label="Describe camera frames"
+          hint="When you are not using Sidekick, it writes what each camera frame shows (things, how many, text, movement), so later questions like “how many people were at the bus stop?” work. Stays on the phone and stops when you ask something. Also covers making photos searchable by meaning. On battery too uses more battery and stops below 30%; all of it pauses when the phone is hot."
+          options={[
+            { value: 'off', label: 'Off' },
+            { value: 'charging', label: 'While charging' },
+            { value: 'always', label: 'On battery too' },
+          ]}
+          value={captionMode(s.captionFrames)}
+          recommended="charging"
+          onChange={(v) => set({ captionFrames: v ?? 'charging' })}
         />
       </Section>
       <Section title="Keep">
