@@ -10,6 +10,12 @@ import { Platform } from 'react-native';
 export const EMBED_DIMS = 256;
 const KEY_NAME = 'sidekick.db.key';
 
+/** A vec0 table of memory vectors (also used to rebuild one in reclaim.ts). */
+export const vecTableSql = (name: string) =>
+  `CREATE VIRTUAL TABLE IF NOT EXISTS ${name} USING vec0(
+     id INTEGER PRIMARY KEY, embedding FLOAT[${EMBED_DIMS}] distance_metric=cosine
+   )`;
+
 let db: DB | null = null;
 
 async function dbKey(): Promise<string> {
@@ -54,14 +60,10 @@ const SCHEMA = [
      INSERT INTO moments_fts(moments_fts, rowid, text) VALUES ('delete', old.id, old.text);
      INSERT INTO moments_fts(rowid, text) VALUES (new.id, new.text);
    END`,
-  `CREATE VIRTUAL TABLE IF NOT EXISTS moments_vec USING vec0(
-     id INTEGER PRIMARY KEY, embedding FLOAT[${EMBED_DIMS}] distance_metric=cosine
-   )`,
+  vecTableSql('moments_vec'),
   // Photo vectors from the same embedder (text and photos share one space). Text questions
   // search both tables; a photo is findable by what it shows before its text is read.
-  `CREATE VIRTUAL TABLE IF NOT EXISTS photos_vec USING vec0(
-     id INTEGER PRIMARY KEY, embedding FLOAT[${EMBED_DIMS}] distance_metric=cosine
-   )`,
+  vecTableSql('photos_vec'),
   // Small key/value store, e.g. which embedder file made the stored vectors.
   'CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)',
   // Things the user told Sidekick to remember (saved) or it guessed (suggested, needs approval).
@@ -220,6 +222,8 @@ export async function getDb(): Promise<DB> {
     ...(location ? { location } : {}),
   });
   d.executeSync('PRAGMA foreign_keys = ON');
+  // Deleted memories are zeroed in the file, not just unlinked (reclaim.ts).
+  d.executeSync('PRAGMA secure_delete = ON');
   for (const sql of SCHEMA) d.executeSync(sql);
   migrate(d);
   db = d;

@@ -8,6 +8,7 @@ import SidekickNative from '../../modules/sidekick-native';
 import { isDownloaded, modelPath } from '@/engine/downloads';
 import { EMBEDDER_FILE } from '@/engine/models';
 import { EMBED_DIMS, getDb, vecParam } from './db';
+import { reclaimSpace } from './reclaim';
 import { embedDocument } from './search-logic';
 
 export const BENCH_PREFIX = 'bench:';
@@ -140,5 +141,6 @@ export async function clearBenchRows(): Promise<number> {
   for (const table of ['moments_vec', 'photos_vec'])
     await d.execute(`DELETE FROM ${table} WHERE id IN (SELECT id FROM moments WHERE ${where})`);
   await d.execute(`DELETE FROM moments WHERE ${where}`);
+  await reclaimSpace({ force: true });
   return count;
 }
