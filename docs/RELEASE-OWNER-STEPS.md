@@ -8,7 +8,8 @@ here costs money. Tick each one off.
 - Website (live, GitHub Pages, no DNS needed): https://robert-whiteley.github.io/sidekick-site
 - Files to upload (Windows **Downloads** folder, also in `fastlane/metadata/android/en-GB/images/`):
   `icon.png` (512 px), `featureGraphic.png` (1024 × 500), phone screenshots (Claude adds them).
-- App bundle (`.aab`): https://expo.dev/artifacts/eas/xCL7gglXD5yTZ3yzweMi83T59m0B7L0aUNur-XXHxy0.aab
+- App bundle (`.aab`): https://expo.dev/accounts/rcwhiteley1/projects/sidekick/builds/fc974798-49dc-404b-a573-5df26a880ebe
+  (open it → **Download** once it says Finished; built from main with the new icon)
 
 ## 1. Create the app
 
@@ -19,27 +20,27 @@ here costs money. Tick each one off.
 
 Each task in that list: click it → answer → **Save** → back to the Dashboard.
 
-- [ ] **Set privacy policy**: `https://robert-whiteley.github.io/sidekick-site/privacy`
-- [ ] **Sign in details**: **All functionality is available without any access restrictions**. If a
+- [x] **Set privacy policy**: `https://robert-whiteley.github.io/sidekick-site/privacy`
+- [x] **Sign in details**: **All functionality is available without any access restrictions**. If a
       note is asked for: `All features work without an account. Gmail send, Google Tasks and Drive backup are optional and use the reviewer's own Google account.`
-- [ ] **Ads**: No, my app does not contain ads.
-- [ ] **Content rating**: email `info@sashy.ai`, category **All other app types**, answer **No** to
+- [x] **Ads**: No, my app does not contain ads.
+- [x] **Content rating**: email `info@sashy.ai`, category **All other app types**, answer **No** to
       every question → Save → Submit. Expected: PEGI 3 / Everyone.
-- [ ] **Target audience**: **18 and over** only. "Could your app unintentionally appeal to children?": **No**.
-- [ ] **Data safety**:
+- [x] **Target audience**: **18 and over** only. "Could your app unintentionally appeal to children?": **No**.
+- [x] **Data safety**:
   - "Does your app collect or share any of the required user data types?" → **No** → Next → Save.
   - If it asks: encrypted in transit **Yes**; deletion: users delete in the app (Settings → Privacy),
     and `https://robert-whiteley.github.io/sidekick-site/delete-data`.
-- [ ] **Government apps**: No.
-- [ ] **Financial features**: My app doesn't provide any financial features.
-- [ ] **Health**: tick **Activity and fitness** only (Sidekick can say today's step count; the data stays on the phone) → Next.
-- [ ] **Trader status**: **Yes, my trader status applies to this app** (your account is a trader;
+- [x] **Government apps**: No.
+- [x] **Financial features**: My app doesn't provide any financial features.
+- [x] **Health**: tick **Activity and fitness** only (Sidekick can say today's step count; the data stays on the phone) → Next.
+- [x] **Trader status**: **Yes, my trader status applies to this app** (your account is a trader;
       "No" would tell EU/UK users consumer protection doesn't apply, and would need changing for any
       paid feature). Terms of Service URL: leave empty (optional; Claude writes terms if paid features come).
-- [ ] **Target audience** extra box "Restrict users … determined to be minors": tick it.
-- [ ] **Select an app category and provide contact details**: category **Productivity**, tags skip;
+- [x] **Target audience** extra box "Restrict users … determined to be minors": tick it.
+- [x] **Select an app category and provide contact details**: category **Productivity**, tags skip;
       email `info@sashy.ai`; website `https://robert-whiteley.github.io/sidekick-site`; phone empty.
-- [ ] **Set up your store listing**:
+- [x] **Set up your store listing** (checked: screenshots in order 1–5, no video):
   - App name: `Sidekick: Private AI Assistant`
   - Short description: `An AI assistant that runs on your phone. Works offline. Your data stays yours.`
   - Full description: all of `fastlane/metadata/android/en-GB/full_description.txt`
@@ -64,10 +65,10 @@ into all four video boxes:
 
 Not needed now: SMS and Call Log declaration (release 2; see the end), background location (not used).
 
-## 4. Wait for the new app bundle
+## 4. The new app bundle
 
-The icon changed, so the `.aab` above is out of date. Claude replaces the link at the top of this
-file with the new one; upload that one in steps 5 and 6.
+- [x] Built from `main` with the new icon: the App bundle link at the top of this file. Upload that one in
+      steps 5 and 6.
 
 ## 5. Internal testing (optional: puts the app on your own phone in minutes)
 
@@ -85,14 +86,17 @@ Google's rule for new personal accounts: **12+ testers opted in for 14 days in a
 - [ ] Test and release → Testing → Closed testing → **Create track** (or use Alpha) → Create release →
       upload the `.aab` (or "Add from library") → release notes `First test release.` → Next → Save →
       **Send for review**.
-- [ ] Testers → Create email list → add 12+ people's Google accounts (Android phones) → Save → send
-      them the **opt-in link**. They must opt in, install, and stay opted in for 14 days.
+- [x] Testers → **Google Groups** → `sidekick-testers@googlegroups.com` → Save. Testers join
+      https://groups.google.com/g/sidekick-testers (posted on Reddit).
+- [ ] Once the release is reviewed, copy the **opt-in link** from the Testers tab and post it with the
+      group link. Testers join the group, open the opt-in link on their phone → Become a tester →
+      install, and stay in the group for 14 days.
 - [ ] After 14 days: Dashboard → **Apply for production** → paste the answers Claude drafts → Submit.
       Review takes a few days.
 
 ## 7. Let Claude do every later upload
 
-- [ ] Users and permissions → the service account Pocket Animals uses → App permissions → add
+- [x] Users and permissions → `eas-submit@…` → App permissions → add
       Sidekick → tick Releases, Store presence, App access → Apply.
 
 ## 8. Google sign-in in the Play app (after the first upload)
@@ -104,14 +108,14 @@ Google's rule for new personal accounts: **12+ testers opted in for 14 days in a
 
 ## 9. Google sign-in approval (Gmail send, Tasks, Drive backup; only these features wait on it)
 
-- [ ] Search Console (https://search.google.com/search-console) → Add property → **URL prefix** →
-      `https://robert-whiteley.github.io/sidekick-site/` → HTML file method → tell Claude the file
-      name (Claude adds it to the site) → Verify. Same Google account as the Google Cloud project.
-- [ ] Google Auth Platform → **Branding**: support email `info@sashy.ai`, home page
+- [x] Search Console (https://search.google.com/search-console) → Add property → **URL prefix** →
+      `https://robert-whiteley.github.io/sidekick-site/` → HTML file method → Verify. Done on the Play account
+      (the same account as the Google Cloud project `sidekick-515813`).
+- [x] Google Auth Platform → **Branding**: app name `Sidekick`, support email (your account's), developer contact `info@sashy.ai`, home page
       `https://robert-whiteley.github.io/sidekick-site`, privacy policy
       `https://robert-whiteley.github.io/sidekick-site/privacy`, authorised domain
-      `robert-whiteley.github.io`, logo `icon.png`.
-- [ ] **Data access**: scopes `gmail.send`, `tasks`, `drive.file`.
+      `robert-whiteley.github.io`, logo `sidekick-logo-120.png` (Downloads).
+- [x] **Data access**: scopes `gmail.send`, `tasks`, `drive.file`.
 - [ ] Record the demo video on the phone (script: `docs/store/oauth-verification.md`, about 3 minutes,
       test account and made-up contact only) → YouTube **Unlisted**.
 - [ ] **Audience → Publish app**, then **Verification centre → Submit** with the justifications from

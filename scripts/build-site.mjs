@@ -79,6 +79,7 @@ export function page(title, body) {
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="google-site-verification" content="2Y94WToT5X8n6B3IKUJsqR5udXoecs95sTS3M4_5MfU">
 <title>${esc(title)}</title>
 <link rel="stylesheet" href="/sidekick-site/style.css">
 </head>
