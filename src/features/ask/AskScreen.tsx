@@ -815,6 +815,10 @@ export function AskScreen({
       // App icon shortcuts: live camera, Listen on.
       if (e.kind === 'camera') return void (live ? undefined : toggleLive());
       if (e.kind === 'listenmode') return void (listening ? undefined : toggleListening());
+      // iPhone App Intents: a question from Siri or Shortcuts, or "What am I looking at?" (on
+      // iPhone that opens the camera; the next send takes the photo).
+      if (e.kind === 'ask') return void (e.text ? ask(e.text) : undefined);
+      if (e.kind === 'look') return void ask(DEFAULT_PHOTO_QUESTION);
       if (e.kind === 'capture') {
         // Stays open (the entry is cleared next) until the photo is saved.
         setUseCamera(true);

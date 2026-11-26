@@ -4,6 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import SidekickNative from '../../modules/sidekick-native';
 import { isDownloaded } from '@/engine/downloads';
+import { useIntentEntry } from '@/engine/app-intents';
 import { parseEntry } from '@/engine/entry-points';
 import { allRequiredFiles } from '@/engine/llm-candidates';
 import { OBSOLETE_MODEL_PATHS } from '@/engine/models';
@@ -36,9 +37,17 @@ function modelsReady() {
 export default function HomeScreen() {
   const [ready, setReady] = useState(modelsReady);
   // sidekick://?entry=listen|capture|screen from the tile, widget or phone assistant.
-  const entry = parseEntry(useLocalSearchParams());
+  const linkEntry = parseEntry(useLocalSearchParams());
+  // iPhone: Siri, Shortcuts, the Action Button (app-intents/). Back to this screen first.
+  const [intentEntry, intentDone] = useIntentEntry(ready, () => {
+    if (router.canDismiss()) router.dismissAll();
+  });
+  const entry = intentEntry ?? linkEntry;
   // Cleared once handled, so the same link (e.g. a widget button) works again next time.
-  const entryDone = useCallback(() => router.setParams({ entry: undefined, t: undefined }), []);
+  const entryDone = useCallback(() => {
+    intentDone();
+    router.setParams({ entry: undefined, t: undefined });
+  }, [intentDone]);
   // Model updates (Automatic / Ask me / Off) and storage cleanup run once the models are in.
   useEffect(() => {
     if (!ready) return;

@@ -24,7 +24,7 @@ Current phase details: `docs/PLAN-v2.md`. Left out or rejected on purpose: ADR 0
 
 - **Full localisation** in the 25 Parakeet v3 languages: every string, command rule, voice and test per language; each new feature then costs 25 translations (ADR 0006).
 - **Auto-detect the spoken language:** needs Parakeet v3 (worse English) or a language-ID model in front of v2; now English-only plus optional translation of heard speech.
-- **iPhone, after the first TestFlight build:** run it on the iPhone 13 mini (memory with the model loaded, speed, download), then the App Store listing (`docs/store/app-store.md`). Possible later: Natural voice on iPhone, a home-screen widget and Siri shortcuts.
+- **iPhone, after the first TestFlight build:** run it on the iPhone 13 mini (memory with the model loaded, speed, download), then the App Store listing (`docs/store/app-store.md`). Built: Siri / Shortcuts / Action Button actions (ADR 0006). Possible later: Natural voice on iPhone, a home-screen widget, a Control Center button of its own.
 - **Wearables:** Omi pendant first (open MIT protocol), then smart glasses; each needs its own connector (`docs/FUTURE-wearables.md`).
 - **Place routines with the app closed:** needs ACCESS_BACKGROUND_LOCATION and a Play declaration with review, often refused.
 - **Restore from Google Drive in the app:** merging speakers, vectors and encrypted media is not simple; restore is manual for now.

@@ -328,6 +328,10 @@ Owner steps needed later (not blocking the build):
       only and pause places hidden; "what am I looking at?" opens the camera; the iPhone prompt
       says what the app can do. One place for these texts (`src/engine/platform-text.ts`) and a
       test (`__tests__/ios-wording-test.tsx`). Built and tested in jest; not yet run on the iPhone.
+- [x] iPhone quick access (26 Nov, owner asked): App Shortcuts "Ask Sidekick", "Start voice
+      question", "What am I looking at?" for Siri, Shortcuts, Action Button and Control Center's
+      Shortcut control (ADR 0006); a CI job compiles the iPhone app for the simulator on every PR.
+      Compiled in CI; not yet run on an iPhone. Study mode dropped (owner: should come from the AI).
 
 ## Storage estimates (to measure)
 

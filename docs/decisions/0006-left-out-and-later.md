@@ -267,9 +267,25 @@ Left out on iPhone, with why (users see the reason in Phone features, Connection
 - **Routines:** an iPhone app can't wake itself at a time or on an event to run the model. Reply:
   "Routines aren't possible on iPhone…"; the Routines settings row is hidden. Reminders still arrive (local
   notifications).
-- **Quick Settings tile, home-screen widget, default assistant:** Android features; iOS equivalents
-  (widget extension, Siri/App Intents) need a native target — later, if asked for. Not listed in
-  Phone features on iPhone (nor USB camera, heat protection or the two-mic split).
+- **Quick Settings tile, home-screen widget, default assistant:** Android features. Not listed in
+  Phone features on iPhone (nor USB camera, heat protection or the two-mic split). The iPhone
+  equivalent is built (owner asked, 26 Nov): three App Shortcuts, "Ask Sidekick" (Siri asks for the
+  question), "Start voice question" and "What am I looking at?", in Siri, the Shortcuts app,
+  Spotlight and the Action Button picker; Control Center through its "Shortcut" control (pick a
+  Sidekick action). Swift in `app-intents/`, compiled into the app target by `expo-app-intents`
+  (Expo, MIT, alpha; Apple reads App Shortcuts only from the app target, not from pods). Each opens
+  the app and hands over the request (`src/engine/app-intents.ts`); the answer is worked out and
+  spoken in the app. The question never travels in a link (any app can open one), and one left
+  waiting over 2 minutes, or sent before the model is in, is dropped.
+- **Answering inside Siri without opening the app:** rejected. The intent would have to load the
+  3 GB model in the background, which iOS doesn't allow for long and the 4 GB iPhone 13 mini can't
+  hold next to Siri; it also can't keep listening. Answers open in the app.
+- **A Sidekick button of its own in Control Center (ControlWidget):** later, if asked for. Needs a
+  separate WidgetKit extension target (its own bundle ID and signing profile, iOS 18+);
+  `expo-widgets` doesn't make controls. The built-in Shortcut control runs the same actions today.
+- **Study mode (quiz me / flashcards from notes):** dropped by the owner (26 Nov): features like
+  this should come from the model itself, not be built specially. Asking "quiz me on my notes
+  about X" gets the model's normal answer from memory.
 - **Notifications, messages, calls, alarms, timers, media, phone controls, screen time, Google
   (Gmail, Tasks, Drive):** iOS gives apps no access to other apps' notifications, texts, call log,
   alarms or system switches; Google sign-in isn't set up for iOS. Shown as "Not possible on iPhone"
