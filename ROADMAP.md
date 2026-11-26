@@ -13,6 +13,7 @@ Current phase details: `docs/PLAN-v2.md`. Left out or rejected on purpose: ADR 0
 ## Release 1 (launch)
 
 - Owner steps in `docs/RELEASE-OWNER-STEPS.md`: Play Console app and first upload, website DNS (robert-whiteley.github.io/sidekick-site), store declarations (data safety, content rating, foreground services, health), Google OAuth verification (Gmail send, Tasks, Drive), store screenshots, production AAB and "go".
+- **iPhone (App Store):** built from the same code (ADR 0006 "iPhone"); owner steps in `docs/RELEASE-OWNER-STEPS.md` section 10, listing in `docs/store/app-store.md`. Not yet built on EAS or run on an iPhone.
 - Finish phone verification of the plan v2 work (build sk46; `docs/LIMITS.md` covers sk44–sk45).
 
 ## Release 2
@@ -23,8 +24,7 @@ Current phase details: `docs/PLAN-v2.md`. Left out or rejected on purpose: ADR 0
 
 - **Full localisation** in the 25 Parakeet v3 languages: every string, command rule, voice and test per language; each new feature then costs 25 translations (ADR 0006).
 - **Auto-detect the spoken language:** needs Parakeet v3 (worse English) or a language-ID model in front of v2; now English-only plus optional translation of heard speech.
-- **iOS build** (iPhone 13 mini): deferred to get Android out first; no OCR, assistant role, tile, widget, place names or background download there yet.
-- **Identical icons on iOS** by bundling the Material Symbols font (Apache-2.0): comes with the iOS work.
+- **iPhone, after the first TestFlight build:** run it on the iPhone 13 mini (memory with the model loaded, speed, download), then the App Store listing (`docs/store/app-store.md`). Possible later: Natural voice on iPhone, a home-screen widget and Siri shortcuts.
 - **Wearables:** Omi pendant first (open MIT protocol), then smart glasses; each needs its own connector (`docs/FUTURE-wearables.md`).
 - **Place routines with the app closed:** needs ACCESS_BACKGROUND_LOCATION and a Play declaration with review, often refused.
 - **Restore from Google Drive in the app:** merging speakers, vectors and encrypted media is not simple; restore is manual for now.

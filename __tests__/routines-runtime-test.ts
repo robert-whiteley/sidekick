@@ -1,8 +1,11 @@
+import { Platform } from 'react-native';
+
 import { handleRoutineEvent, onPlace, setRoutineDeps, setRoutineUi } from '@/engine/routines';
 import {
   addRoutine,
   listRoutines,
   migrateBriefing,
+  ROUTINES_NEED_ANDROID,
   routineRequest,
   setEventsSource,
   setRoutinesStore,
@@ -16,6 +19,14 @@ jest.mock('@/engine/settings', () => ({
 }));
 jest.mock('expo-battery', () => ({}));
 jest.mock('@/engine/location-track', () => ({ onPlaceChange: () => () => {} }));
+
+// Routines run on Android; the iPhone explains why not (last test).
+beforeAll(() => {
+  Platform.OS = 'android';
+});
+afterAll(() => {
+  Platform.OS = 'ios';
+});
 
 function memStore() {
   const m = new Map<string, string>();
@@ -163,4 +174,17 @@ it('calendar event alarms', async () => {
   expect(plan.alarms.some((a: { at: number }) => a.at === T(14, 50))).toBe(true);
   await handleRoutineEvent({ type: 'time' }, T(14, 50));
   expect(answered).toEqual(['"Standup" starts in 10 minutes. tell me what it is']);
+});
+
+test('on iPhone a routine is explained, not saved', () => {
+  Platform.OS = 'ios';
+  try {
+    const before = listRoutines().length;
+    expect(routineRequest('every day at 6pm give me a recap of my day')).toEqual({
+      text: ROUTINES_NEED_ANDROID,
+    });
+    expect(listRoutines().length).toBe(before);
+  } finally {
+    Platform.OS = 'android';
+  }
 });

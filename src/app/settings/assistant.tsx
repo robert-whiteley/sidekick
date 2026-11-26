@@ -1,3 +1,5 @@
+import { Platform } from 'react-native';
+
 import { EntryPointsSection } from '@/features/settings/EntryPointsSection';
 import { FollowupsSection } from '@/features/settings/FollowupsSection';
 import { NotesRecapSection } from '@/features/settings/NotesRecapSection';
@@ -37,17 +39,19 @@ export default function AssistantSettings() {
         />
       </Section>
       <Section title="Voice">
-        <ChoiceRow
-          label="Voice for answers"
-          hint="One voice is used all the time; it never switches mid-answer."
-          options={[
-            { value: 'pocket', label: 'Natural voice' },
-            { value: 'system', label: "Phone's voice" },
-          ]}
-          value={s.voiceChoice === 'auto' ? null : s.voiceChoice}
-          recommended={rec.voice}
-          onChange={(v) => set({ voiceChoice: v ?? 'auto' })}
-        />
+        {Platform.OS !== 'ios' && (
+          <ChoiceRow
+            label="Voice for answers"
+            hint="One voice is used all the time; it never switches mid-answer."
+            options={[
+              { value: 'pocket', label: 'Natural voice' },
+              { value: 'system', label: "Phone's voice" },
+            ]}
+            value={s.voiceChoice === 'auto' ? null : s.voiceChoice}
+            recommended={rec.voice}
+            onChange={(v) => set({ voiceChoice: v ?? 'auto' })}
+          />
+        )}
         <SliderRow
           label="Speech speed"
           hint={'Also by voice: "speak slower", "speak faster", "normal speed".'}

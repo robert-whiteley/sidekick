@@ -1,4 +1,5 @@
 import { act, fireEvent, render, screen } from '@testing-library/react-native';
+import { Platform } from 'react-native';
 
 import { notices } from '@/engine/notices';
 import { AskScreen } from '@/features/ask/AskScreen';
@@ -162,6 +163,7 @@ test('opening the chat turns listening back on if it was on before the app was k
 
 test('the Listen button follows the real microphone when it is stopped from the notification', async () => {
   jest.useFakeTimers();
+  Platform.OS = 'android';
   try {
     mockListening.on = true;
     await render(<AskScreen />);
@@ -176,6 +178,13 @@ test('the Listen button follows the real microphone when it is stopped from the 
     expect(on()).toBe(false);
   } finally {
     mockListening.on = false;
+    Platform.OS = 'ios';
     jest.useRealTimers();
   }
+});
+
+test('the iPhone has no background Listen button (hold the mic instead)', async () => {
+  await render(<AskScreen />);
+  expect(await screen.findByText('Level 2, by the lift.')).toBeTruthy();
+  expect(screen.queryByLabelText('Listen in the background')).toBeNull();
 });

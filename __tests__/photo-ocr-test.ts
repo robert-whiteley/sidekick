@@ -47,6 +47,6 @@ test('OCR files are pinned to a commit with sha256 and size, and downloaded on f
       /^https:\/\/huggingface\.co\/PaddlePaddle\/PP-OCRv6_small_(det|rec)_onnx\/resolve\/[0-9a-f]{40}\//,
     );
   }
-  const names = allRequiredFiles('').map((f) => f.name);
+  const names = allRequiredFiles('', undefined, false).map((f) => f.name);
   for (const f of Object.values(OCR_FILES)) expect(names).toContain(f.name);
 });

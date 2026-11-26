@@ -116,3 +116,25 @@ describe('commandSafeWhenLocked', () => {
     expect(commandSafeWhenLocked(null)).toBe(false);
   });
 });
+
+describe('help on iPhone', () => {
+  const on = {
+    camera: false,
+    listening: false,
+    memory: true,
+    calendar: true,
+    messages: false,
+    email: false,
+    online: false,
+    location: false,
+  };
+  it('offers no alarms, timers or Listen', () => {
+    const t = helpText({ ...on, iphone: true });
+    expect(t).not.toMatch(/alarms|timers|Listen/);
+    expect(t).toMatch(/set reminders/);
+    expect(t).toMatch(/More with Online lookup in Settings/);
+  });
+  it('Android still offers them', () => {
+    expect(helpText(on)).toMatch(/timers and alarms.*Listen/s);
+  });
+});

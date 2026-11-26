@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "main": "index.js",
   "dependencies": {
+    "@expo-google-fonts/material-symbols": "^0.4.55",
     "@op-engineering/op-sqlite": "^19.0.5",
     "expo": "~58.0.26",
     "expo-application": "~58.1.2",
@@ -21,11 +22,13 @@
     "expo-haptics": "~58.0.8",
     "expo-linking": "~58.0.17",
     "expo-local-authentication": "~58.0.3",
+    "expo-location": "~58.0.22",
     "expo-media-library": "~58.0.14",
     "expo-network": "~58.0.5",
     "expo-notifications": "~58.1.9",
     "expo-router": "~58.0.32",
     "expo-secure-store": "~58.0.3",
+    "expo-sensors": "~58.0.5",
     "expo-sharing": "~58.0.23",
     "expo-speech": "~58.0.4",
     "expo-status-bar": "~58.0.5",
@@ -49,6 +52,7 @@
     "eslint-plugin-prettier": "^5.5.7",
     "jest": "~30.5.2",
     "jest-expo": "~58.0.15",
+    "jimp-compact": "^0.16.1",
     "prettier": "^3.10.1",
     "typescript": "~6.0.3"
   },
@@ -64,7 +68,14 @@
   },
   "private": true,
   "jest": {
-    "preset": "jest-expo"
+    "preset": "jest-expo",
+    "testPathIgnorePatterns": [
+      "/node_modules/",
+      "<rootDir>/.claude/"
+    ],
+    "modulePathIgnorePatterns": [
+      "<rootDir>/.claude/"
+    ]
   },
   "license": "Apache-2.0",
   "op-sqlite": {
@@ -72,5 +83,15 @@
     "sqliteVec": true,
     "fts5": true,
     "performanceMode": true
+  },
+  "expo": {
+    "autolinking": {
+      "android": {
+        "exclude": [
+          "expo-location",
+          "expo-sensors"
+        ]
+      }
+    }
   }
 }

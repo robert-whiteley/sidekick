@@ -10,12 +10,17 @@
       "supportsTablet": false,
       "bundleIdentifier": "app.ondevice.sidekick",
       "entitlements": {
-        "com.apple.developer.kernel.increased-memory-limit": true
+        "com.apple.developer.kernel.increased-memory-limit": true,
+        "com.apple.developer.kernel.extended-virtual-addressing": true
       },
       "infoPlist": {
-        "UIBackgroundModes": ["audio"],
-        "ITSAppUsesNonExemptEncryption": false
-      }
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSSpeechRecognitionUsageDescription": "Sidekick turns what you say into text on this iPhone while you hold the mic. Your voice is not sent to Apple or anyone else.",
+        "NSFaceIDUsageDescription": "Sidekick uses Face ID to unlock the app when App lock is on.",
+        "NSPhotoLibraryAddUsageDescription": "Sidekick saves a moment you choose into Photos.",
+        "NSPhotoLibraryUsageDescription": "Sidekick saves a moment you choose into an album in Photos. It does not read your other photos."
+      },
+      "deploymentTarget": "16.4"
     },
     "android": {
       "adaptiveIcon": {
@@ -76,7 +81,21 @@
       [
         "expo-calendar",
         {
-          "calendarPermission": "Sidekick reads your calendar to answer questions like \"when is my dentist\", and adds events only after you tap Add. Events stay on this phone."
+          "calendarPermission": "Sidekick reads your calendar to answer questions like \"when is my dentist\", and adds events only after you tap Add. Events stay on this phone.",
+          "remindersPermission": false
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Sidekick adds place names to your memories and answers \"where did I park\" while the app is open. Locations stay on this phone.",
+          "locationAlwaysAndWhenInUsePermission": false,
+          "locationAlwaysPermission": false,
+          "locationFullAccuracyPermission": false,
+          "motionUsagePermission": "Sidekick reads your step count from Motion & Fitness to answer \"how many steps today\". It stays on this phone.",
+          "isIosBackgroundLocationEnabled": false,
+          "isAndroidBackgroundLocationEnabled": false,
+          "isAndroidForegroundServiceEnabled": false
         }
       ],
       [

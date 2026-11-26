@@ -1,7 +1,8 @@
 import { Directory, File } from 'expo-file-system';
-import { BackHandler } from 'react-native';
+import { BackHandler, Platform } from 'react-native';
 
 import SidekickNative from '../../modules/sidekick-native';
+import { closeDb } from '@/memory/db';
 import { deleteEverything, exportEverything } from '@/memory/store';
 import { forgetConversation } from './assistant';
 import { dataDir, modelsDir } from './paths';
@@ -66,10 +67,20 @@ export async function exportAllData(): Promise<ExportResult> {
   return { folder: name, files };
 }
 
+async function restartApp() {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    await (require('expo-updates') as typeof import('expo-updates')).reloadAsync();
+  } catch (e) {
+    console.log(`[wipe] restart failed: ${String(e)}`);
+  }
+}
+
 /**
  * Deletes everything Sidekick keeps: memories, people, media, settings and the downloaded
  * models, as an uninstall would. On Android the system does it (and closes the app; opening it
- * again starts the first run). Elsewhere the files and database are cleared and the app restarts.
+ * again starts the first run). On iPhone the native module wipes the same and the app restarts.
+ * Elsewhere the files and database are cleared and the app restarts.
  */
 export async function deleteAllData(): Promise<void> {
   try {
@@ -80,6 +91,13 @@ export async function deleteAllData(): Promise<void> {
   forgetConversation();
   await SidekickNative.llmUnload().catch(() => {});
   await SidekickNative.embedUnload().catch(() => {});
+  if (Platform.OS === 'ios') {
+    // iPhone apps can't close themselves: wipe natively, then restart the app's JS.
+    closeDb();
+    SidekickNative.wipeAllData?.();
+    await restartApp();
+    return;
+  }
   if (SidekickNative.wipeAllData?.()) return;
   await deleteEverything();
   SidekickNative.deleteFile(dataDir());

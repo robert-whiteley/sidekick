@@ -24,7 +24,7 @@ Read this before proposing any of these again. Each line says why.
 
 - **Pocket TTS on the Pixel 5:** first sound 3.8–4.3 s per sentence while Gemma is still writing (laptop: 0.6 s; voice-sample length makes no difference). The app falls back to the system voice automatically when a short sentence takes over 2.5 s. Faster phones keep Pocket. Background model passes (names, follow-ups) now wait while Sidekick answers or speaks (`foreground-gate.ts`, max 3 min), so they no longer slow the first sound further.
 
-- **iOS:** deferred. No OCR, assistant role, tile or widget there yet.
+- **iOS:** built 26 Nov (section "iPhone (26 Nov)" below); not yet run on an iPhone.
 
 ## Later (not built yet)
 
@@ -159,7 +159,7 @@ Read this before proposing any of these again. Each line says why.
 - Built: a location track (encrypted DB) while Listening / Live camera runs (native, journaled) or the app is open (every 5 min); places named by voice ("call this place the gym", "this is home"); where am I / where was I at 3 / where did I park / when was I last at X / how long at X / where have I been; enter/leave events for routines (`onPlaceChange`, `src/engine/location-track.ts`); weather from MET Norway (Online lookup only, position rounded to ~1 km). Settings → Privacy → Location (switch, places, delete history).
 - No ACCESS_BACKGROUND_LOCATION: Play requires a declaration and review for it, and Android 14+ blocks while-in-use location in services started from the background. Positions are kept only while the user-started service runs or the app is open; when Android restarts the service on its own (in the background) it restarts without location (and stops instead of crashing if Android refuses the start).
 - Parking: marked when a car kit's Bluetooth (by name, as hands-free mode) disconnects while Sidekick runs; otherwise guessed from the first slow fix after driving speed, which can be a few hundred metres off (updates are at most every 5 min / 100 m to save battery).
-- Place names offline: GeoNames cities500 (every town and village ≥ 500 people, 226 551 places) packed to 5.2 MB (2.7 MB in the download), replacing the 1.4 MB towns ≥ 15 000 table. Android only for now (iOS gets no place name until the pack is bundled there). Street names come from Android's Geocoder (Google, online) only when Online lookup is on.
+- Place names offline: GeoNames cities500 (every town and village ≥ 500 people, 226 551 places) packed to 5.2 MB (2.7 MB in the download), replacing the 1.4 MB towns ≥ 15 000 table. On iPhone the same pack is bundled in the app (26 Nov). Street names come from Android's Geocoder (Google, online) only when Online lookup is on.
 - Rejected: Open-Meteo (free tier is non-commercial only). MET Norway needs an identifying User-Agent: "Sidekick/1.0 https://robert-whiteley.github.io/sidekick-site" (no personal details).
 - Left out: named places in the Timeline (it shows the town); Android 16 "home/work" from Google is not readable by apps. Frequent places are now offered for naming once, while the user is there ("You're often here (near Banbury, evenings). Name it?" Home / Work / Other… / Not now; never asked again for that spot).
 - Place routines ("when I get home …") run only while Sidekick is open or listening (its foreground service reads the position). Left out with the app fully closed: it needs ACCESS_BACKGROUND_LOCATION, which Google Play allows only after a Permissions Declaration (core-feature justification, a prominent in-app disclosure, a demo video, review; often refused when the feature isn't the app's main purpose), and Android geofencing comes from Google Play services (closed source). Owner's call if wanted later.
@@ -222,4 +222,45 @@ Read this before proposing any of these again. Each line says why.
 ## One look on Android and iOS (25 Nov)
 
 - The UI is one shared component library (`src/ui`) with one token file, identical on both platforms (owner: same on iOS and Android); `__tests__/ui-conventions-test.ts` fails when a screen bypasses it without a `// ui-exception: <why>`.
-- Later (with the iOS work): icons still come from each phone's own set (Material Symbols on Android, SF Symbols on iOS via expo-symbols). Making them identical means bundling the Material Symbols font (Apache-2.0) on iOS too.
+- Icons: identical since 26 Nov. Android draws Material Symbols through expo-symbols; the iPhone draws the same glyphs from the bundled Material Symbols font (Apache-2.0, `@expo-google-fonts/material-symbols`), checked against expo-symbols' codepoints by `__tests__/icons-test.ts`.
+
+## iPhone (26 Nov)
+
+Built for the App Store from the same code (no Mac: EAS builds in the cloud). Swift in
+`modules/sidekick-native/ios/`; every native call Swift doesn't implement has a safe iPhone answer in
+`modules/sidekick-native/src/ios-fallbacks.ts` (a test fails if one is missing), so nothing crashes or
+hangs. Not compiled locally (no Swift toolchain on Linux); the first EAS build is the compile check.
+
+Works on iPhone: chat by typing or holding the mic (Apple Speech, on the device), the Gemma model and
+memory search (LiteRT-LM Swift, CPU), photos and "what am I looking at?", text in photos (Apple
+Vision instead of the PaddleOCR models), QR/barcodes, PDFs, memory and recall, reminders, calendar,
+contacts, maps, battery/storage/steps (Core Motion through expo-sensors), place names (the same
+GeoNames pack, location "while using" through expo-location), the model download (background
+URLSession through expo-file-system), app lock, export and delete-everything, online lookup.
+
+Left out on iPhone, with why (users see the reason in Phone features, Connections or the reply):
+
+- **Background listening, wake word, live conversation notes:** iOS doesn't let an app keep the
+  microphone on in the background for this. Hold the mic instead. Reply: "Listening in the background
+  needs Android."
+- **Live camera memory and "tell me when you see…":** iOS doesn't let apps film in the background, and
+  there is no USB camera API for apps. Reply: "The live camera needs Android. On iPhone, take a photo
+  with the camera button and ask about it."
+- **Routines:** an iPhone app can't wake itself at a time or on an event to run the model. Reply:
+  "Routines need Android…"; the Routines settings row is hidden. Reminders still arrive (local
+  notifications).
+- **Quick Settings tile, home-screen widget, default assistant:** Android features; iOS equivalents
+  (widget extension, Siri/App Intents) need a native target — later, if asked for.
+- **Notifications, messages, calls, alarms, timers, media, phone controls, screen time, Google
+  (Gmail, Tasks, Drive):** iOS gives apps no access to other apps' notifications, texts, call log,
+  alarms or system switches; Google sign-in isn't set up for iOS. Shown as "Not possible on iPhone".
+- **Natural voice (Pocket TTS):** not ported (ONNX Runtime iOS build not added); the iPhone's own voice
+  reads answers.
+- **GPU/NPU for the model:** the LiteRT-LM xcframework used (v0.19.1) is CPU only for the Swift API;
+  the iPhone downloads only the generic model (3.0 GB vs 3.5 GB on Android).
+- **Background audio mode** (`UIBackgroundModes: audio`) removed: the iPhone app answers only while
+  open, and Apple rejects background modes an app doesn't need.
+- **China mainland:** not offered (App Store availability). Generative AI apps there need a CAC
+  Security Assessment and an AIGC filing through a local entity, which a free open-source app can't do.
+- **Download after the app is killed:** the background download continues while the app is
+  suspended, but if the user force-quits Sidekick it restarts on the next open (no resume data kept).

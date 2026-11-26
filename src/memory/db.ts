@@ -1,6 +1,7 @@
 import { type DB, open } from '@op-engineering/op-sqlite';
 import * as Crypto from 'expo-crypto';
 import * as SecureStore from 'expo-secure-store';
+import { Platform } from 'react-native';
 
 /**
  * The encrypted memory database (SQLCipher). The key is random, made on first run, and kept in
@@ -212,12 +213,45 @@ function migrate(d: DB) {
 
 export async function getDb(): Promise<DB> {
   if (db) return db;
-  const d = open({ name: 'memory.db', encryptionKey: await dbKey() });
+  const location = iosDbFolder();
+  const d = open({
+    name: 'memory.db',
+    encryptionKey: await dbKey(),
+    ...(location ? { location } : {}),
+  });
   d.executeSync('PRAGMA foreign_keys = ON');
   for (const sql of SCHEMA) d.executeSync(sql);
   migrate(d);
   db = d;
   return d;
+}
+
+/**
+ * iPhone: op-sqlite's default folder (Library) is copied by iCloud and computer backups, so the
+ * database goes in Sidekick's own folder, which the native module keeps out of backups (Android:
+ * backups are off for the app). There are no older iPhone installs to move.
+ */
+function iosDbFolder(): string | undefined {
+  if (Platform.OS !== 'ios') return undefined;
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const n = require('../../modules/sidekick-native').default as {
+      getDeviceInfo(): { filesDir: string };
+    };
+    return `${n.getDeviceInfo().filesDir}/data`;
+  } catch {
+    return undefined;
+  }
+}
+
+/** Closes the database (before "Delete all my data" removes its file). */
+export function closeDb() {
+  try {
+    db?.close();
+  } catch {
+    // Already closed.
+  }
+  db = null;
 }
 
 export function vecParam(v: number[]): Float32Array {

@@ -19,7 +19,7 @@ import { notices } from './notices';
 
 /** The codes in a JPEG; empty when none, or on phones without the scanner. */
 export async function scanCodes(path: string): Promise<CodeContent[]> {
-  if (Platform.OS !== 'android' || !SidekickNative.scanCodes) return [];
+  if (Platform.OS === 'web' || !SidekickNative.scanCodes) return [];
   try {
     const list = JSON.parse(
       await SidekickNative.scanCodes(path.replace(/^file:\/\//, '')),

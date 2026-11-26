@@ -186,10 +186,12 @@ export function helpText(on: {
   email: boolean;
   online: boolean;
   location: boolean;
+  /** iPhone: no timers, alarms or background Listen to offer. */
+  iphone?: boolean;
 }): string {
   const can: string[] = [
     'answer questions and remember things you tell me',
-    'set reminders, timers and alarms',
+    on.iphone ? 'set reminders' : 'set reminders, timers and alarms',
     'do sums and conversions, and translate',
   ];
   if (on.camera)
@@ -208,7 +210,7 @@ export function helpText(on: {
   if (on.location) can.push('say where you were');
   if (on.online) can.push('look things up online');
   const off: string[] = [];
-  if (!on.listening) off.push('Listen');
+  if (!on.listening && !on.iphone) off.push('Listen');
   if (!on.online) off.push('Online lookup');
   const tail = off.length ? ` More with ${off.join(' and ')} in Settings.` : '';
   return `I can ${can.slice(0, -1).join(', ')} and ${can.at(-1)}.${tail}`;
