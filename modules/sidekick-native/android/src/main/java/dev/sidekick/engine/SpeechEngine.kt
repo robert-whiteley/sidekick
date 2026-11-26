@@ -147,7 +147,7 @@ class SpeechEngine(private var paths: SpeechPaths, keywordsFile: File) {
       ),
     )
 
-  fun newVad(): Vad =
+  fun newVad(minSilenceSec: Float = 0.6f): Vad =
     Vad(
       null,
       VadModelConfig(
@@ -155,7 +155,7 @@ class SpeechEngine(private var paths: SpeechPaths, keywordsFile: File) {
           SileroVadModelConfig(
             model = paths.vad,
             threshold = 0.5f,
-            minSilenceDuration = 0.6f,
+            minSilenceDuration = minSilenceSec,
             minSpeechDuration = 0.3f,
             windowSize = VAD_WINDOW,
             maxSpeechDuration = 25f,
@@ -189,6 +189,48 @@ class SpeechEngine(private var paths: SpeechPaths, keywordsFile: File) {
       s.acceptWaveform(samples, SAMPLE_RATE)
       asr.decode(s)
       return asr.getResult(s).text.trim()
+    } finally {
+      s.release()
+    }
+  }
+
+  /** A detector with a shorter pause, for cutting a finished line where the voice changes. */
+  private val pieceVad by lazy { newVad(LineSplit.PAUSE_SEC) }
+
+  /** Speech spans (sample ranges) inside a finished line, split at pauses of LineSplit.PAUSE_SEC. */
+  @Synchronized
+  fun speechPieces(samples: FloatArray): List<Pair<Int, Int>> {
+    val vad = pieceVad
+    vad.reset()
+    val out = mutableListOf<Pair<Int, Int>>()
+    fun drain() {
+      while (!vad.empty()) {
+        val seg = vad.front()
+        vad.pop()
+        val start = seg.start.toInt()
+        out.add(start to minOf(samples.size, start + seg.samples.size))
+      }
+    }
+    var i = 0
+    while (i + VAD_WINDOW <= samples.size) {
+      vad.acceptWaveform(samples.copyOfRange(i, i + VAD_WINDOW))
+      drain()
+      i += VAD_WINDOW
+    }
+    vad.flush()
+    drain()
+    return out
+  }
+
+  /** Words with their start times (seconds), for sharing one transcription out to a line's parts. */
+  @Synchronized
+  fun transcribeWords(samples: FloatArray): List<Pair<String, Float>> {
+    val s = asr.createStream()
+    try {
+      s.acceptWaveform(samples, SAMPLE_RATE)
+      asr.decode(s)
+      val r = asr.getResult(s)
+      return LineSplit.words(r.tokens, r.timestamps)
     } finally {
       s.release()
     }

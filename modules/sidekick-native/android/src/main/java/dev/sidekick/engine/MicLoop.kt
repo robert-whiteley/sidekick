@@ -436,11 +436,35 @@ object MicLoop {
   private fun handleSegment(ctx: Context, engine: SpeechEngine, audio: FloatArray, atMs: Long) {
     try {
       if (!worthTranscribing(audio)) return
-      if (commandsOnly) {
-        val t = System.currentTimeMillis()
-        if (t > awaitingQuestionUntil && !Voice.turns.isFollowUp(atMs, t)) return
+      val t = System.currentTimeMillis()
+      val questionLikely = t <= awaitingQuestionUntil || Voice.turns.isFollowUp(atMs, t)
+      if (commandsOnly && !questionLikely) return
+      // Conversation (not a question to Sidekick): one line per person, cut where the voice changes.
+      if (!questionLikely && audio.size >= 2 * LineSplit.JUDGE_SEC * SAMPLE_RATE) {
+        val pieces = LineSplit.blocks(audio, engine.speechPieces(audio))
+        val parts = LineSplit.parts(audio.size, pieces, { a, b -> engine.voiceprint(audio.copyOfRange(a, b)) })
+        if (parts.size > 1) {
+          Log.i(TAG, "line cut in ${parts.size} where the voice changes")
+          // One transcription of the whole line (cutting it would cut words), shared out by time.
+          val texts = LineSplit.shareWords(engine.transcribeWords(audio), parts)
+          for ((i, p) in parts.withIndex()) {
+            if (texts[i].isBlank()) continue
+            handleLine(ctx, engine, audio.copyOfRange(p.first, p.second), atMs + p.first * 1000L / SAMPLE_RATE, texts[i])
+          }
+          return
+        }
       }
-      val raw = engine.transcribe(audio)
+      handleLine(ctx, engine, audio, atMs)
+    } catch (t: Throwable) {
+      Log.e(TAG, "segment failed", t)
+    }
+  }
+
+  /** One line: transcribed here unless [heard] already holds its words (a part of a cut line). */
+  private fun handleLine(ctx: Context, engine: SpeechEngine, audio: FloatArray, atMs: Long, heard: String? = null) {
+    try {
+      if (heard == null && audio.size < MIN_TRANSCRIBE_SEC * SAMPLE_RATE) return
+      val raw = heard ?: engine.transcribe(audio)
       if (raw.isBlank()) return
       val voice =
         if (audio.size >= MIN_LINE_VOICEPRINT_SEC * SAMPLE_RATE || AGREEMENT.containsMatchIn(raw.trim())) {
