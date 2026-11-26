@@ -11,6 +11,8 @@
  * read-back, and the same prompt works on every backend and for the iPhone later.
  */
 
+import { RESEARCH_WORDS } from '@/web/research-logic';
+
 export type ArgType = 'string' | 'number' | 'boolean' | 'datetime';
 
 export type ArgSpec = {
@@ -80,6 +82,13 @@ export const TOOLS: ToolSpec[] = [
     kind: 'answer',
     args: { from: when('start'), to: when('end'), topic: s('topic, if any') },
     words: /\b(recap|summar|sum up|catch me up|overview|digest|what happened|been (doing|up to))\b/,
+  },
+  {
+    name: 'research',
+    desc: 'research a topic online in several searches and write a short report with sources',
+    kind: 'info',
+    args: { topic: req('what to research, as asked') },
+    words: RESEARCH_WORDS,
   },
   {
     name: 'message',

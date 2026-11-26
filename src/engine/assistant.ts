@@ -65,6 +65,8 @@ import { answerAboutPage } from './shared-doc';
 import { firstUrl } from './shared-doc-logic';
 import { askWithLookup, type WebSource } from '@/web/lookup';
 import { webLinkWanted } from '@/web/lookup-logic';
+import { research } from '@/web/research';
+import { maybeEditPhoto } from './photo-edit';
 import { answerLocation } from './location';
 import { feedbackRule, resolveTimeWithModel, routeWithTools, type RouteOutcome } from './tools';
 import { forgetRanges } from '@/memory/time-range';
@@ -275,6 +277,23 @@ export async function answer(
         return answer(o.text, null, onText, { ...opts, routed: true });
       case 'answer':
         return null;
+      case 'research': {
+        // Several searches, pages read on the phone, one report with numbered sources.
+        const r = await research(o.topic, onText, status);
+        if (!offRecord && !r.local) await rememberExchange(question, r.text).catch(() => {});
+        return {
+          text: r.text,
+          usedPhoto: null,
+          sources: [],
+          ms: r.ms,
+          ttftMs: 0,
+          web: r.web,
+          webQuery: r.queries[0],
+          // Nothing found online: offer the browser search instead.
+          webLink: !r.local && !r.web.length && !!r.queries[0],
+          ...(r.local ? { local: true } : {}),
+        };
+      }
     }
   };
   // Where am I / was I / did I park, "call this place the gym", the weather (location.ts).
@@ -331,6 +350,25 @@ export async function answer(
       scratch: true,
     });
     return { text, usedPhoto: photoNow, sources: [], ms: Date.now() - t0, ttftMs: 0 };
+  }
+
+  // "Make the background white", "turn it the right way up": a new, edited copy of the photo
+  // (the model picks the edit; photo-edit.ts). Plain photo questions go on to the answer.
+  if (photoNow && !opts?.routine) {
+    const edit = await maybeEditPhoto(question, photoNow, status).catch(() => null);
+    if (edit) {
+      onText(edit.text);
+      return {
+        text: edit.text,
+        usedPhoto: photoNow,
+        sources: [],
+        ms: edit.ms,
+        ttftMs: 0,
+        local: true,
+        // momentAt 0: a new file, not a stored moment, so no camera frames are shown around it.
+        media: edit.path ? [{ momentAt: 0, kind: 'photo', path: edit.path }] : undefined,
+      };
+    }
   }
 
   // "Remind me to … at …": scheduled for real, here, so the reply never claims what didn't happen.

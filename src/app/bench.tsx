@@ -22,6 +22,8 @@ import {
   runRecallBench,
   runRecallSearchOnly,
 } from '@/engine/answers-bench';
+import { runPhotoEditBench } from '@/engine/photo-edit-bench';
+import { runResearchBench } from '@/engine/research-bench';
 import { EMBED_DIMS } from '@/memory/db';
 import { cosine } from '@/memory/voices';
 
@@ -128,6 +130,9 @@ export default function BenchScreen() {
       else if (what === 'recall') await runRecallBench(quiet, only);
       else if (what === 'recall-search') await runRecallSearchOnly(quiet);
       else if (what === 'recall-clear') await clearRecallData(quiet);
+      else if (what === 'research') await runResearchBench(quiet, only);
+      else if (what === 'photo-edit')
+        await runPhotoEditBench(quiet, device.externalFilesDir ?? device.filesDir);
       quiet(`[bench] ${what} done`);
     });
   const params = useLocalSearchParams<{ run?: string; only?: string; size?: string; t?: string }>();
@@ -468,6 +473,7 @@ export default function BenchScreen() {
         />
         <Button title="Recall: ask" disabled={busy} onPress={() => bench('recall')} />
         <Button title="Recall: remove" disabled={busy} onPress={() => bench('recall-clear')} />
+        <Button title="Research bench" disabled={busy} onPress={() => bench('research')} />
       </View>
       <View style={styles.row}>
         <Button title="Conversation test" disabled={busy} onPress={conversationTest} />

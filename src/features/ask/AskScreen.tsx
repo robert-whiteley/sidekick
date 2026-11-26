@@ -81,6 +81,7 @@ import { stopConversationNotes, updateConversationNotes } from '@/engine/convers
 import { stopTranslateHeard, translateHeardIfIdle } from '@/engine/translate-heard';
 import { driveBackupIfDue } from '@/engine/drive-backup-schedule';
 import { cancelLlm, ensureLlm, holdBackground, releaseBackground } from '@/engine/llm';
+import { stopResearch } from '@/web/research';
 import { readBackDone } from '@/engine/actions';
 import { startFollowupNotifications } from '@/engine/followup-notify';
 import { setRoutineUi } from '@/engine/routines';
@@ -951,6 +952,7 @@ export function AskScreen({
   );
 
   const stop = () => {
+    stopResearch();
     cancelLlm();
     speaker.current?.stop();
     setSpeakingId(null);

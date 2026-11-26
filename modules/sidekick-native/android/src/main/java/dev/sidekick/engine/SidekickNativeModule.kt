@@ -350,6 +350,20 @@ class SidekickNativeModule : Module() {
 
     AsyncFunction("ocrUnload") { Ocr.unload() }
 
+    // Light photo edits (PhotoEdit.kt): a new file each time; the original is kept.
+    AsyncFunction("photoEdit") { photoPath: String, op: String, args: Map<String, Any?>, segModelPath: String? ->
+      val r = PhotoEdit.edit(context, photoPath, op, args, segModelPath)
+      mapOf(
+        "path" to r.path,
+        "width" to r.width,
+        "height" to r.height,
+        "ms" to r.ms.toDouble(),
+        "segMs" to r.segMs.toDouble(),
+      )
+    }
+
+    AsyncFunction("photoEditUnload") { PhotoEdit.unload() }
+
     // --- PDFs in picked folders (one page per call, so JS can pace them) ---
     Function("pdfCanReadText") { Pdf.canReadText }
 

@@ -95,7 +95,7 @@ Read this before proposing any of these again. Each line says why.
 - Rejected: publisher RSS bundled by default (terms vary; BBC's are personal, non-commercial only).
 - Rejected: automating Google or the browser, by scraping or an AccessibilityService (against Google's terms and Play policy).
 - Rejected: computing the link's words with Gemma after every answer (CPU contention with speech, wasted when not tapped).
-- Wikipedia User-Agent has no contact details (would be personal info); may be rate-limited harder if Wikimedia tightens.
+- The User-Agent names the app and its public project URL, no personal contact (26 Nov): since Wikimedia's 2026 limits, a User-Agent without a URL or email counts as unidentified (10 requests a minute per IP; the old one got 429 from the 11th request, research needs ~12), one with a URL as a compliant bot (200 a minute).
 - The hidden "LOOKUP" turn is undone (the chat is cloned before it and restored) so follow-ups only see the real question and answer.
 - Gap: Gemma's search words on a Pixel-5-class CPU may often miss the 1.5 s budget (then rules are used); a `[lookup]` log line now shows which was used and the timings.
 - Measured on the Pixel 5 (Wi-Fi, UK): "who won the 2022 world cup?" answered from Wikipedia in 9.6 s (lookup ~2.5 s). GDELT took 9 s+ to answer at all (even its 429 "busy" reply), so with a 4 s limit news questions got no news source. A later test (24 Nov) waited 9 s and GDELT still only replied 429 after 10–11 s on every try (also from the laptop), so it is back to 4 s. Gap: GDELT is unreliable from here, so news on niche topics often falls back to Wikipedia facts or "no current information"; Wikipedia current events (0.3 s) and user-added RSS feeds work. No free, key-less, commercial-safe general news search was found to replace it (Nov 2026: Currents allows commercial use free but needs a key/registration; GNews and Mediastack free plans are non-commercial). Owner decision 24 Nov: leave news as is. Built-in RSS feeds rejected: most news feeds (BBC, Guardian, Reuters) are personal/non-commercial use only.
@@ -369,3 +369,79 @@ Left out on iPhone, with why (users see the reason in Phone features, Connection
   and the answer says so; reading more parts would take minutes on the Pixel 5 per question.
 - **Left out: video files** in share-in (only audio, PDF and text). Recordings from video apps can
   be shared as audio by most recorders; video files are large to copy in.
+
+## Lite versions of cloud-app features (26 Nov; numbers in docs/BENCH.md "Lite features")
+
+### Image generation: not built yet; SDXS-512 is usable on the Pixel 5, needs the owner's OK on its licence terms
+
+Every model small enough for a phone descends from Stable Diffusion 1.5, 2.1 or SDXL, so its
+licence is an OpenRAIL one. Checked on each model card and licence text (Nov 2026):
+
+| Model (size on the phone)                              | Licence                                   | Commercial-safe for a free Apache-2.0 app?                                                                                                      |
+| ------------------------------------------------------ | ----------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| SDXS-512 (IDKD, distilled SD; 683 MB at 8-bit)         | OpenRAIL++-M                              | Yes, with conditions: the licence's use restrictions (Attachment A) must be passed on in the app's terms and the licence shipped with the model |
+| SD 1.5 / DreamShaper 8 + LCM-LoRA or Hyper-SD (1.9 GB) | CreativeML OpenRAIL-M (+ OpenRAIL++ LoRA) | Same conditions                                                                                                                                 |
+| BK-SDM tiny / small (nota-ai; ~0.65–1 GB)              | CreativeML OpenRAIL-M                     | Same conditions                                                                                                                                 |
+| SD 2.1 base / Apple Core ML SD 2.1 (iPhone)            | OpenRAIL++-M                              | Same conditions                                                                                                                                 |
+| TAESD tiny image decoder (10 MB)                       | MIT                                       | Yes                                                                                                                                             |
+| SD-Turbo, SDXL-Turbo, SD 3 / 3.5 (Medium, Large)       | Stability AI Community Licence            | No: registration, "Powered by Stability AI", $1M revenue cap, revocable                                                                         |
+| Stable Cascade, FLUX.1-dev, Kolors                     | Non-commercial                            | No                                                                                                                                              |
+| FLUX.1-schnell (12B), Sana, Lumina, PixArt-Σ           | Apache-2.0 / Nvidia / open                | Licence fine (except Sana's Nvidia licence), but 2–12 GB: too big for phones                                                                    |
+
+Measured on the Pixel 5 (CPU, 6 threads, stable-diffusion.cpp, MIT, 512×512, made-up prompts):
+
+| Setup                                   | Time per image | Peak memory | Download | Quality                                                                       |
+| --------------------------------------- | -------------- | ----------- | -------- | ----------------------------------------------------------------------------- |
+| SDXS-512, 1 step, 8-bit, TAESD          | 37–43 s        | ~1.1 GB     | 693 MB   | Good: photos, landscapes, portraits, illustrations; text in images is garbled |
+| SD 1.5 8-bit + LCM-LoRA, 4 steps, TAESD | 240 s          | 2.0 GB      | 1.9 GB   | Good, a little better than SDXS; far too slow                                 |
+
+- A faster phone: a Snapdragon 8 Gen 2 / A15-class CPU is about 2.5–3× the Pixel 5 per image
+  (≈ 12–15 s with SDXS); with Apple's Core ML (iPhone 13: SD 2.1 in ~11 s for 20 steps,
+  published) or a recent Snapdragon NPU (Qualcomm AI Hub: ~2 s) it is a few seconds.
+- Plan if the owner agrees: an optional "Make pictures" download (693 MB, Wi-Fi) on phones with
+  ≥ 6 GB RAM, sd.cpp in the native module, Gemma unloaded while it runs, and a "Report this
+  picture" button (Google Play's AI-generated-content policy requires one).
+- Why not built in this round: (1) the OpenRAIL terms must go into the app's terms and every user
+  agrees to them (what users see; the repo's licence check allows only plain open licences);
+  (2) Play's report-content duty; (3) the SD training-data concerns (LAION) are a reputational
+  risk for a privacy-first app. Owner decision needed.
+
+### Light photo edits (built, Android)
+
+- Built: rotate, flip, crop to a shape, black and white, enhance, and background remove / white /
+  colour / blur, picked by the model from what was said. Background cut-out: U²-Netp
+  (Apache-2.0, 4.6 MB) chosen over Silueta (44 MB, about the same masks) and ISNet (179 MB,
+  ~6× slower on the laptop).
+- Left out: **erase an object** (needs a way to point at the object, i.e. a mask-drawing screen,
+  plus an inpainting model with two inputs: MI-GAN (MIT, 28 MB) or LaMa (Apache-2.0, 200 MB) are
+  the candidates); **upscale** (Real-ESRGAN, BSD-3: a 17M-parameter model run tile by tile, slow on a
+  phone CPU, and phone photos are already 12 MP; not measured). Later, if asked.
+- iPhone: not yet (the edits need a Swift port; the app says so and still answers about the photo).
+
+### Research (built)
+
+- Built: the model plans up to 4 searches over the existing sources (Wikipedia, DuckDuckGo,
+  SearXNG if set, news sources for news), the phone reads up to 6 pages and writes a short report
+  with numbered sources. Only search words and page requests leave the phone.
+- Limits chosen for the 4,096-token window and the Pixel 5: 4 searches, 6 pages, 4,400
+  characters of passages, ≤ 200-word report. More pages would not fit the window.
+- Left out: following links inside pages, and searching again after reading (each extra model
+  pass costs ~6 s plus writing time on the Pixel 5).
+
+### Other cloud-app features considered (Part C)
+
+Already in Sidekick: memory, voice conversation, photo questions, reminders/routines (scheduled
+tasks), off the record (temporary chat), copy/share, model choice, maps/location, Drive backup.
+Built now: "what can you do?" mentions research and photo edits.
+
+| Feature (ChatGPT / Gemini / Claude)         | Decision and why                                                                                         |
+| ------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| Suggested follow-up questions under answers | Left out: one more model pass (~5 s on the Pixel 5) after every answer, competing with the spoken reply. |
+| Projects / custom instructions              | Left out: saved facts already shape answers; separate spaces are the "profiles" option above.            |
+| Canvas (edit a document side by side)       | Later: a large new screen; the 4k window limits long documents anyway.                                   |
+| Branching chats                             | Left out: the one continuous chat is the design (see "separate profiles").                               |
+| Study / quiz mode                           | Not needed: Gemma does this when asked in the chat.                                                      |
+| Code interpreter / data analysis            | Left out: no safe sandbox on the phone; sums and conversions already run in code.                        |
+| YouTube / video summaries                   | Left out: needs YouTube's transcripts (against its terms without the API, and the API needs a key).      |
+| Agent mode (browsing, filling forms)        | Out of scope (SPEC: no autonomous agents; actions need the user's OK).                                   |
+| Custom GPTs / plugins marketplace           | Left out: accounts and servers.                                                                          |

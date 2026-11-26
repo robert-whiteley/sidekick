@@ -180,6 +180,17 @@ declare class SidekickNativeModule extends NativeModule<SidekickNativeModuleEven
     photoPath: string,
   ): Promise<{ lines: string[]; scores: number[]; ms: number }>;
   ocrUnload(): Promise<void>;
+  /**
+   * Android: a light edit of a photo into a new file (rotate, flip, crop, grayscale, enhance,
+   * background with the U²-Netp model at [segModelPath]). Undefined on iPhone (not built yet).
+   */
+  photoEdit?(
+    photoPath: string,
+    op: string,
+    args: Record<string, string | number>,
+    segModelPath: string | null,
+  ): Promise<{ path: string; width: number; height: number; ms: number; segMs: number }>;
+  photoEditUnload?(): Promise<void>;
   /** Android: whether this phone can read a PDF's embedded text (else every page needs OCR). */
   pdfCanReadText(): boolean;
   /** Android: a PDF's page count and page [index]'s embedded text (null if unreadable here). */
