@@ -142,17 +142,19 @@ Done:
 
 Your steps (after Claude says the first build is in TestFlight):
 
-- [ ] **TestFlight**: install the TestFlight app on the iPhone → App Store Connect → TestFlight →
+- [x] **TestFlight**: install the TestFlight app on the iPhone → App Store Connect → TestFlight →
       Internal Testing → add yourself → open the invite on the iPhone → **Install**. First launch
       downloads the AI model (about 3 GB, use Wi-Fi). Tell Claude what works and what doesn't.
 - [ ] **Screenshots**: on the iPhone, open screens with test data only and press side button + volume
       up (3 to 10). Copy them to the PC (e.g. into Downloads), tell Claude the folder; Claude runs
       `node scripts/iphone-screenshots.mjs <folder>` and gives you the files (1284 × 2778). Drag them
       into **6.5" Display** under version 1.0.
-- [ ] **Version 1.0 texts**: promotional text, description, keywords, support URL, copyright
-      (from `docs/store/app-store.md`) → Save. Build: **Add build** → pick the TestFlight build.
-- [ ] **App Information**: subtitle, category **Productivity**, content rights **No**.
-- [ ] **Age Rating**: answer None/No to everything → override to **18+** (why: in the store doc).
+- [x] **Version 1.0 texts, subtitle, categories, copyright, URLs**: Claude pushed them from
+      `store.config.json` (`eas metadata:push`, 26 Nov). Check them on the page.
+- [ ] **Build**: version 1.0 → **Add build** → pick the TestFlight build. **App Information**:
+      content rights **No**.
+- [ ] **Age Rating** (EAS can't set it yet; Apple added a "social media" question): answer None/No
+      to everything → override to **18+** (why: in the store doc).
 - [ ] **App Privacy**: privacy policy URL → "Do you collect data?" **No** → **Publish** (label
       "Data Not Collected").
 - [ ] **App Review Information**: sign-in **No**, your name and phone, email `info@sashy.ai`, notes

@@ -1,0 +1,38 @@
+{
+  "configVersion": 0,
+  "apple": {
+    "version": "1.0",
+    "release": {
+      "automaticRelease": true
+    },
+    "info": {
+      "en-GB": {
+        "title": "Sidekick – On-device AI",
+        "subtitle": "Private AI that works offline",
+        "promoText": "An AI assistant that runs on your iPhone. Ask by voice or text, show it a photo, and it remembers for you. Works offline; your data never leaves the phone.",
+        "description": "Sidekick is an AI assistant that runs entirely on your iPhone. Ask it anything, show it what you're looking at, and it remembers for you — without sending any of it anywhere.\n\nPRIVATE BY DESIGN\n• No account, no sign-up, no ads, no tracking.\n• Everything is processed on your iPhone and stored there, encrypted.\n• Works offline, even in airplane mode, once its AI model is downloaded.\n• Online lookup is off until you turn it on. Even then, only the search words are sent.\n• Export everything, or delete anything, any time. Deleting the app removes it all.\n\nASK ANYTHING\n• Hold the mic and speak, or type. Answers are spoken and shown in the chat.\n• \"What am I looking at?\" — take a photo and ask. Sidekick reads the text in photos too.\n• Scan QR codes and barcodes from a photo.\n\nREMEMBERS FOR YOU\n• Remembers what you tell it and the photos you ask about, so you can ask later: \"Where did I park?\", \"What was the wifi password on that sign?\"\n• Search your memory by meaning, person, place or date.\n• Keeps notes on the people you mention, with facts you approve.\n• Recaps of any time or topic: \"recap what we talked about this week\".\n• Optionally notes the town you're in (from a place list built into the app), so you can ask \"what did I save in Bristol?\".\n\nGETS THINGS DONE — ALWAYS WITH YOUR OK\n• Suggests reminders, to-dos and events from what you say; nothing is added until you approve it.\n• Recurring reminders (\"every Monday at 9\").\n• Reads and adds calendar events, and looks up contacts and birthdays.\n• \"Navigate me to the station\" opens directions straight away.\n• Battery, storage and today's step count when you ask.\n\nOPTIONAL EXTRAS (OFF UNTIL YOU TURN THEM ON)\n• Online lookup through Wikipedia and DuckDuckGo, news headlines and the weather.\n• Face ID lock for the app.\n\nGOOD TO KNOW\n• Sidekick uses a small AI model that fits on a phone. It is good at everyday help but is not an expert on deep specifics, and it can make mistakes.\n• The first download is about 3 GB; Wi-Fi is recommended. It carries on in the background.\n• Needs enough free storage for the model; Sidekick checks before downloading.\n• On iPhone, Sidekick answers while it is open: Apple doesn't let apps keep listening or filming in the background.",
+        "keywords": [
+          "assistant",
+          "offline",
+          "private",
+          "chatbot",
+          "local",
+          "llm",
+          "memory",
+          "voice",
+          "notes",
+          "reminders",
+          "recall",
+          "ocr",
+          "scan",
+          "camera"
+        ],
+        "supportUrl": "https://robert-whiteley.github.io/sidekick-site/support",
+        "marketingUrl": "https://robert-whiteley.github.io/sidekick-site",
+        "privacyPolicyUrl": "https://robert-whiteley.github.io/sidekick-site/privacy"
+      }
+    },
+    "copyright": "2026 Robert Whiteley",
+    "categories": ["PRODUCTIVITY", "UTILITIES"]
+  }
+}
