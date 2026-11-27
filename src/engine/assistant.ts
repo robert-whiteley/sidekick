@@ -32,7 +32,7 @@ import { clearChatState, loadChatState, saveChatState } from '@/memory/chat-stat
 import { IPHONE, onIphone, platformText } from './platform-text';
 import { questionPart, SYSTEM_PROMPT, withAnswerStyle } from './prompts';
 import { keptFile } from '@/memory/media-files';
-import { speechClipFor } from './speech-clip';
+import { speechClipFor, usedSpeechClip } from './speech-clip';
 import type { Moment } from '@/memory/store';
 import { MEMORY_LIMIT, memoryContext, pickFacts } from './prompt-budget';
 import {
@@ -656,6 +656,15 @@ export async function answer(
       ).catch(() => undefined)) ?? undefined;
   }
 
+  // An answer drawn from a heard line: that line's recording, to play. The model says which
+  // line it used, if any (only lines that were in the prompt), after the answer is shown.
+  if (!recall?.media && !wantsRecording && opts?.onFound) {
+    const show = opts.onFound;
+    void usedSpeechClip(question, text, notes ? sources : [], askUsedClip).then(
+      (clip) => clip && show(clip),
+    );
+  }
+
   return {
     text,
     usedPhoto: image,
@@ -677,3 +686,7 @@ export async function answer(
         : undefined,
   };
 }
+
+/** The short throwaway check behind usedSpeechClip (speech-clip.ts). */
+const askUsedClip = (prompt: string, system: string) =>
+  askLlm(prompt, null, () => {}, { system, maxTokens: 3, scratch: true }).then((r) => r.text);
