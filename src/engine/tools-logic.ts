@@ -73,7 +73,8 @@ export const EDIT_TOOL: ToolSpec = {
     'change the photo: rotate (degrees 90 = clockwise, -90, 180), flip (mirror), crop to a ' +
     'shape, grayscale (black and white), enhance (brighter, clearer colours), background ' +
     '(remove, white, a colour, or blur), erase (remove an object or person from the photo), ' +
-    'upscale (make it bigger and sharper)',
+    'upscale (make it bigger and sharper). Only when asked to change the photo, not questions ' +
+    'about it',
   kind: 'action',
   args: {
     op: { type: 'string', values: [...EDIT_OPS], required: true },
@@ -210,13 +211,13 @@ export const TOOLS: ToolSpec[] = [
   },
   {
     name: 'event',
-    desc: 'add a calendar event',
+    desc: 'add an appointment or meeting to my calendar (not an alarm or a reminder)',
     kind: 'action',
     args: { title: req(), when: req('time words, e.g. Friday at 3pm'), place: s() },
   },
   {
     name: 'reminder',
-    desc: 'a reminder notification with a message at a time, or a to-do (not an alarm sound)',
+    desc: 'remind me of something with a notification at a time, or a to-do (not an alarm sound; if you are to do or tell me something then, that is routine)',
     kind: 'action',
     args: { what: req('what to do'), when: s('time words, or empty for a to-do') },
   },
@@ -239,7 +240,10 @@ export const TOOLS: ToolSpec[] = [
     name: 'timer',
     desc: 'a countdown that rings after some minutes',
     kind: 'action',
-    args: { minutes: num(0.1, 1440, true), label: s() },
+    args: {
+      minutes: num(0.1, 1440, true, 'may be a fraction, e.g. 1.5 for 90 seconds'),
+      label: s(),
+    },
   },
   {
     name: 'navigate',
@@ -288,7 +292,7 @@ export const TOOLS: ToolSpec[] = [
   },
   {
     name: 'phone_setting',
-    desc: 'torch, volume, do not disturb, brightness, or open the wifi/bluetooth/airplane switch',
+    desc: 'torch, volume, do not disturb, brightness, or open the wifi/bluetooth/airplane switch (not the camera or listening)',
     kind: 'action',
     args: {
       setting: oneOf(
@@ -575,7 +579,19 @@ export function fillPrompt(question: string, now: Date, tool: ToolSpec): string 
 Request: ${JSON.stringify(question)}
 Tool: ${catalogText([tool])}
 
-Reply with one JSON object of this tool's arguments, only those said or implied by the request. If this tool does not fit the request, reply {"none":true}.`;
+Reply with one JSON object of this tool's arguments, keyed by the argument names before the colons (for example ${argExample(tool)}), only those said or implied by the request. If this tool does not fit the request, reply {"none":true}.`;
+}
+
+/**
+ * A one-key example of the reply's shape, from the tool's first argument. Without it the model
+ * wrote edit_photo's choice as the key ({"crop":"square"}) instead of {"op":"crop"}, and every
+ * call was refused (phone bench, 27 Nov).
+ */
+export function argExample(tool: ToolSpec): string {
+  const [name, a] = Object.entries(tool.args)[0] ?? [];
+  if (!name || !a) return '{}';
+  const v = a.values?.[0] ?? (a.type === 'number' ? 1 : a.type === 'boolean' ? true : '...');
+  return JSON.stringify({ [name]: v }).replace(/":/g, '": ');
 }
 
 /** The reply to [fillPrompt] → a call to [tool], {tool:'none'}, or null (not JSON). */
@@ -592,7 +608,11 @@ export function parseFillReply(reply: string, tool: string): ToolCall | null {
   const r = o as Record<string, unknown>;
   if (r.none === true || r.tool === 'none') return { tool: 'none', args: {} };
   // Also accepted: the router's own shape {"tool":…, "args":{…}}.
-  const inner = r.args ?? r.arguments;
+  // And the arguments under the tool's own name, {"listening":{"on":false}} (seen on the phone).
+  const keys = Object.keys(r);
+  const only = keys.length === 1 ? r[tool] : undefined;
+  const named = only && typeof only === 'object' ? only : undefined;
+  const inner = r.args ?? r.arguments ?? named;
   const args = inner && typeof inner === 'object' ? (inner as Record<string, unknown>) : r;
   return { tool, args };
 }
@@ -637,6 +657,23 @@ export function validateCall(call: ToolCall, tools: ToolSpec[] = TOOLS): Validat
   for (const [name, a] of Object.entries(spec.args)) {
     let v = call.args[name];
     if (typeof v === 'string') v = v.trim();
+    // A choice written as a flag ({"grayscale": true} for {"op": "grayscale"}; seen on the phone
+    // even after a retry): taken when exactly one such key is there and it carries nothing else.
+    // Not for tools with an on/off argument, where the flag's value means something
+    // ({"torch": true} is the torch on: asked again instead).
+    if (
+      (v === undefined || v === null) &&
+      a.required &&
+      a.values &&
+      !Object.values(spec.args).some((x) => x.type === 'boolean')
+    ) {
+      const flag = (x: unknown) =>
+        x === true || x === 1 || (!!x && typeof x === 'object' && !Object.keys(x).length);
+      const keys = Object.keys(call.args).filter(
+        (k) => a.values!.includes(k.toLowerCase()) && flag(call.args[k]),
+      );
+      if (keys.length === 1) v = keys[0].toLowerCase();
+    }
     if (v === '' || v === null || v === undefined) {
       if (a.required) return { ok: false, error: `${name} missing` };
       continue;

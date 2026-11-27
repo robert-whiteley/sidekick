@@ -44,6 +44,11 @@ export function parseSensitive(reply: string, count: number): Set<number> | null
   return nums.length ? new Set(nums.map((n) => n - 1)) : null;
 }
 
+/** The items the private-topic check did not mark; an unclear check ([marked] null) keeps none. */
+export function unmarked<T>(items: T[], marked: Set<number> | null): T[] {
+  return marked ? items.filter((_, i) => !marked.has(i)) : [];
+}
+
 const STOP = new Set(
   'my our is are was were the a an to of in on at for with and or be has have had will would its it this that me i we'.split(
     ' ',

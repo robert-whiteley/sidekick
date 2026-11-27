@@ -5,6 +5,7 @@ import { Platform } from 'react-native';
 import SidekickNative from '../../modules/sidekick-native';
 import { connection, downloadFile, isDownloaded, wifiOnlyDownloads } from './downloads';
 import {
+  androidSpeech,
   type InterpretLanguage,
   interpretLanguage,
   interpretSystem,
@@ -173,6 +174,7 @@ export function stopInterpreter() {
 /** Checks the speech model and voices for this pair, and loads the chat model in the meantime. */
 async function prepare() {
   const theirs = state.theirs;
+  voiceList = null;
   void ensureLlm().catch(() => {});
   if (Platform.OS === 'ios') {
     const can = SidekickNative.interpretCanHear?.(theirs.tag) ?? false;
@@ -239,6 +241,7 @@ export function openVoiceDownloads(): boolean {
 
 /** Re-checks the voices (after the owner came back from installing one). */
 export async function recheckVoices() {
+  voiceList = null;
   const [me, them] = await Promise.all([voiceState(state.mine), voiceState(state.theirs)]);
   set({ voices: { me, them } });
 }
@@ -361,7 +364,19 @@ export const lastTurnTiming = () => lastTiming;
 function speak(text: string, side: InterpretSide) {
   if (state.voices[side] === 'missing') return;
   const l = langOf(side);
-  Speech.speak(text, { language: l.tag, rate: getSettings().speechRate ?? 1.0 });
+  const rate = getSettings().speechRate ?? 1.0;
+  if (Platform.OS !== 'android') {
+    Speech.speak(text, { language: l.tag, rate });
+    return;
+  }
+  void phoneVoices().then((voices) => Speech.speak(text, { ...androidSpeech(l, voices), rate }));
+}
+
+let voiceList: Promise<Speech.Voice[]> | null = null;
+/** The phone's voices, asked once per session (installing one means coming back to the screen). */
+function phoneVoices(): Promise<Speech.Voice[]> {
+  voiceList ??= Speech.getAvailableVoicesAsync().catch(() => []);
+  return voiceList;
 }
 
 /** Says a turn again (tap on a translation). */

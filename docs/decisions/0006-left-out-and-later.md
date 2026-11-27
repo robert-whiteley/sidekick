@@ -463,7 +463,7 @@ licence file or card on Hugging Face (Nov 2026):
 
 The only unrestricted model small enough was MiniT2I. Measured with stable-diffusion.cpp on the
 laptop: 8.7 s per step, and it needs about 20 steps for a clean picture (fewer steps are mush);
-about 3 minutes a picture on the laptop, so roughly 5 minutes or more on the Pixel 5 (estimated; not timed on the phone). Not usable. **Decision: SDXS-512 under OpenRAIL++**, with its
+about 3 minutes a picture on the laptop, so roughly 5 minutes or more on the Pixel 5 (estimated; MiniT2I is not in the app, so it was not timed on the phone; SDXS-512 in the app takes 30–32 s a picture there). Not usable. **Decision: SDXS-512 under OpenRAIL++**, with its
 Attachment A passed on word for word in the picture terms (docs/picture-terms.md, shown in
 Settings → Assistant → Make pictures and agreed to by downloading) and the licences linked in
 THIRD_PARTY_NOTICES.md.
@@ -487,7 +487,7 @@ THIRD_PARTY_NOTICES.md.
   to support with the reason and what was asked for (no picture attached, nothing sent without
   the user).
 
-Speed: 37–43 s a picture on the Pixel 5 with the same model and settings in the earlier trial (docs/BENCH.md "Lite features"); the in-app build is not yet timed on the phone.
+Speed: 37–43 s a picture on the Pixel 5 with the same model and settings in the earlier trial (docs/BENCH.md "Lite features"); the in-app build, timed on the Pixel 5 (27 Nov, 6 pictures): 29.6–31.9 s to draw, plus about 2 s for the safety check; peak app memory 3.3 GB with the chat model still loaded. The first phone run found every picture failing in the release build (R8 had renamed the progress callback the native code calls by name); fixed with a keep rule.
 
 **Content filter: only what store policy requires.** Google Play's AI-Generated Content policy
 (support.google.com/googleplay/android-developer/answer/13985936) says apps that generate
@@ -523,11 +523,11 @@ objects, an in-app send needs a server, which Sidekick doesn't have.
   ~6× slower on the laptop).
 - **Erase an object** (built 26 Nov): asking to remove something from a photo answers with a
   "Brush over it" button; the brush screen marks the object and MI-GAN (MIT, 28 MB, downloaded
-  the first time) fills it in, with undo and "erase more". Not yet timed on the phone.
+  the first time) fills it in, with undo and "erase more". Pixel 5: 2.3–2.7 s for a 1536 × 1536 photo (27 Nov).
   LaMa (Apache-2.0, 200 MB) was not tried: 7× the download for a phone-sized photo.
 - **Upscale** (built 26 Nov): Real-ESRGAN general x4v3 (BSD-3, 5 MB), 4×, in 128 px tiles. Only
   offered for photos with a long edge of 1024 px or less (bigger ones get "it's already W × H");
-  phone camera photos are already 12 MP. Not yet timed on the phone.
+  phone camera photos are already 12 MP. Pixel 5: 21.8–21.9 s for 512 → 2048 px (27 Nov).
 - iPhone: not yet (the edits need a Swift port; the app says so and still answers about the photo).
 
 ### Chat models: abliterated or user-chosen (notes only)

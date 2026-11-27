@@ -47,6 +47,13 @@ export class RateWindow {
     if (this.times.length < this.limit) return 0;
     return Math.max(0, this.times[this.times.length - this.limit] + this.windowMs - this.clock());
   }
+  /** How long until [n] requests in a row are allowed (0 = now). */
+  waitForMs(n: number): number {
+    this.prune();
+    const over = this.times.length - Math.max(0, this.limit - n);
+    if (over <= 0) return 0;
+    return Math.max(0, this.times[over - 1] + this.windowMs - this.clock());
+  }
   take() {
     this.times.push(this.clock());
   }

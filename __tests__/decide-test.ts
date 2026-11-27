@@ -8,7 +8,13 @@ import {
   parseDecision,
   wantsThinking,
 } from '../src/engine/decide-logic';
-import { fillPrompt, parseFillReply, toolByName, TOOLS } from '../src/engine/tools-logic';
+import {
+  argExample,
+  fillPrompt,
+  parseFillReply,
+  toolByName,
+  TOOLS,
+} from '../src/engine/tools-logic';
 
 describe('parseDecision (bench variant)', () => {
   it('reads a DO marker naming a known tool', () => {
@@ -34,6 +40,9 @@ describe('the sorter reply', () => {
     expect(parseClassify('Lookup.')).toEqual({ kind: 'lookup' });
     expect(parseClassify('news')).toEqual({ kind: 'lookup', news: true });
     expect(parseClassify('banana')).toEqual({ kind: 'answer' });
+    // A tool's main choice instead of its name (the sorter said "upscale" on the phone).
+    expect(parseClassify('upscale')).toEqual({ kind: 'do', tool: 'edit_photo' });
+    expect(parseClassify('torch')).toEqual({ kind: 'do', tool: 'phone_setting' });
     expect(parseClassify('')).toEqual({ kind: 'answer' });
     expect(decisionLabel({ kind: 'do', tool: 'timer' })).toBe('do:timer');
   });
@@ -88,6 +97,41 @@ describe('filling one tool', () => {
     expect(p).toContain('"five minutes on the clock"');
     for (const t of TOOLS.filter((x) => x.name !== 'timer')) expect(p).not.toContain(`${t.name}(`);
   });
+  it('shows the reply shape keyed by argument names (edit_photo: {"op": …})', () => {
+    // The model wrote {"crop":"square"} without it, so every photo edit was refused.
+    const edit = toolByName('edit_photo')!;
+    expect(fillPrompt('crop it square', new Date(2026, 10, 27), edit)).toContain(
+      'for example {"op": "rotate"}',
+    );
+    expect(argExample(toolByName('timer')!)).toMatch(/^\{"\w+": /);
+    for (const t of TOOLS) expect(() => JSON.parse(argExample(t))).not.toThrow();
+  });
+  it('reads the model’s {"tool_name", "arguments"} shape', () => {
+    expect(
+      parseFillReply(
+        '```json\n{"tool_name":"edit_photo","arguments":{"op":"crop","shape":"square"}}\n```',
+        'edit_photo',
+      ),
+    ).toEqual({ tool: 'edit_photo', args: { op: 'crop', shape: 'square' } });
+  });
+  it('reads the arguments under the tool’s own name', () => {
+    // Seen on the phone for "Stop listening".
+    expect(parseFillReply('{"listening":{"on":false}}', 'listening')).toEqual({
+      tool: 'listening',
+      args: { on: false },
+    });
+    // A lone argument that shares the tool's name is still an argument.
+    expect(parseFillReply('{"timer":5}', 'timer')).toEqual({ tool: 'timer', args: { timer: 5 } });
+  });
+  it('tells the sorter alarms and reminders are not calendar events', () => {
+    const sys = catalogSystem(DECIDE_TOOLS);
+    expect(sys).toMatch(/^event: .*not an alarm or a reminder/m);
+    expect(sys).toMatch(/^reminder: .*that is routine/m);
+    expect(sys).toMatch(/^phone_setting: .*not the camera or listening/m);
+    expect(fillPrompt('90 seconds', new Date(2026, 10, 27), toolByName('timer')!)).toContain(
+      '1.5 for 90 seconds',
+    );
+  });
   it('reads bare arguments, the router shape, none, and refuses junk', () => {
     expect(parseFillReply('{"minutes":5}', 'timer')).toEqual({
       tool: 'timer',
@@ -109,5 +153,8 @@ describe('thinking hand-off marker', () => {
     expect(wantsThinking('THINK')).toBe(true);
     expect(wantsThinking(' **think.** ')).toBe(true);
     expect(wantsThinking('I think it is Paris.')).toBe(false);
+    // Seen on the phone: the marker, then the model's own working.
+    expect(wantsThinking('THINK The user is asking a simple subtraction problem.')).toBe(true);
+    expect(wantsThinking('Think of a number between 1 and 10.')).toBe(false);
   });
 });

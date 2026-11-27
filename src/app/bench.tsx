@@ -11,7 +11,14 @@ import SidekickNative, {
   type LlmTuning,
 } from '../../modules/sidekick-native';
 import { GEMMA_GENERIC } from '@/engine/llm-candidates';
-import { ensureLlm, resetBackendChoice, setLlmTuning, unloadLlm } from '@/engine/llm';
+import {
+  ensureLlm,
+  holdBackground,
+  releaseBackground,
+  resetBackendChoice,
+  setLlmTuning,
+  unloadLlm,
+} from '@/engine/llm';
 import { dataDir, modelsDir as modelsDirFn } from '@/engine/paths';
 import { downloadFile, modelPath } from '@/engine/downloads';
 import { EMBEDDER_FILE, MODEL_FILES, type ModelFile } from '@/engine/models';
@@ -286,8 +293,19 @@ export default function BenchScreen() {
 
   // One back-to-back run of everything that matters for speed, one `[speed] {json}` line each.
   // The chat model and the embedder are never loaded at the same time.
+  // The speed run calls the model directly, outside the app's queue: background passes (photo
+  // captions, facts) are held off so they don't cancel its questions mid-answer.
   const speedRun = () =>
     run('speed', async () => {
+      holdBackground();
+      try {
+        await speedRunInner();
+      } finally {
+        releaseBackground();
+      }
+    });
+  const speedRunInner = () =>
+    (async () => {
       const emit = (r: SpeedResult) => {
         const line = speedLine(r);
         console.log(line);
@@ -310,6 +328,8 @@ export default function BenchScreen() {
             variant,
             ms: Date.now() - t0,
             firstTokenMs: s.ttftMs,
+            decodeTokens: s.decodeTokens,
+            decodeTokPerSec: Number(s.decodeTokensPerSec.toFixed(2)),
             ok: true,
             text: answerRef.current,
           });
@@ -419,7 +439,7 @@ export default function BenchScreen() {
       await SidekickNative.embedUnload();
       console.log('[speed] done');
       setLog((l) => [...l, '[speed] done']);
-    });
+    })();
 
   const load = (backend: LlmBackend | 'auto') =>
     run('load', async () => {
