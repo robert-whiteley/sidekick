@@ -40,6 +40,7 @@ import {
 } from './routines-store';
 import { DEFAULTS, getSettings, updateSettings } from './settings';
 import {
+  changeRisk,
   type Choice,
   describeLine,
   type RegistryCtx,
@@ -59,20 +60,33 @@ import {
 } from './settings-registry';
 import { diskSpace, keepPeriods, setStillsKeepDays, stillsKeepDays } from './storage-monitor';
 import { connectGoogle } from '@/integrations/google';
+import {
+  addPhotoFolder,
+  chooseMorePhotos,
+  PHOTO_FOLDERS,
+  removePhotoFolder,
+  removePhotoIndex,
+  setPhotoSearch,
+} from '@/memory/gallery';
 import { clearTrack } from '@/memory/places-store';
 import { isOn, setSwitch } from '@/integrations/prefs';
 import { applyRetention, deleteRange } from '@/memory/store';
 import {
   clearContacts,
   deleteSource,
+  fileLabel,
   folderLabel,
   openNotificationAccess,
   notificationAccessGranted,
+  PICK_START,
+  pickFiles,
   pickFolder,
   removeFolder,
+  removePickedFile,
   requestCalendar,
   requestContacts,
   setNotificationCapture,
+  stopFolders,
   syncNow,
 } from '@/memory/sources';
 import { deletePictureModel } from './picture';
@@ -131,6 +145,10 @@ function currentValue(d: SettingDef): SettingValue {
       return c.s.newsFeeds;
     case 'folders':
       return c.s.folderUris.map(folderLabel);
+    case 'photo_folders':
+      return c.s.photoFolderUris.map(folderLabel);
+    case 'picked_files':
+      return c.s.fileUris.map(fileLabel);
     case 'interpreter_languages':
       return (c.s.interpreterLanguages ?? []).map((x) => interpretLanguage(x)?.name ?? x);
     case 'routines':
@@ -168,7 +186,28 @@ async function apply(d: SettingDef, next: SettingValue, item?: string): Promise<
   return applyRuntime(d, next, item);
 }
 
+/** Photo search on or off, as on Settings → Phone search (off deletes the photo index). */
+async function applyPhotos(on: boolean): Promise<string | null> {
+  if (!on) {
+    await setPhotoSearch(false);
+    return null;
+  }
+  if (!iphone()) {
+    // No Photos permission on Android: the camera folder in the system picker.
+    await setPhotoSearch(true);
+    await addPhotoFolder(PHOTO_FOLDERS.camera);
+    return null;
+  }
+  return (await setPhotoSearch(true)) === 'none' ? 'Photos permission was not given.' : null;
+}
+
 async function applySettings(d: SettingDef, next: SettingValue): Promise<string | null> {
+  if (d.effect === 'photos') return applyPhotos(next === true);
+  if (d.effect === 'folders' && !next) {
+    // Everything read from folders and files is deleted and the picks forgotten.
+    await stopFolders();
+    return null;
+  }
   // Checks before saving, as on the screens.
   switch (d.effect) {
     case 'appLock': {
@@ -276,6 +315,25 @@ async function applyRuntime(
       if (uri) void syncNow('folders').catch(() => {});
       return null;
     }
+    case 'photo_folders': {
+      if (removing(currentValue(d))) {
+        const uri = s.photoFolderUris.find((u) => folderLabel(u) === item);
+        if (uri) await removePhotoFolder(uri);
+        return null;
+      }
+      await addPhotoFolder();
+      return null;
+    }
+    case 'picked_files': {
+      if (removing(currentValue(d))) {
+        const uri = s.fileUris.find((u) => fileLabel(u) === item);
+        if (uri) await removePickedFile(uri);
+        return null;
+      }
+      if (!s.sourceFolders) updateSettings({ sourceFolders: true });
+      await pickFiles(PICK_START.downloads);
+      return null;
+    }
     case 'interpreter_languages': {
       const keep = (s.interpreterLanguages ?? []).filter(
         (x) => (interpretLanguage(x)?.name ?? x) !== item,
@@ -362,6 +420,13 @@ async function runAction(d: SettingDef, value: SettingValue): Promise<string | n
     case 'delete_location_history':
       await clearTrack();
       return null;
+    case 'choose_allowed_photos':
+      if (!iphone()) return 'On Android, add photo folders instead.';
+      await chooseMorePhotos();
+      return null;
+    case 'remove_photo_index':
+      await removePhotoIndex();
+      return null;
     default:
       return null;
   }
@@ -380,6 +445,15 @@ function postUndo(d: SettingDef, plan: Extract<SettingPlan, { kind: 'change' }>)
   if (d.type === 'action') return;
   const prev = plan.cur;
   const undoItem = plan.item;
+  // Undo a list change: add back what was removed, or remove what was added.
+  const back =
+    d.type === 'list'
+      ? Array.isArray(plan.next) && Array.isArray(prev) && plan.next.length < prev.length
+        ? [...plan.next, undoItem ?? '']
+        : (prev as string[])
+      : prev;
+  // No one-tap Undo when going back would delete something or need Approve.
+  if (changeRisk(d, back, plan.next) !== 'normal') return;
   const key = cardKey(d.id);
   notices.post(
     {
@@ -390,13 +464,6 @@ function postUndo(d: SettingDef, plan: Extract<SettingPlan, { kind: 'change' }>)
       actions: [{ label: 'Undo', id: 'undo' }],
     },
     () => {
-      // Undo a list change: add back what was removed, or remove what was added.
-      const back =
-        d.type === 'list'
-          ? Array.isArray(plan.next) && Array.isArray(prev) && plan.next.length < prev.length
-            ? [...plan.next, undoItem ?? '']
-            : (prev as string[])
-          : prev;
       void apply(d, back, undoItem).then((why) =>
         report(key, why, `Undone: ${describeLine(d, back)}.`),
       );
@@ -452,6 +519,16 @@ function deleteWhat(d: SettingDef, plan: Extract<SettingPlan, { kind: 'change' }
       return { kind: 'folder', label: plan.item ?? '' };
     case 'routines':
       return { kind: 'routine', label: plan.item ?? '' };
+    case 'search_photos':
+      return { kind: 'photos', again: false };
+    case 'remove_photo_index':
+      return { kind: 'photos', again: true };
+    case 'photo_folders':
+      return { kind: 'photoFolder', label: plan.item ?? '' };
+    case 'picked_files':
+      return { kind: 'pickedFile', label: plan.item ?? '' };
+    case 'folders_source':
+      return { kind: 'folderSource' };
     case 'keep_memories': {
       const days = Number(plan.next);
       return {

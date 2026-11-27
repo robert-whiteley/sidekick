@@ -695,6 +695,10 @@ indexed by default; turning it off or removing a folder deletes its index.
   arms after 1.5 s and expires after 2 minutes; deleting needs DELETE typed on a sheet, never voice
   alone or a single tap. Rejected: a spoken "yes" for critical changes (anyone nearby, or a misheard
   word, could say it) and asking before every change (too slow for "make it louder").
+- Phone search: photo or folder search off, removing a folder, file or photo folder, and
+  removing the photo index open the delete sheet (by voice and in Settings). "Read photos on
+  battery" and "Lowest battery for reading" (30% by default) are settings now, used by the photo
+  reading budget.
 - Turning Contacts off is critical, not a deletion: it removes only Sidekick's copy, which the next
   sync brings back.
 - **iPhone:** settings the iPhone doesn't have (consent mode, Instructions only, pause places,

@@ -180,6 +180,15 @@ describe('slow photo work budget', () => {
     expect(photoDuty({ ...cool, lowPowerMode: true })).toBe(0);
     expect(photoDuty({ ...cool, thermalStatus: 1 })).toBe(0);
   });
+  it('follows Settings: off on battery, or a higher lowest level; a charger still reads', () => {
+    expect(photoDuty({ ...cool, onBattery: false })).toBe(0);
+    expect(photoDuty({ ...cool, onBattery: false, charging: true })).toBe(1);
+    expect(photoDuty({ ...cool, batteryLevel: 0.45, floor: 0.5 })).toBe(0);
+    expect(photoDuty({ ...cool, batteryLevel: 0.75, floor: 0.5 })).toBeCloseTo(
+      PHOTO_BUDGET.maxDuty / 2,
+    );
+    expect(photoDuty({ ...cool, floor: 1 })).toBe(0);
+  });
   it('saves up time at the duty, capped', () => {
     expect(refillBudget(0, 0, 100_000, 0.02)).toBe(2000);
     expect(refillBudget(0, 0, 10_000_000, 0.02)).toBe(PHOTO_BUDGET.capMs);

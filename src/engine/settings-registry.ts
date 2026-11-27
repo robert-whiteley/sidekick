@@ -27,6 +27,7 @@ import {
   FRAME_WINDOW_OPTIONS,
   RESERVE_OPTIONS,
   VIDEO_KEEP_OPTIONS,
+  BATTERY_FLOORS,
 } from './setting-options';
 
 export type Risk = 'normal' | 'critical' | 'destructive';
@@ -44,6 +45,7 @@ export type SectionId =
   | 'models'
   | 'routines'
   | 'interpreter'
+  | 'phoneSearch'
   | 'data';
 
 export const SECTION_NAMES: Record<SectionId, string> = {
@@ -56,6 +58,7 @@ export const SECTION_NAMES: Record<SectionId, string> = {
   models: 'Models',
   routines: 'Routines',
   interpreter: 'Interpreter',
+  phoneSearch: 'Phone search',
   data: 'Your data',
 };
 
@@ -70,6 +73,7 @@ export const SECTION_HREF: Record<SectionId, string> = {
   models: '/settings/models',
   routines: '/settings/routines',
   interpreter: '/interpret',
+  phoneSearch: '/settings/phone-search',
   data: '/settings/privacy',
 };
 
@@ -85,6 +89,7 @@ export type EffectId =
   | 'calendar'
   | 'notifications'
   | 'folders'
+  | 'photos'
   | 'location'
   | 'wakeWord';
 
@@ -186,6 +191,7 @@ const CHOICES = {
     { value: 0, label: 'Forever' },
   ],
   lockAfter: opts([...APP_LOCK_CHOICES], lockAfterLabel),
+  minBattery: opts([...BATTERY_FLOORS], (v: number) => `${v}%`),
 };
 
 const s = (key: keyof Settings, d: Omit<SettingDef, 'store' | 'key'>): SettingDef => ({
@@ -689,30 +695,6 @@ const STATIC: SettingDef[] = [
     type: 'boolean',
     risk: 'normal',
   }),
-  s('sourceFolders', {
-    id: 'folders_source',
-    name: 'Folders',
-    desc: 'read documents, spreadsheets and PDFs in folders you pick',
-    section: 'connections',
-    type: 'boolean',
-    risk: 'normal',
-    effect: 'folders',
-  }),
-  {
-    id: 'folders',
-    name: 'Picked folders',
-    desc: 'add a folder (the folder picker opens) or remove one by name',
-    section: 'connections',
-    type: 'list',
-    store: 'runtime',
-    key: 'folderUris',
-    risk: 'destructive',
-    riskOf: (next, cur) =>
-      Array.isArray(next) && Array.isArray(cur) && next.length < cur.length
-        ? 'destructive'
-        : 'normal',
-    consequence: 'What Sidekick read from that folder is deleted. Your files are not touched.',
-  },
   s('sourceContacts', {
     id: 'contacts_source',
     name: 'Contacts',
@@ -1071,6 +1053,127 @@ const STATIC: SettingDef[] = [
     risk: 'destructive',
     verb: 'delete everything',
   },
+  // Phone search (Settings → Phone search)
+  s('sourceGallery', {
+    id: 'search_photos',
+    name: 'Search my photos',
+    desc: 'find photos and screenshots by what they show and the words in them (iPhone: the Photos permission; Android: photo folders you pick)',
+    section: 'phoneSearch',
+    type: 'boolean',
+    risk: 'destructive',
+    // On: Sidekick reads your photos (a permission or a folder pick). Off: deletes the photo index.
+    riskOf: (next) => (next ? 'critical' : 'destructive'),
+    consequence: (next) =>
+      next
+        ? 'Sidekick reads the words and contents of your photos, on this phone only.'
+        : 'What Sidekick read from your photos is deleted. Your photos are not touched.',
+    effect: 'photos',
+  }),
+  {
+    id: 'photo_folders',
+    name: 'Photo folders',
+    desc: 'add a photo folder (the folder picker opens) or remove one by name',
+    section: 'phoneSearch',
+    type: 'list',
+    store: 'runtime',
+    key: 'photoFolderUris',
+    risk: 'destructive',
+    riskOf: (next, cur) =>
+      Array.isArray(next) && Array.isArray(cur) && next.length < cur.length
+        ? 'destructive'
+        : 'normal',
+    consequence: 'What Sidekick read from that folder is deleted. Your photos are not touched.',
+    android: true,
+  },
+  {
+    id: 'choose_allowed_photos',
+    name: 'Choose which photos',
+    desc: 'iPhone: pick which photos Sidekick may see (the phone’s own picker opens)',
+    section: 'phoneSearch',
+    type: 'action',
+    store: 'runtime',
+    risk: 'normal',
+    verb: 'choose which photos Sidekick may see',
+  },
+  {
+    id: 'remove_photo_index',
+    name: 'Remove the photo index',
+    desc: 'delete what was read from your photos; it is read again, newest first',
+    section: 'phoneSearch',
+    type: 'action',
+    store: 'runtime',
+    risk: 'destructive',
+    verb: 'remove the photo index',
+  },
+  s('sourceFolders', {
+    id: 'folders_source',
+    name: 'Search folders I choose',
+    desc: 'read documents, spreadsheets and PDFs in folders and files you pick',
+    section: 'phoneSearch',
+    type: 'boolean',
+    risk: 'destructive',
+    // Off deletes what was read from every folder and file and forgets the picks.
+    riskOf: (next) => (next ? 'normal' : 'destructive'),
+    consequence:
+      'What Sidekick read from your folders and files is deleted. Your files are not touched.',
+    effect: 'folders',
+  }),
+  {
+    id: 'folders',
+    name: 'Picked folders',
+    desc: 'add a folder (the folder picker opens) or remove one by name',
+    section: 'phoneSearch',
+    type: 'list',
+    store: 'runtime',
+    key: 'folderUris',
+    risk: 'destructive',
+    riskOf: (next, cur) =>
+      Array.isArray(next) && Array.isArray(cur) && next.length < cur.length
+        ? 'destructive'
+        : 'normal',
+    consequence: 'What Sidekick read from that folder is deleted. Your files are not touched.',
+  },
+  {
+    id: 'picked_files',
+    name: 'Picked files',
+    desc: 'add files (the file picker opens, in Downloads on Android) or remove one by name',
+    section: 'phoneSearch',
+    type: 'list',
+    store: 'runtime',
+    key: 'fileUris',
+    risk: 'destructive',
+    riskOf: (next, cur) =>
+      Array.isArray(next) && Array.isArray(cur) && next.length < cur.length
+        ? 'destructive'
+        : 'normal',
+    consequence: 'What Sidekick read from that file is deleted. The file is not touched.',
+  },
+  s('searchPaused', {
+    id: 'pause_phone_search',
+    name: 'Pause reading',
+    desc: 'stop reading new photos and files for now; what is already read can still be found',
+    section: 'phoneSearch',
+    type: 'boolean',
+    risk: 'normal',
+  }),
+  s('indexOnBattery', {
+    id: 'read_photos_on_battery',
+    name: 'Read photos on battery',
+    desc: 'read new photos a little at a time on battery too (off: only while charging)',
+    section: 'phoneSearch',
+    type: 'boolean',
+    risk: 'normal',
+  }),
+  s('indexMinBattery', {
+    id: 'lowest_battery_for_reading',
+    name: 'Lowest battery for reading',
+    desc: 'no photo reading on battery below this level',
+    section: 'phoneSearch',
+    type: 'choice',
+    choices: CHOICES.minBattery,
+    format: labelOf(CHOICES.minBattery),
+    risk: 'normal',
+  }),
 ];
 
 /** Integration switches (Settings → Connections → each app): one setting each. */

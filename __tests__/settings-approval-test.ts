@@ -87,6 +87,15 @@ jest.mock('@/engine/storage-monitor', () => ({
 jest.mock('@/engine/data-export', () => ({ deleteAllData: jest.fn(), exportAllData: jest.fn() }));
 jest.mock('@/engine/picture', () => ({ deletePictureModel: jest.fn() }));
 jest.mock('@/integrations/google', () => ({ connectGoogle: jest.fn(async () => true) }));
+jest.mock('@/memory/gallery', () => ({
+  addPhotoFolder: jest.fn(async () => null),
+  chooseMorePhotos: jest.fn(),
+  galleryStats: async () => ({ photos: 1200, read: 900, done: 1000, failed: 0 }),
+  PHOTO_FOLDERS: { camera: 'camera', screenshots: 'shots' },
+  removePhotoFolder: jest.fn(),
+  removePhotoIndex: jest.fn(),
+  setPhotoSearch: jest.fn(async () => 'none'),
+}));
 jest.mock('@/memory/places-store', () => ({ clearTrack: jest.fn(), trackSize: async () => 12 }));
 jest.mock('@/memory/store', () => ({
   applyRetention: jest.fn(),
@@ -104,7 +113,12 @@ jest.mock('@/memory/sources', () => ({
   removeFolder: jest.fn(),
   requestCalendar: jest.fn(async () => true),
   requestContacts: jest.fn(async () => true),
+  fileLabel: (u: string) => u,
+  PICK_START: { documents: 'docs', downloads: 'dl' },
+  pickFiles: jest.fn(async () => 0),
+  removePickedFile: jest.fn(),
   setNotificationCapture: jest.fn(),
+  stopFolders: jest.fn(),
   syncNow: jest.fn(async () => 0),
 }));
 
@@ -114,6 +128,8 @@ const { appSettingTool } =
 const { getSettings, updateSettings } =
   require('@/engine/settings') as typeof import('@/engine/settings');
 const { deleteAllData } = require('@/engine/data-export') as { deleteAllData: jest.Mock };
+const gallery = require('@/memory/gallery') as Record<string, jest.Mock>;
+const sources = require('@/memory/sources') as Record<string, jest.Mock>;
 /* eslint-enable @typescript-eslint/no-require-imports */
 
 beforeAll(() => {
@@ -257,5 +273,47 @@ describe('deleting', () => {
     expect(getSettings().videoKeepHours).toBeNull();
     await confirmDelete('DELETE');
     expect(getSettings().videoKeepHours).toBe(2);
+  });
+});
+
+describe('phone search', () => {
+  it('photo search off and removing the index open the sheet with the photo count', async () => {
+    updateSettings({ sourceGallery: true });
+    await appSettingTool({ do: 'off', setting: 'search_photos' });
+    let r = pendingDelete()!;
+    expect(r.title).toBe('Stop searching photos?');
+    expect(r.lines[0]).toMatch(/1,?200 photos \(/);
+    expect(gallery.setPhotoSearch).not.toHaveBeenCalled();
+    await confirmDelete('DELETE');
+    expect(gallery.setPhotoSearch).toHaveBeenCalledWith(false);
+
+    await appSettingTool({ do: 'set', setting: 'remove_photo_index' });
+    r = pendingDelete()!;
+    expect(r.title).toBe('Remove the photo index?');
+    expect(gallery.removePhotoIndex).not.toHaveBeenCalled();
+    await confirmDelete('DELETE');
+    expect(gallery.removePhotoIndex).toHaveBeenCalled();
+  });
+
+  it('turning folders off is a deletion; turning photos on needs Approve', async () => {
+    updateSettings({ sourceFolders: true, sourceGallery: false });
+    await appSettingTool({ do: 'off', setting: 'folders_source' });
+    expect(pendingDelete()!.lines[0]).toMatch(/7 passages/);
+    await confirmDelete('DELETE');
+    expect(sources.stopFolders).toHaveBeenCalled();
+
+    expect(await appSettingTool({ do: 'on', setting: 'search_photos' })).toMatch(/^Tap Approve/);
+    expect(notices.all.some((n) => n.armAt !== undefined)).toBe(true);
+  });
+
+  it('pause and the battery settings change at once', async () => {
+    expect(await appSettingTool({ do: 'on', setting: 'pause_phone_search' })).toBe(
+      'Pause reading is now on.',
+    );
+    expect(getSettings().searchPaused).toBe(true);
+    await appSettingTool({ do: 'off', setting: 'read_photos_on_battery' });
+    expect(getSettings().indexOnBattery).toBe(false);
+    await appSettingTool({ do: 'set', setting: 'lowest_battery_for_reading', value: '50%' });
+    expect(getSettings().indexMinBattery).toBe(50);
   });
 });

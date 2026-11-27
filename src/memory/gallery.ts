@@ -394,6 +394,8 @@ async function dutyNow(): Promise<{ duty: number; charging: boolean }> {
     lowPowerMode,
     thermalStatus,
     drainingOnCharger: chargerFallingBehind(),
+    onBattery: s.indexOnBattery,
+    floor: s.indexMinBattery / 100,
   });
   return { duty, charging };
 }

@@ -2,9 +2,12 @@ import { useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
 import { AppState, Platform, View } from 'react-native';
 
+import { askToDelete } from '@/engine/delete-plans';
+import { DEFAULTS } from '@/engine/settings';
+import { BATTERY_FLOORS } from '@/engine/setting-options';
 import { Page } from '@/features/settings/Page';
 import { useSettings } from '@/features/settings/useSettings';
-import { Button, confirm, Row, Section, styles } from '@/features/settings/ui';
+import { Button, ChoiceRow, Row, Section, styles } from '@/features/settings/ui';
 import {
   addPhotoFolder,
   chooseMorePhotos,
@@ -40,9 +43,10 @@ const ACCESS: Record<PhotoAccess, string> = {
   none: 'Not allowed.',
 };
 
+const MIN_BATTERY = DEFAULTS.indexMinBattery;
 const n = (x: number) => x.toLocaleString();
-const PACE =
-  'New photos can be found by date and name at once. Their words and contents are read newest first: quickly while charging, a little at a time on battery (not under 30% or when warm), and at once when you ask about recent ones.';
+const pace = (onBattery: boolean, floor: number) =>
+  `New photos can be found by date and name at once. Their words and contents are read newest first: quickly while charging, ${onBattery ? `a little at a time on battery (not under ${floor}% or when warm)` : 'not on battery'}, and at once when you ask about recent ones.`;
 
 const mb = (n: number) => `${Math.max(1, Math.round((n * BYTES_PER_PHOTO) / 1e6))} MB`;
 
@@ -101,20 +105,14 @@ export default function PhoneSearchScreen() {
       return void run('Asking for photos', async () => {
         if ((await setPhotoSearch(true)) === 'none') throw new Error('permission was not given');
       });
-    confirm(
-      'Stop searching photos?',
-      'What Sidekick read from your photos is deleted. Your photos are not touched.',
-      () => run('Deleting the photo index', () => setPhotoSearch(false)),
+    void askToDelete({ kind: 'photos', again: false }, () =>
+      run('Deleting the photo index', () => setPhotoSearch(false)),
     );
   };
 
   const toggleFolders = (on: boolean) => {
     if (on) return set({ sourceFolders: true });
-    confirm(
-      'Stop searching folders and files?',
-      'What Sidekick read from them is deleted. Your files are not touched.',
-      () => run('Deleting the file index', stopFolders),
-    );
+    void askToDelete({ kind: 'folderSource' }, () => run('Deleting the file index', stopFolders));
   };
 
   const addFolder = (start?: string) =>
@@ -148,7 +146,8 @@ export default function PhoneSearchScreen() {
               <>
                 <AppText variant="bodySmall" tone="muted">
                   Sidekick reads only the photo folders you add. Tap a button, then “Use this
-                  folder” at the bottom of the screen that opens. {PACE}
+                  folder” at the bottom of the screen that opens.{' '}
+                  {pace(s.indexOnBattery, s.indexMinBattery)}
                 </AppText>
                 {s.photoFolderUris.map((uri) => (
                   <View key={uri} style={styles.itemRow}>
@@ -158,10 +157,8 @@ export default function PhoneSearchScreen() {
                     <TextButton
                       title="Remove"
                       onPress={() =>
-                        confirm(
-                          'Remove this photo folder?',
-                          'What Sidekick read from it is deleted. Your photos are not touched.',
-                          () => run('Removing folder', () => removePhotoFolder(uri)),
+                        void askToDelete({ kind: 'photoFolder', label: folderLabel(uri) }, () =>
+                          run('Removing folder', () => removePhotoFolder(uri)),
                         )
                       }
                       accessibilityLabel={`Remove photo folder ${folderLabel(uri)}`}
@@ -188,7 +185,7 @@ export default function PhoneSearchScreen() {
               </>
             ) : (
               <AppText variant="bodySmall" tone="muted">
-                {ACCESS[access]} {PACE}
+                {ACCESS[access]} {pace(s.indexOnBattery, s.indexMinBattery)}
               </AppText>
             )}
             {!isAndroid && access !== 'none' ? (
@@ -201,10 +198,8 @@ export default function PhoneSearchScreen() {
               danger
               title="Remove the photo index"
               onPress={() =>
-                confirm(
-                  'Remove the photo index?',
-                  'What Sidekick read from your photos is deleted and read again, newest first. Your photos are not touched.',
-                  () => run('Removing', removePhotoIndex),
+                void askToDelete({ kind: 'photos', again: true }, () =>
+                  run('Removing', removePhotoIndex),
                 )
               }
             />
@@ -229,10 +224,8 @@ export default function PhoneSearchScreen() {
                 <TextButton
                   title="Remove"
                   onPress={() =>
-                    confirm(
-                      'Remove this folder?',
-                      'What Sidekick read from it is deleted. Your files are not touched.',
-                      () => run('Removing folder', () => removeFolder(uri)),
+                    void askToDelete({ kind: 'folder', label: folderLabel(uri) }, () =>
+                      run('Removing folder', () => removeFolder(uri)),
                     )
                   }
                   accessibilityLabel={`Remove folder ${folderLabel(uri)}`}
@@ -248,10 +241,8 @@ export default function PhoneSearchScreen() {
                 <TextButton
                   title="Remove"
                   onPress={() =>
-                    confirm(
-                      'Remove this file?',
-                      'What Sidekick read from it is deleted. The file is not touched.',
-                      () => run('Removing file', () => removePickedFile(uri)),
+                    void askToDelete({ kind: 'pickedFile', label: fileLabel(uri) }, () =>
+                      run('Removing file', () => removePickedFile(uri)),
                     )
                   }
                   accessibilityLabel={`Remove file ${fileLabel(uri)}`}
@@ -284,6 +275,22 @@ export default function PhoneSearchScreen() {
           value={s.searchPaused}
           onChange={(v) => set({ searchPaused: v })}
         />
+        <Row
+          label="Read photos on battery"
+          hint="Off: new photos are read only while charging."
+          value={s.indexOnBattery}
+          onChange={(v) => set({ indexOnBattery: v })}
+        />
+        {s.indexOnBattery ? (
+          <ChoiceRow
+            label="Lowest battery for reading"
+            hint="No reading on battery below this level."
+            options={BATTERY_FLOORS.map((v) => ({ value: v, label: `${v}%` }))}
+            value={s.indexMinBattery === MIN_BATTERY ? null : s.indexMinBattery}
+            recommended={MIN_BATTERY}
+            onChange={(v) => set({ indexMinBattery: v ?? MIN_BATTERY })}
+          />
+        ) : null}
       </Section>
       {msg ? (
         <AppText variant="bodySmall" tone="muted">

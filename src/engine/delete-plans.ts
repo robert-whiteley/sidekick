@@ -8,6 +8,8 @@ import { platformText } from './platform-text';
 import { PICTURE_FILES } from './models';
 import { formatBytes, type StorageKind } from './storage';
 import { measureUsageNow } from './storage-monitor';
+import { galleryStats } from '@/memory/gallery';
+import { BYTES_PER_PHOTO } from '@/memory/gallery-logic';
 import { countMoments } from '@/memory/store';
 import { trackSize } from '@/memory/places-store';
 import { countKind } from '@/memory/sources';
@@ -23,7 +25,13 @@ export type DeleteWhat =
   | { kind: 'folder'; label: string }
   | { kind: 'keep'; media: StorageKind | 'memories'; line: string; before?: number }
   | { kind: 'routine'; label: string }
-  | { kind: 'locationHistory' };
+  | { kind: 'locationHistory' }
+  /** The photo index: all of it (photo search off), or to be read again ([again]). */
+  | { kind: 'photos'; again: boolean }
+  | { kind: 'photoFolder'; label: string }
+  | { kind: 'pickedFile'; label: string }
+  /** Folders and files off: everything read from them, and the picks. */
+  | { kind: 'folderSource' };
 
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 const memories = (n: number) => plural(n, 'memory', 'memories');
@@ -147,6 +155,53 @@ export async function deleteLines(
             ? `${plural(n, 'remembered position')} and the town names on your memories are deleted.`
             : 'Every remembered position and the town names on your memories are deleted.',
           'Your named places stay.',
+        ],
+        exportFirst: false,
+      };
+    }
+    case 'photos': {
+      const g = await safe(galleryStats, null);
+      const n = g?.photos ?? -1;
+      return {
+        title: w.again ? 'Remove the photo index?' : 'Stop searching photos?',
+        lines: [
+          n >= 0
+            ? `What Sidekick read from ${plural(n, 'photo')} (${formatBytes(n * BYTES_PER_PHOTO)}) is deleted.`
+            : 'What Sidekick read from your photos is deleted.',
+          w.again
+            ? 'They are read again, newest first. Your photos are not touched.'
+            : 'Your photos are not touched.',
+        ],
+        exportFirst: false,
+      };
+    }
+    case 'photoFolder':
+      return {
+        title: 'Remove this photo folder?',
+        lines: [
+          `What Sidekick read from “${w.label}” is deleted from its index.`,
+          'Your photos are not touched.',
+        ],
+        exportFirst: false,
+      };
+    case 'pickedFile':
+      return {
+        title: 'Remove this file?',
+        lines: [
+          `What Sidekick read from “${w.label}” is deleted from its index.`,
+          'The file is not touched.',
+        ],
+        exportFirst: false,
+      };
+    case 'folderSource': {
+      const n = await safe(() => countKind('file'), -1);
+      return {
+        title: 'Stop searching folders and files?',
+        lines: [
+          n >= 0
+            ? `${plural(n, 'passage')} read from your folders and files are deleted, and the picked folders and files are forgotten.`
+            : 'Everything read from your folders and files is deleted, and the picks are forgotten.',
+          'Your files are not touched.',
         ],
         exportFirst: false,
       };
