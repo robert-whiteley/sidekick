@@ -27,24 +27,19 @@ case "${1:-}" in
     cd "$dir"
     npx expo prebuild --platform ios --no-install
     (cd ios && USE_CCACHE=1 pod install)
+    # Without a keychain group the app has no keychain on the Simulator (the database key,
+    # settings). Xcode, signing to run locally, puts these into the app as Simulator entitlements.
+    ent="ios/Sidekick/Sidekick.entitlements"
+    pb=/usr/libexec/PlistBuddy
+    $pb -c "Add :application-identifier string SIMULATOR.$BUNDLE" "$ent"
+    $pb -c "Add :keychain-access-groups array" -c "Add :keychain-access-groups:0 string SIMULATOR.$BUNDLE" "$ent"
     (cd ios && xcodebuild build -quiet -workspace Sidekick.xcworkspace -scheme Sidekick \
       -configuration Debug -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' \
-      -derivedDataPath build ARCHS=arm64 ONLY_ACTIVE_ARCH=YES CODE_SIGNING_ALLOWED=NO)
+      -derivedDataPath build ARCHS=arm64 ONLY_ACTIVE_ARCH=YES \
+      CODE_SIGN_IDENTITY=- CODE_SIGN_STYLE=Manual DEVELOPMENT_TEAM= PROVISIONING_PROFILE_SPECIFIER=)
     app=$(app_path "$dir")
     test -d "$app"
-    # Unsigned, the app has no keychain (the database key, settings): sign it for the Simulator
-    # with an app id and its keychain group, as a development build would have.
-    ent="$dir/ios/build/sim.entitlements"
-    cat >"$ent" <<EOF
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0"><dict>
-  <key>application-identifier</key><string>SIMULATOR.$BUNDLE</string>
-  <key>keychain-access-groups</key><array><string>SIMULATOR.$BUNDLE</string></array>
-</dict></plist>
-EOF
-    codesign --force --sign - --timestamp=none --entitlements "$ent" "$app"
-    codesign -d --entitlements - "$app" | grep -q keychain-access-groups
+    strings "$app/Sidekick" | grep -c keychain-access-groups || echo "no Simulator entitlements in the app"
     ;;
   boot)
     udid=$(xcrun simctl list devices available -j | node -e '
