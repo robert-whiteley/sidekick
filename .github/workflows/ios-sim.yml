@@ -29,7 +29,7 @@ jobs:
     timeout-minutes: 240
     env:
       LOGS: ${{ github.workspace }}/logs
-      MODELS: ${{ runner.temp }}/models
+      MODELS: ${{ github.workspace }}/../sim-models
       UPGRADE_FROM: ${{ github.event_name == 'push' && 'dcc6ec6' || inputs.upgrade_from }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -48,7 +48,7 @@ jobs:
             ios-ccache-
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
-          path: ${{ runner.temp }}/models
+          path: ${{ github.workspace }}/../sim-models
           key: ios-sim-models-${{ hashFiles('src/engine/models.ts') }}
           restore-keys: ios-sim-models-
       - run: brew install ccache
