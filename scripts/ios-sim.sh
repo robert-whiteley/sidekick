@@ -30,7 +30,21 @@ case "${1:-}" in
     (cd ios && xcodebuild build -quiet -workspace Sidekick.xcworkspace -scheme Sidekick \
       -configuration Debug -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' \
       -derivedDataPath build ARCHS=arm64 ONLY_ACTIVE_ARCH=YES CODE_SIGNING_ALLOWED=NO)
-    test -d "$(app_path "$dir")"
+    app=$(app_path "$dir")
+    test -d "$app"
+    # Unsigned, the app has no keychain (the database key, settings): sign it for the Simulator
+    # with an app id and its keychain group, as a development build would have.
+    ent="$dir/ios/build/sim.entitlements"
+    cat >"$ent" <<EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+  <key>application-identifier</key><string>SIMULATOR.$BUNDLE</string>
+  <key>keychain-access-groups</key><array><string>SIMULATOR.$BUNDLE</string></array>
+</dict></plist>
+EOF
+    codesign --force --sign - --timestamp=none --entitlements "$ent" "$app"
+    codesign -d --entitlements - "$app" | grep -q keychain-access-groups
     ;;
   boot)
     udid=$(xcrun simctl list devices available -j | node -e '
@@ -38,6 +52,9 @@ case "${1:-}" in
       const all = Object.entries(d).filter(([r]) => r.includes("iOS")).flatMap(([, v]) => v);
       const p = all.filter((x) => /^iPhone \d+$/.test(x.name)).pop() ?? all.find((x) => x.name.startsWith("iPhone"));
       console.log(p.udid);')
+    # sidekick:// links open without the "Open in Sidekick?" question (it would stop the check).
+    defaults write "$HOME/Library/Developer/CoreSimulator/Devices/$udid/data/Library/Preferences/com.apple.launchservices.schemeapproval" \
+      "com.apple.CoreSimulator.CoreSimulatorBridge-->sidekick" -string "$BUNDLE"
     xcrun simctl boot "$udid" || true
     xcrun simctl bootstatus "$udid" -b >/dev/null
     echo "$udid"
@@ -117,7 +134,7 @@ case "${1:-}" in
     pkill -f 'expo start' 2>/dev/null || true
     wait 2>/dev/null || true
     # What the checks look for, in one place.
-    grep -hE '\[flows\]|\[db\]|op-sqlite|SQL|not a database|database is locked|\[ask\]|\[decide\]|\[picture\]' \
+    grep -hE '\[bench\]|entitlement|\[flows\]|\[db\]|op-sqlite|SQL|not a database|database is locked|\[ask\]|\[decide\]|\[picture\]' \
       "$LOGS/$tag-metro.log" "$LOGS/$tag-device.log" >"$LOGS/$tag-summary.log" || true
     cat "$LOGS/$tag-summary.log"
     ;;
