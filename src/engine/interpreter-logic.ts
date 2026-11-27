@@ -81,6 +81,22 @@ export const interpretLanguage = (code: string) =>
   INTERPRET_LANGUAGES.find((l) => l.code === code) ?? null;
 
 /**
+ * What expo-speech needs to speak [l] on Android. It builds the locale with
+ * `Locale.Builder().setLanguage()`, which rejects a full tag ("es-ES") and falls back to the
+ * phone's own language: the other person heard Spanish read by the English voice (seen on the
+ * phone). So: the language code, plus an offline voice for the exact region when there is one.
+ */
+export function androidSpeech(
+  l: InterpretLanguage,
+  voices: { identifier: string; language: string }[],
+): { language: string; voice?: string } {
+  const tag = l.tag.toLowerCase();
+  const same = voices.filter((v) => v.language.toLowerCase() === tag);
+  const voice = (same.find((v) => !/network/i.test(v.identifier)) ?? same[0])?.identifier;
+  return voice ? { language: l.code, voice } : { language: l.code };
+}
+
+/**
  * The language the model named ("Spanish", "spanish", "es", "Español", "Brazilian Portuguese")
  * → one we offer, or null. Only a name lookup: which language is meant is the model's call.
  */

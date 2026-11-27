@@ -858,11 +858,39 @@ Starting the interpreter on the phone (`routing.ts` cases, each a fresh call, so
 The `talk` misses: "translate for me and the driver, he speaks German" (as on the laptop) and "can
 you interpret between me and this lady in Arabic" (no language either).
 
+### Out loud on the phone (Pixel 5, 27 Nov; stopped part-way)
+
+The interpreter screen opened from the chat ("help me talk to this taxi driver, he speaks
+Spanish"), on the `main` build. Each line from `gen_audio.py` was played from a laptop speaker
+into the phone's mic: tap the side's mic, play, tap again.
+
+| What                                        | Result                                                                      |
+| ------------------------------------------- | --------------------------------------------------------------------------- |
+| Spanish speech download (Parakeet v3)       | 487 MB on Wi-Fi, ready in about 2 min                                       |
+| Hearing a turn (after the mic is closed)    | 1.0–1.4 s; 12 s for the first turn of each side (model load)                |
+| Translating a turn (13 Spanish turns)       | median 7.0 s English → Spanish, 5.0 s Spanish → English                     |
+| Spanish heard over the air                  | all 6 lines right but names ("Miravista" → "Mara Vista")                    |
+| German heard over the air (Piper voice)     | 3 of 6 lines right; "Natürlich" → "Not really", one line not caught         |
+| Owner's lines in German                     | 4/4 translated well                                                         |
+| Control lines said out loud                 | "say" 4/4 translated; stop 2/2; switch to Italian 1/1; switch to French 0/1 |
+| "Thank you very much, that's all for today" | ended the session (expected: translate), as in the text bench               |
+
+**Fixed: the other person heard the translation in the English voice.** expo-speech builds the
+voice's locale with `Locale.Builder().setLanguage("es-ES")`, which rejects a full tag and falls
+back to the phone's language: the log showed Spanish text sent to the en-GB voice. Android now
+gets the language code plus an offline voice for the exact region when the phone has one
+(`androidSpeech`, tested). Not yet heard on the phone with the fix.
+
+German and Japanese voices aren't downloaded on this phone (the screen says so and offers "Get
+voice"; that opens another app, so it was left). Asking for a Japanese shop assistant brought up
+Android's contacts permission prompt, left unanswered when the phone work stopped.
+
 ### Still weak / not measured
 
-- Parakeet v3 and Whisper small on the phone (speed and memory while hearing a language).
-- Anything heard out loud: real mic turns, a real speaker of the language, and the phone voices
-  speaking translations (no sound tests without the owner's go-ahead).
+- Japanese out loud (Whisper small), the third stop line, the phone voices with the fix above,
+  and German / Japanese voices once installed.
+- Whisper small on the phone (speed and memory while hearing a language).
+- A real speaker of the language (only made-up TTS speech so far).
 - The interpreter screen on a phone, and everything on iPhone (Apple speech, voices; the iOS
   code was not compiled here).
 - A turn of ~5 s is usable but slow; Bergamot is the faster fallback if it feels too slow.
