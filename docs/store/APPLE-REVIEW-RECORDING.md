@@ -22,8 +22,8 @@ Open Control Centre, tap **Screen Recording**, wait for the 3-second countdown, 
 2. **First run.** Show the space check and the download starting by itself on Wi-Fi, and the explainer. The download takes about 5 to 10 minutes; you can keep recording through it, or cut the middle later (see below). When it finishes, the chat opens with example questions.
 3. **Typed question.** Tap one example question, or type "What can you do?" and send. Let the answer finish.
 4. **Voice.** Hold the mic button, say "What's a good name for a cat?", let go. Show the answer being written and spoken.
-5. **Memory.** Type "I parked on level 3, space 42" and send. Then ask "Where did I park?" and show the answer.
-6. **No shared content.** Open Settings (gear icon) → Assistant and show the Make pictures row: "Not on iPhone yet". Sidekick has no accounts and nothing is shared with other users, so there is no reporting or blocking to show. (The picture Report button exists only on Android.)
+5. **Offline.** Turn on airplane mode in Control Centre, ask any question, and show it is still answered. Turn airplane mode off again.
+6. **No shared content.** Sidekick has no accounts and nothing is shared with other users, so there is no reporting or blocking to show. (Pictures, and their Report button, are Android only.)
 7. **Privacy and data.** Settings → Privacy: show Online lookup is off. Tap **Export everything** and show the share sheet, then close it. Tap **Delete everything** and show the confirmation; tap Cancel (or Delete, if you don't mind losing the test data).
 8. Stop the recording.
 
