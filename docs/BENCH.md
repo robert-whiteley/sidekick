@@ -247,8 +247,11 @@ owner's counts of memories, facts and voices were the same before, during and af
 
   Search hardly slows down from 2,200 to 6,200 memories. The owner's counts (1,228 memories,
   8 facts, 23 voices) were the same before, during and after; test rows 0 afterwards; the deep-link
-  flag file was deleted. **Storage is not given back:** after the 5,000 were removed the database
-  still used 8.6 MB against 3.1 MB before (being looked into).
+  flag file was deleted. **Storage is given back now** (PR 36, phone 27 Nov, main build): load
+  of 5,000 (275 s, +6.9 MB, file 9.99 MB), then clear: `[storage] reclaim: rebuilt moments_vec,
+photos_vec; vacuumed; 9760 → 2996 KB`, back to 3,067,904 bytes used and on disk, the same as
+  before the load (the first clear also gave back 6.7 MB left from the 26 Nov run). Owner counts
+  unchanged (1,228 memories, 8 facts, 23 voices).
 
 - Units: the model writes numbers in words ("four and four-tenths pounds"); fine to hear, but not
   checkable by rule.
@@ -454,7 +457,20 @@ ADR 0006 "Lite versions of cloud-app features".
 - Faster phones: CPU-only ≈ 12–15 s with SDXS on a Snapdragon 8 Gen 2 / A15-class phone (2.5–3×
   the Pixel 5 per core, estimated); a few seconds with Core ML or a recent NPU (published).
 - Verdict: usable on phones with ≥ 6 GB RAM as an optional download; built as "Make pictures"
-  with the licence terms in the app (ADR 0006). The in-app build is not yet timed on the phone.
+  with the licence terms in the app (ADR 0006).
+- **In the app (Pixel 5, 27 Nov, `run=picture`):** 29.6–31.9 s to draw each of 6 pictures,
+  plus about 2 s for the safety check and 8 s to route the request (sorter + the tool's
+  arguments; the first one 18 s while the sorter's cache was built); peak app memory 3.3 GB with
+  the chat model still loaded. Routing 8/8 (6 drawing requests, 2 that only mention pictures).
+  The safety check: 12/12 right (7 allowed: "a sexy red sports car", "a swimmer in a swimsuit",
+  a couple on a beach…; 5 blocked: nudity, sex, a minor), median 1.6–2.1 s.
+- **Fixed: every picture failed in the release build.** The native library calls the progress
+  callback's `onProgress` by name and R8 had renamed it (`NoSuchMethodError` on
+  `dev.sidekick.engine.a`); a keep rule in `consumer-rules.pro` and a test that every method the
+  C++ looks up by name is kept (`native-keep-rules-test.ts`).
+- The pictures themselves could not be looked at from the laptop: the app's files are not
+  readable over adb on this Android (the bench files were deleted afterwards). Still to look at by eye
+  on the phone.
 
 ### Photo edits: background model
 
@@ -463,6 +479,41 @@ ADR 0006 "Lite versions of cloud-app features".
 | U²-Netp (chosen)                                               | 4.6 MB | 0.8–1.1 s      | Clean on people, a dog, cups, a bicycle |
 | Silueta                                                        | 44 MB  | 1.3–1.8 s      | About the same                          |
 | ISNet general                                                  | 179 MB | 5–7 s          | Worse with the same preprocessing       |
+
+### Research on the phone (27 Nov, `run=research`, 10 made-up topics)
+
+With the Wikimedia limit now shared by every request (9 a minute), the first run on main gave
+**7/10**: three topics run straight after another one ("honey bee decline", "tidal vs wind",
+"microplastics") answered "I couldn't find anything online" in under 10 s, because their searches
+had no Wikimedia budget left and gave up at once. **Fixed:** research now waits for the
+Wikimedia minute before searching when the plan needs more than is left (the status says
+"Waiting N s for Wikipedia's per-minute limit…"; `research.ts`, `RateWindow.waitForMs`). After:
+**10/10 reports, all with sources and citations right**, median 55 s, slowest 69 s (was 44 s
+median among the ones that worked); the sorter sent 8 of the 10 to research (2 were answered as
+questions; the bench researches them anyway).
+
+### Photo edits on the phone (27 Nov, `run=photo-edit`, made-up photo)
+
+**Fixed: only 4 of 16 requests became an edit** (main build). The tool-argument step showed the
+model only the tool's signature, and it answered with the choice as the key
+(`{"background":"white"}`, `{"crop":"square"}`) instead of `{"op": …}`; the sorter also said
+"upscale" instead of the tool's name. Now the prompt shows the reply's shape keyed by the
+argument names (`{"op": "rotate"}`), a lone flag key naming one of a required choice's values is
+read as that value (only for tools without a yes/no argument, so `{"torch": true}` is still asked
+again), the `{"tool_name", "arguments"}` shape is read, and a sorter word that is one tool's
+choice picks that tool. After: **16/16**.
+
+| Edit (Pixel 5)                                  | Time                        |
+| ----------------------------------------------- | --------------------------- |
+| Background white / blue / blurred (U²-Netp)     | 1.5–2.6 s (model 1.2–1.7 s) |
+| Rotate, crop, mirror, black and white, brighten | 73–215 ms                   |
+| Erase (MI-GAN, 1536 × 1536, brushed blob)       | 2.3–2.7 s                   |
+| Upscale 512 → 2048 (Real-ESRGAN x4v3)           | 21.8–21.9 s                 |
+| Whole request (sorter + arguments + edit)       | 8–35 s                      |
+
+A 1536 px photo is refused for upscaling by design (offered up to 1024 px). Still wrong:
+questions about the photo can be sent to other tools by the sorter ("what is in the
+background?" → watch).
 
 ## Chat features (27 Nov 2026)
 
@@ -475,12 +526,27 @@ Edit / Try again, "How Sidekick answers", formatted answers, private facts kept 
   (no bullets, stars or table pipes), the private-topic line in the owner-fact prompt and the
   parser for the model's person-fact check. Full suite, tsc and eslint pass.
 - Release APK built (`sk-chatfeat1.apk`); the bundle carries the new prompt and settings text.
-- **Phone: not checked yet.** When the phone lock came free (00:57) the Pixel 5 was on its lock
-  screen, so nothing was installed or tapped. Still to do on the phone, made-up content only:
-  screenshots light/dark of a formatted recipe; Edit and Try again replacing the last exchange
-  (and its memory row); the answer-style box obeyed ("call me Captain Nemo, metric units");
-  `sidekick://bench?run=facts` (8 made-up owner lines and 8 person lines, half private) to see
-  that the model leaves private ones out. Read aloud is audible: waits for the owner's OK.
+- **Phone (Pixel 5, 27 Nov, made-up content):**
+  - Formatted answer (a pancake recipe with an ingredients list, numbered steps and a bold tip):
+    bold headings, bullets, numbered steps with hanging indents and the bold tip all render, in
+    light and dark (screenshots read and deleted).
+  - Try again on the answer replaced it with a new one; Edit on the question put it back in the
+    box and the edited question and its answer replaced the old exchange (one exchange left).
+  - "How Sidekick answers" = "Call me Captain Nemo and use metric units": two answers in
+    kilometres and minutes, but neither used the name. The same prompt on the laptop (no chat
+    history, no memory notes) used it in 3 of 4; on the phone the chat restarts from its
+    summary and last turns and had 4 memory notes in each prompt. Not solved; the box was emptied
+    again afterwards.
+  - `run=facts`: **fixed, the owner's private facts were kept.** The model suggested all 5 private
+    owner facts (a diagnosis, a vote, a debt, a mosque, a boyfriend) as facts to remember, because only the person-fact
+    path had a privacy check. Owner suggestions now go through the same check
+    (`withoutPrivate`, `fact-inference.ts`) when private topics are off: 4 of 5 dropped (left:
+    "My boyfriend is Ezra"), the 3 ordinary ones kept. Person lines: 4/4 private ones marked, 1
+    ordinary one marked too (a jazz fan).
+  - **Fixed: a crash at start.** `llmCancel` could call `cancelProcess` on a conversation another
+    thread had just closed (SIGSEGV in `Conversation.cancelProcess`); closing and cancelling now
+    share one lock and cancel only a live conversation (`LlmEngine.kt`).
+  - Read aloud is audible: not tested (waits for the owner).
 
 ## Rules vs model, thinking (27 Nov 2026)
 
@@ -542,8 +608,31 @@ for one-off routines, camera vs camera settings, "stop listening", "text me a fu
 step refuses a message to "me", and the model then answers), talk about the weather on Mars.
 The fill step's misses in the run above were mostly arguments the schema refused (phone settings
 as `{torch: true}`); such a call is now asked once more with the reason it was refused (`fillTool`).
-Still to measure on the phone: the built version end to end (catalog with the lookup and news
-lines, plus fill), pending phone time.
+**The built version end to end on the phone (27 Nov, `decide&variant=app`: the app's own
+`decideRequest`, then `fillTool`):** 171/199 on main, **180/198** after the fixes below (one log
+line lost), median 6.6 s a request with the arguments. By set after: knowledge, arithmetic,
+dates, reasoning, refusals, multi-step all right; units 7/8, tools 53/63, near-misses 24/27,
+paraphrases 22/26, other languages 8/8, look-ups 4/4, questions 4/4.
+
+Fixed (root causes in the tool lines and the argument step; checked on the laptop first with the
+same Gemma file, sorter 168 → 177 of 198):
+
+- "Set an alarm for 6:30", "Wake me up at 7am", "Remind me to call the dentist" and the Spanish
+  alarm went to **event** ("add a calendar event"); now "add an appointment or meeting to my
+  calendar (not an alarm or a reminder)". Event misses: 6 → 0.
+- Routines said as "every Monday at 8 tell me the weather" went to reminder; the reminder line
+  now says "if you are to do or tell me something then, that is routine" (2 of 5 fixed).
+- "Turn off the camera", "make it grab fewer pictures" went to phone settings; that line now
+  says "(not the camera or listening)" (1 of 4 fixed: "use fewer frames").
+- "Stop listening" was refused because the model put the arguments under the tool's name
+  (`{"listening":{"on":false}}`); that shape is now read.
+- "Start a countdown of 90 seconds" gave `minutes: 0`; the argument now says it may be a
+  fraction ("1.5 for 90 seconds").
+
+Still wrong: getting woken up goes to reminder (2), routines said once ("in one minute, tell me a
+fun fact", "at 5pm give me a summary", "every Monday at 8 tell me the weather") go to reminder or are answered, "stop listening" and "turn
+off the camera" to phone settings, "tell me when you see a bus" to routine, talk about the alarm
+or the weather on Mars as a tool, and "turn the volume down" fills `{"volume": "down"}`.
 
 ### Thinking
 
@@ -554,10 +643,33 @@ wired on Android (`LlmEngine.kt`, LiteRT-LM `ThinkingConfig`) and off by default
 photo tasks on made-up material, `bench/answers/background-cases.ts`). "handoff" lets the answer
 pass reply THINK and is then asked again with thinking on (`wantsThinking`, `decide-logic.ts`).
 
-Not yet measured: the phone was locked (keyguard) whenever this work had it, and the PIN is the
-owner's. Until there is data the app keeps the default (thinking off) everywhere. iPhone: the
-bundled Swift LiteRT-LM API has `ThinkingConfig` (enable + token budget), but `Llm.swift` does not
-pass `thinkingBudget` yet.
+**Fixed first: thinking never switched on.** Gemma 4's switch is in the system turn; a per-turn
+`ThinkingConfig` on a conversation cloned from the prefilled base does nothing (0 thought
+characters on the phone; checked on the laptop with Python `litert-lm` 0.20). A turn with a
+budget now gets its own conversation with thinking in its config (`freshConversation`,
+`LlmEngine.kt`). The hand-off marker never matched either: the model writes "THINK" and then its
+working on the same line (`wantsThinking` now takes that).
+
+Pixel 5, 27 Nov (budget 1024 = real thinking, after the fix):
+
+| Run                                    | Hard (16) | Everyday (8) | Median hard / everyday     | Wall, CPU ticks  |
+| -------------------------------------- | --------- | ------------ | -------------------------- | ---------------- |
+| **Off (default)**                      | **13**    | **8**        | **10.3 s / 3.9 s**         | 225 s, 84,387    |
+| 1024                                   | 12        | 8            | 80 s; first words 24–123 s | 1,247 s, 490,577 |
+| Hand-off (THINK, then again with 1024) | 12        | 8            | 81 s / 4.1 s               | 1,562 s, 611,204 |
+
+| Background tasks (14: notes, facts, who-is-who, recaps, photos) | Right  | Median | Wall, CPU ticks |
+| --------------------------------------------------------------- | ------ | ------ | --------------- |
+| **Off**                                                         | **11** | 12.5 s | 181 s, 66,197   |
+| 1024                                                            | 11     | 67 s   | 947 s, 372,430  |
+
+The hand-off flagged all 16 hard questions but also 1 of 8 everyday ones and 13 of 41 other
+plain questions (a 32% false alarm, each then 60–130 s). Thinking won one or two the plain answer missed (months with 28 days
+with 1024, the trip puzzle with the hand-off) and lost two it had right (workers and fences, the
+socks).
+**Decision: thinking stays off everywhere** (the owner's rule: off unless there is a clear
+overall gain; here it is 5–8× slower for no gain). iPhone: the bundled Swift LiteRT-LM API has
+`ThinkingConfig` (enable + token budget), but `Llm.swift` does not pass `thinkingBudget` yet.
 
 ## Chat models compared (27 Nov 2026)
 
@@ -601,10 +713,26 @@ peak memory. Decision and details in [ADR 10](decisions/0010-litert-lm-0.20.md).
 
 - The cache format changed, so the first load after the update rebuilds it once, like a first
   install. App settings unchanged (default 4096-token context, 140 image tokens per photo).
-- **Phone: not checked yet.** When the phone lock was taken the Pixel 5 was on its lock screen, so
-  nothing was installed. Still to do with `sk-litert20.apk`: the Speed test bench by deep link,
-  twice (the first run rebuilds the cache), with first word, words/s and peak memory
-  (`dumpsys meminfo`) for text and photo, against 0.19.1.
+- **Phone (Pixel 5, 27 Nov, Speed test bench, cache already rebuilt).** Three runs; the bench
+  now holds background passes while it runs (in the first run, frame captions cancelled half its
+  questions) and logs decode tokens and tokens/s:
+
+  | Gemma 4 E2B, default settings | 0.19.1 (ADR 9) | 0.20.0, phone runs 2 and 3                       |
+  | ----------------------------- | -------------- | ------------------------------------------------ |
+  | Load                          | 2.9 s (warm)   | 7.9–9.0 s                                        |
+  | Text: first word / total      | –              | 1.75–1.80 s / 11.0–11.3 s (cached prompt 0.13 s) |
+  | Photo: first word / total     | –              | 3.4–3.5 s / 14.2–15.0 s                          |
+  | Writing speed                 | 6.7 tok/s      | 7.6–7.9 tok/s (6 threads: 8.1–8.4)               |
+  | Peak app memory, text / photo | 2.27 / 3.14 GB | 2.47 / 3.02 GB                                   |
+
+  Writing is 13–18% faster; memory is within 0.2 GB of 0.19.1. In run 3 the app was 0.8 GB higher
+  throughout (3.31 / 3.86 GB) because the speech and memory-search models from the end of run 2
+  were still loaded, not because of the runtime. 6 threads beat the library default on every
+  measure in all three runs (load 6.7 s, text first word 1.45 s, photo 2.85 s); 2 threads were
+  slowest. Fewer image tokens (70) halve the photo's first word (1.8 s). The "spec" variant
+  (speculative decoding) fails on 0.20.0 with `INVALID_ARGUMENT: Visual token budget`; the app
+  does not use it. Speech: first file 10.3 s (model load), then 1.6–1.8 s for 7.4 s of audio;
+  voiceprint 0.55 s; memory search load 1.7 s, 255 ms per item.
 
 ## Interpreter (26 Nov 2026)
 
@@ -696,12 +824,75 @@ Starting the interpreter (`routing.ts`, the app's sorter and then the tool's arg
 
 The miss: "translate for me and the driver, he speaks German" translated the sentence.
 
+### On the phone, all 7 languages and the one-call check (Pixel 5, 27 Nov)
+
+`run=interpreter&only=mt` with all 280 cases from `prompts.ts` (20 turns × 7 languages, and the
+10 owner lines per language with the `SIDEKICK:` / `SAY:` reply) plus the 18 `routing.ts`
+cases, on the main build with this branch's fixes; logcat kept every line this time.
+
+| What                                           | Result                                                         |
+| ---------------------------------------------- | -------------------------------------------------------------- |
+| Translation turn (140)                         | median 6.0 s, 90th percentile 8.2 s; first words 3.6 s (5.2 s) |
+| English → language / language → English        | median 7.5 s / 5.2 s; first words 5.0 s / 3.5 s                |
+| Owner turn with the SIDEKICK/SAY check (140)   | median 6.4 s, 90th percentile 7.1 s; first words 3.6 s         |
+| chrF into the language / into English          | 72.6 / 75.7 (laptop 70.2 / 75.9)                               |
+| Japanese                                       | 57.6 / 59.7                                                    |
+| Untranslated echoes                            | 0                                                              |
+| Ordinary owner lines kept for the other person | 99/105                                                         |
+| Stop / switch language                         | 20/21, 14/14                                                   |
+| Peak app memory (PSS)                          | 2.40 GB (median 2.33 GB)                                       |
+
+The misses are the laptop's: "Thank you very much, that's all for today" ended the session in 6
+of 7 languages; one "Okay Sidekick, you can stop translating now" (Italian) was not taken as
+stop. Owner turns inside the conversations: 0 of 70 taken as said to Sidekick.
+
+Starting the interpreter on the phone (`routing.ts` cases, each a fresh call, so the sorter's
+12 s here is without its cache; in the app it is about 2 s):
+
+| Request                                         | Sorter                        | translate arguments |
+| ----------------------------------------------- | ----------------------------- | ------------------- |
+| 5 conversation requests                         | translate (5/5)               | `talk: true` 3/5    |
+| "translate 'where is the station' into Spanish" | answered with the translation | translate, no talk  |
+| 3 questions about a language                    | answer (3/3)                  | –                   |
+
+The `talk` misses: "translate for me and the driver, he speaks German" (as on the laptop) and "can
+you interpret between me and this lady in Arabic" (no language either).
+
+### Out loud on the phone (Pixel 5, 27 Nov; stopped part-way)
+
+The interpreter screen opened from the chat ("help me talk to this taxi driver, he speaks
+Spanish"), on the `main` build. Each line from `gen_audio.py` was played from a laptop speaker
+into the phone's mic: tap the side's mic, play, tap again.
+
+| What                                        | Result                                                                      |
+| ------------------------------------------- | --------------------------------------------------------------------------- |
+| Spanish speech download (Parakeet v3)       | 487 MB on Wi-Fi, ready in about 2 min                                       |
+| Hearing a turn (after the mic is closed)    | 1.0–1.4 s; 12 s for the first turn of each side (model load)                |
+| Translating a turn (13 Spanish turns)       | median 7.0 s English → Spanish, 5.0 s Spanish → English                     |
+| Spanish heard over the air                  | all 6 lines right but names ("Miravista" → "Mara Vista")                    |
+| German heard over the air (Piper voice)     | 3 of 6 lines right; "Natürlich" → "Not really", one line not caught         |
+| Owner's lines in German                     | 4/4 translated well                                                         |
+| Control lines said out loud                 | "say" 4/4 translated; stop 2/2; switch to Italian 1/1; switch to French 0/1 |
+| "Thank you very much, that's all for today" | ended the session (expected: translate), as in the text bench               |
+
+**Fixed: the other person heard the translation in the English voice.** expo-speech builds the
+voice's locale with `Locale.Builder().setLanguage("es-ES")`, which rejects a full tag and falls
+back to the phone's language: the log showed Spanish text sent to the en-GB voice. Android now
+gets the language code plus an offline voice for the exact region when the phone has one
+(`androidSpeech`, tested). Not yet heard on the phone with the fix.
+
+German and Japanese voices aren't downloaded on this phone (the screen says so and offers "Get
+voice"; that opens another app, so it was left). Asking for a Japanese shop assistant brought up
+Android's contacts permission prompt, left unanswered when the phone work stopped.
+
 ### Still weak / not measured
 
-- Parakeet v3 and Whisper small on the phone (speed and memory while hearing a language).
-- Anything heard out loud: real mic turns, a real speaker of the language, and the phone voices
-  speaking translations (no sound tests without the owner's go-ahead).
+- Japanese out loud (Whisper small), the third stop line, the phone voices with the fix above,
+  and German / Japanese voices once installed.
+- Whisper small on the phone (speed and memory while hearing a language).
+- A real speaker of the language (only made-up TTS speech so far).
 - The interpreter screen on a phone, and everything on iPhone (Apple speech, voices; the iOS
   code was not compiled here).
 - A turn of ~5 s is usable but slow; Bergamot is the faster fallback if it feels too slow.
-- The one-call stop / switch and the translate + `talk` start are measured on the laptop only.
+- Speech recognition on the phone for languages other than English (needs Parakeet v3 / Whisper
+  small downloaded and the made-up audio; not run 27 Nov).

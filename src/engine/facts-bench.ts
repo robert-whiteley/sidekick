@@ -3,6 +3,7 @@
  * off, so the phone shows whether the model keeps health, beliefs, sexuality, politics and money
  * out of its suggestions. Logs JSON lines; saves nothing.
  */
+import { withoutPrivate } from './fact-inference';
 import { askLlmInBackground } from './llm';
 import {
   factPrompt,
@@ -39,7 +40,18 @@ export async function runFactsBench(log: (line: string) => void) {
   for (const [line, priv] of OWNER) {
     const { text } = await askLlmInBackground(factPrompt([line], false), null, { maxTokens: 120 });
     const facts = parseFacts(text, [line]);
-    log(JSON.stringify({ bench: 'facts', kind: 'owner', line, private: priv, suggested: facts }));
+    // The app's path: the private-topic check on what the model suggested (fact-inference.ts).
+    const kept = await withoutPrivate(facts);
+    log(
+      JSON.stringify({
+        bench: 'facts',
+        kind: 'owner',
+        line,
+        private: priv,
+        model: facts,
+        suggested: kept,
+      }),
+    );
   }
   const { text } = await askLlmInBackground(sensitiveCheckPrompt(OTHERS.map(([l]) => l)), null, {
     maxTokens: 20,

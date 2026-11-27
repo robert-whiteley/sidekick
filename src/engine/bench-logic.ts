@@ -5,12 +5,19 @@ export type SpeedResult = {
   ms: number;
   firstTokenMs?: number;
   audioSec?: number;
+  /** Chat model: tokens written and their speed (LiteRT-LM's own count). */
+  decodeTokens?: number;
+  decodeTokPerSec?: number;
   ok: boolean;
   text: string;
 };
 
+/** Words in an answer (for words per second next to tokens per second). */
+export const wordCount = (text: string) => (text.match(/[\p{L}\p{N}'’-]+/gu) ?? []).length;
+
 export function speedLine(r: SpeedResult): string {
-  return `[speed] ${JSON.stringify({ ...r, text: r.text.replace(/\s+/g, ' ').trim().slice(0, 80) })}`;
+  const words = r.decodeTokens !== undefined ? { words: wordCount(r.text) } : {};
+  return `[speed] ${JSON.stringify({ ...r, ...words, text: r.text.replace(/\s+/g, ' ').trim().slice(0, 80) })}`;
 }
 
 function bytesFromBase64(b64: string, max: number): Uint8Array {

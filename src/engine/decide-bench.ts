@@ -1,7 +1,8 @@
 /**
  * Dev-only bench for "rules vs model" and thinking mode (docs/BENCH.md). Run on the phone from
  * the speed-test screen's deep link: sidekick://bench?run=decide&variant=catalog|catalog-off|
- * catalog-fill|classify|fused|fused-lookup|full|embed, run=thinking&variant=0|256|1024|-1|
+ * catalog-fill|app|classify|fused|fused-lookup|full|embed (app: the chat's own path end to end,
+ * the tools offered without a photo, lookup lines on, then the chosen tool's arguments), run=thinking&variant=0|256|1024|-1|
  * default|handoff, or run=background&variant=<budget>. Nothing is done: each request is only
  * classified (or answered in a throwaway chat). One JSON line per case on logcat:
  * `[decide] {...}` / `[think] {...}`. The model is unloaded at the end so the app's own chat
@@ -22,12 +23,14 @@ import {
   wantsThinking,
   catalogSystem,
   classifySystem,
+  DECIDE_TOOLS,
   decideHint,
   decisionLabel,
   parseClassify,
   parseDecision,
   type Decision,
 } from './decide-logic';
+import { decideRequest } from './decide';
 import { EMBEDDER_FILE } from './models';
 import { modelPath } from './downloads';
 import { askLlm, unloadLlm } from './llm';
@@ -114,14 +117,20 @@ export async function runDecideBench(log: Log, variant: string, only?: string): 
   let ok = 0;
   let scored = 0;
   let totalMs = 0;
+  // The app's sorter offers the photo and picture tools only with a photo / the picture model.
+  const appTools = DECIDE_TOOLS.filter(
+    (t) => t.name !== 'draft' && t.name !== 'edit_photo' && t.name !== 'make_picture',
+  );
   const system =
-    variant === 'catalog' || variant === 'catalog-off' || variant === 'catalog-fill'
-      ? catalogSystem(undefined, variant === 'catalog')
-      : variant === 'classify'
-        ? classifySystem()
-        : variant === 'full'
-          ? SYSTEM_PROMPT + fullCatalog()
-          : SYSTEM_PROMPT + decideHint();
+    variant === 'app'
+      ? catalogSystem(appTools)
+      : variant === 'catalog' || variant === 'catalog-off' || variant === 'catalog-fill'
+        ? catalogSystem(undefined, variant === 'catalog')
+        : variant === 'classify'
+          ? classifySystem()
+          : variant === 'full'
+            ? SYSTEM_PROMPT + fullCatalog()
+            : SYSTEM_PROMPT + decideHint();
   // The system prompt's size (read once per chat): a scratch turn re-reads it.
   if (variant !== 'embed') {
     const probe = await askLlm('Hi', null, () => {}, { system, maxTokens: 1, scratch: true });
@@ -167,14 +176,22 @@ export async function runDecideBench(log: Log, variant: string, only?: string): 
             ? { kind: 'lookup' }
             : { kind: 'answer' };
         extra = { nearest: best?.e.id, sim: Number(best?.s.toFixed(3)) };
-      } else if (variant === 'classify' || variant.startsWith('catalog')) {
-        const r = await ask(`Request: ${it.q}`, system, 5);
-        d = parseClassify(r.text);
-        ms = r.ms;
-        extra = { reply: r.text.slice(0, 30), prefill: r.stats.prefillTokens };
+      } else if (variant === 'classify' || variant.startsWith('catalog') || variant === 'app') {
+        if (variant === 'app') {
+          // The app's own call (cached catalog prompt, scratch chat).
+          const r = await decideRequest(it.q);
+          d = r.decision;
+          ms = r.ms;
+          extra = { reply: r.reply };
+        } else {
+          const r = await ask(`Request: ${it.q}`, system, 5);
+          d = parseClassify(r.text);
+          ms = r.ms;
+          extra = { reply: r.text.slice(0, 30), prefill: r.stats.prefillTokens };
+        }
         // The whole path: the chosen tool's arguments from the one-tool router, which may
         // still say none. Only a valid call counts as acting.
-        if (variant === 'catalog-fill' && d.kind === 'do') {
+        if ((variant === 'catalog-fill' || variant === 'app') && d.kind === 'do') {
           const fill = await fillTool(it.q, d.tool, { now: new Date() }).catch(() => null);
           ms += fill?.ms ?? 0;
           extra = { ...extra, filled: fill?.tool, fillError: fill?.error, args: fill?.args };
@@ -202,7 +219,11 @@ export async function runDecideBench(log: Log, variant: string, only?: string): 
     const got = decisionLabel(d);
     // Lookup off: "answer" is right for a lookup question (no internet is offered).
     const want =
-      it.want && variant !== 'fused-lookup' && variant !== 'classify' && variant !== 'catalog'
+      it.want &&
+      variant !== 'fused-lookup' &&
+      variant !== 'classify' &&
+      variant !== 'catalog' &&
+      variant !== 'app'
         ? it.want.filter((w) => w !== 'lookup')
         : it.want;
     const want2 = want && !want.length ? ['answer'] : want;

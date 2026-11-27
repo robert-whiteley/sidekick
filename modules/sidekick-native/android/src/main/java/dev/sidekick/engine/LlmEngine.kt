@@ -177,16 +177,20 @@ class LlmEngine(private val cacheDir: String, private val nativeLibDir: String) 
     chatRunning = !opts.scratch
     val finish = { done.countDown() }
     closeScratch()
+    // Gemma's thinking switch is part of the system turn, so a conversation whose system prompt
+    // was already read (a clone of a prefilled base) ignores a per-message ThinkingConfig: a turn
+    // with thinking on starts its own conversation with thinking set from the start.
+    val thinking = opts.thinkingBudget?.takeIf { it != 0 }?.let { ThinkingConfig(enableThinking = true, thinkingTokenBudget = it) }
     val conv =
       try {
         if (opts.scratch) {
-          freshConversation(e, opts.system, keepBase = opts.cacheSystem).also { scratch = it }
+          freshConversation(e, opts.system, keepBase = opts.cacheSystem, thinking = thinking).also { scratch = it }
         } else if (opts.offRecord) {
           (
             offRecord?.takeIf { opts.keepHistory }
               ?: run {
                 closeOffRecord()
-                freshConversation(e, opts.system).also { offRecord = it }
+                freshConversation(e, opts.system, thinking = thinking).also { offRecord = it }
               }
           ).also { chat -> keepUndoCopy(chat, opts.undoable, offRecordChat = true) }
         } else {
@@ -195,9 +199,9 @@ class LlmEngine(private val cacheDir: String, private val nativeLibDir: String) 
           (
             conversation?.takeIf { opts.keepHistory }
               ?: run {
-                conversation?.close()
+                dispose(conversation, "chat")
                 conversation = null
-                freshConversation(e, opts.system).also { conversation = it }
+                freshConversation(e, opts.system, thinking = thinking).also { conversation = it }
               }
           ).also { chat -> keepUndoCopy(chat, opts.undoable, offRecordChat = false) }
         }
@@ -299,7 +303,7 @@ class LlmEngine(private val cacheDir: String, private val nativeLibDir: String) 
     val o = offRecord ?: return
     offRecord = null
     if (beforeOffRecord) closeBefore()
-    runCatching { o.close() }.onFailure { Log.w(TAG, "off-the-record chat close failed", it) }
+    dispose(o, "off-the-record chat")
   }
 
   /**
@@ -308,7 +312,16 @@ class LlmEngine(private val cacheDir: String, private val nativeLibDir: String) 
    * With [keepBase] false (side tasks with their own prompts) the chat's prefilled base is reused
    * only if it matches, and never replaced, so the next chat question still starts instantly.
    */
-  private fun freshConversation(e: Engine, system: String?, keepBase: Boolean = true): Conversation {
+  private fun freshConversation(
+    e: Engine,
+    system: String?,
+    keepBase: Boolean = true,
+    thinking: ThinkingConfig? = null,
+  ): Conversation {
+    if (thinking != null) {
+      ExperimentalFlags.visualTokenBudget = tuning.visualTokenBudget
+      return e.createConversation(conversationConfig(system, prefill = false, thinking = thinking))
+    }
     try {
       if (keepBase || bases[system.orEmpty()]?.isAlive == true) return baseFor(e, system).clone()
       ExperimentalFlags.visualTokenBudget = tuning.visualTokenBudget
@@ -331,10 +344,11 @@ class LlmEngine(private val cacheDir: String, private val nativeLibDir: String) 
     return e.createConversation(conversationConfig(system, prefill = true)).also { bases[key] = it }
   }
 
-  private fun conversationConfig(system: String?, prefill: Boolean) =
+  private fun conversationConfig(system: String?, prefill: Boolean, thinking: ThinkingConfig? = null) =
     ConversationConfig(
       systemInstruction = system?.let { Contents.of(listOf(Content.Text(it))) },
       prefillPrefaceOnInit = prefill,
+      thinkingConfig = thinking,
     )
 
   /** Drops the prefilled base so the next question rebuilds it with the current [tuning]. */
@@ -355,11 +369,7 @@ class LlmEngine(private val cacheDir: String, private val nativeLibDir: String) 
   private fun closeScratch() {
     val s = scratch ?: return
     scratch = null
-    try {
-      s.close()
-    } catch (t: Throwable) {
-      Log.w(TAG, "scratch conversation close failed", t)
-    }
+    dispose(s, "scratch conversation")
   }
 
   private fun closeBefore() {
@@ -379,20 +389,34 @@ class LlmEngine(private val cacheDir: String, private val nativeLibDir: String) 
     val b = before ?: return false
     before = null
     if (beforeOffRecord) {
-      runCatching { offRecord?.close() }
+      dispose(offRecord, "off-the-record chat")
       offRecord = b
     } else {
-      runCatching { conversation?.close() }
+      dispose(conversation, "chat")
       conversation = b
     }
     return true
   }
 
-  /** Not locked (it must reach a running answer); a conversation closed meanwhile is ignored. */
+  /**
+   * Not under the engine's lock (it must reach a running answer), only under [convLock], which
+   * every close of these conversations also takes: cancelling one that another thread had just
+   * closed crashed the app natively (SIGSEGV in cancelProcess, Pixel 5, 27 Nov).
+   */
   fun cancel() {
-    runCatching { conversation?.cancelProcess() }
-    runCatching { offRecord?.cancelProcess() }
-    runCatching { scratch?.cancelProcess() }
+    synchronized(convLock) {
+      for (c in listOf(conversation, offRecord, scratch)) {
+        if (c?.isAlive == true) runCatching { c.cancelProcess() }
+      }
+    }
+  }
+
+  /** Guards closing the chat, off-the-record and scratch conversations against [cancel]. */
+  private val convLock = Any()
+
+  private fun dispose(c: Conversation?, what: String) {
+    c ?: return
+    synchronized(convLock) { runCatching { c.close() }.onFailure { Log.w(TAG, "$what close failed", it) } }
   }
 
   val isLoaded: Boolean
@@ -415,7 +439,7 @@ class LlmEngine(private val cacheDir: String, private val nativeLibDir: String) 
     closeScratch()
     closeBefore()
     closeOffRecord()
-    conversation?.close()
+    dispose(conversation, "chat")
     conversation = null
     resetBase()
     engine?.close()

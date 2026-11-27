@@ -84,10 +84,14 @@ export const THINK_HINT =
   ' If answering well needs careful step-by-step working that you could get wrong at a glance ' +
   '(several calculation steps, a logic puzzle, fitting a plan around times), reply with only THINK.';
 
-/** The reply is the THINK marker (alone, possibly with punctuation or formatting). */
+/**
+ * The reply is the THINK marker: alone (any case, possibly with punctuation or formatting), or
+ * in capitals at the start of a longer reply. On the phone the model wrote "THINK" and then its
+ * working, so the marker alone never matched (27 Nov).
+ */
 export function wantsThinking(text: string): boolean {
   const t = text.trim();
-  return t.length <= 20 && /^\W*THINK\W*$/i.test(t);
+  return /^\W*THINK\b/.test(t) || (t.length <= 20 && /^\W*THINK\W*$/i.test(t));
 }
 
 // --- Variants measured on the phone and not used (kept for the bench, docs/BENCH.md) ---
@@ -131,6 +135,11 @@ export function parseClassify(text: string, tools: ToolSpec[] = DECIDE_TOOLS): D
     .filter((x) => w.split('_').length > 1 && w.includes(x.name))
     .sort((a, b) => b.name.length - a.name.length)[0];
   if (inside) return { kind: 'do', tool: inside.name };
+  // A tool's main choice instead of its name ("upscale" for edit_photo, seen on the phone).
+  const byChoice = tools.filter((x) =>
+    Object.values(x.args).some((a) => a.required && a.values?.includes(w)),
+  );
+  if (byChoice.length === 1) return { kind: 'do', tool: byChoice[0].name };
   return { kind: 'answer' };
 }
 

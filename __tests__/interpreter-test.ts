@@ -1,5 +1,6 @@
 /** The interpreter's pure logic: languages, prompts, reading the model's replies, routing. */
 import {
+  androidSpeech,
   INTERPRET_LANGUAGES,
   interpretLanguage,
   languageFromName,
@@ -123,5 +124,21 @@ describe('routing', () => {
     expect(DECIDE_TOOLS).toContain(t);
     expect(catalogSystem()).toContain('or interpret a spoken conversation');
     expect(lockSafe('translate', { to: 'Spanish', talk: true })).toBe(false);
+  });
+});
+
+describe('androidSpeech', () => {
+  // expo-speech rejects "es-ES" as a language and speaks with the phone's own (English) voice.
+  it('gives the language code, never the full tag', () => {
+    expect(androidSpeech(es, [])).toEqual({ language: 'es' });
+  });
+  it("picks an offline voice for the tag's region", () => {
+    const voices = [
+      { identifier: 'es-us-x-esd-local', language: 'es-US' },
+      { identifier: 'es-es-x-eed-network', language: 'es-ES' },
+      { identifier: 'es-es-x-eea-local', language: 'es-ES' },
+    ];
+    expect(androidSpeech(es, voices)).toEqual({ language: 'es', voice: 'es-es-x-eea-local' });
+    expect(androidSpeech(ja, voices)).toEqual({ language: 'ja' });
   });
 });

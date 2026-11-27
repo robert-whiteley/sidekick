@@ -16,6 +16,14 @@ test('edit_photo is offered to the sorter only with a photo, and never to routin
   expect(NOT_IN_ROUTINES.has('edit_photo')).toBe(true);
 });
 
+test('an edit written as a flag is read as the op; one carrying details is not guessed', () => {
+  // Seen on the phone (27 Nov), even after the retry with the reason.
+  expect(editCall({ grayscale: true })).toEqual({ op: 'grayscale', args: {} });
+  expect(editCall({ enhance: {} })).toEqual({ op: 'enhance', args: {} });
+  expect(editCall({ background: { mode: 'blur' } })).toBeNull();
+  expect(editCall({ grayscale: true, flip: true })).toBeNull();
+});
+
 describe('parseEditReply', () => {
   test('background white', () => {
     const e = parseEditReply('{"tool":"edit_photo","args":{"op":"background","mode":"white"}}');
