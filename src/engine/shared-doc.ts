@@ -8,6 +8,13 @@
 import SidekickNative from '../../modules/sidekick-native';
 import { integrationsNative, type RecordingStatus } from '@/integrations/native';
 import { rememberExchange, ownerVoice } from '@/memory/store';
+import { Directory, File, Paths } from 'expo-file-system';
+import * as Sharing from 'expo-sharing';
+
+import { readDeviceFile } from '@/files/device';
+import { extOf, fileType } from '@/files/kinds';
+import { type Sheet, sheetSummary, sheetText, toCsv } from '@/files/sheet';
+import { DESCRIBE_PROMPT, parseDescription } from '@/memory/photo-text';
 import { addSharedFile, readPdf } from '@/memory/sources';
 import { clipText, type WebSource } from '@/web/lookup-logic';
 import { isOnline } from '@/web/lookup';
@@ -19,23 +26,33 @@ import { getSettings } from './settings';
 import type { SharedItem } from './share-in';
 import {
   type Attachment,
+  clockOf,
   combinePrompt,
   DOC_LIMITS,
   DOC_SYSTEM,
   docLabel,
   docParts,
   docPrompt,
-  fileKind,
   firstUrl,
   labelSpeakers,
   parseRecordingLines,
   partPrompt,
   recordingReadyLine,
+  SHEET_SUMMARY_QUESTION,
   TRANSCRIPT_QUESTION,
   transcriptText,
+  videoText,
 } from './shared-doc-logic';
+import { answerSheetQuestion } from './sheet-query';
 
-export type SharedAnswer = { text: string; ms: number; web?: WebSource[]; waitingOnline?: boolean };
+export type SharedAnswer = {
+  text: string;
+  ms: number;
+  web?: WebSource[];
+  waitingOnline?: boolean;
+  /** Changes to keep on the attachment (a page read, a video looked at, a column added). */
+  update?: Partial<Attachment>;
+};
 
 /** What the chat attaches for a share (a picture or plain text are handled by the Ask screen). */
 export async function attachmentFor(item: SharedItem): Promise<Attachment | null> {
@@ -51,37 +68,179 @@ export async function attachmentFor(item: SharedItem): Promise<Attachment | null
   }
   if (item.fileError)
     return {
-      kind: 'text',
+      kind: 'file',
       name: item.fileError,
       at,
-      error: "I couldn't open that file (it may be too big).",
+      error: "I couldn't open that file (it may be too big: up to 400 MB works).",
     };
-  if (item.filePath) {
-    const name = item.fileName || 'Shared file';
-    const kind = fileKind(item.mime, name);
-    if (!kind) return { kind: 'text', name, at, error: "I can't read this kind of file yet." };
-    if (kind === 'audio') return startRecording(item.filePath, name, at);
-    try {
-      if (kind === 'pdf') {
-        const r = await readPdf(item.filePath);
-        if (!r.text.trim())
-          return { kind, name, at, error: "I couldn't find any text in this PDF." };
-        return { kind, name, at, text: r.text, partial: !r.complete };
-      }
-      const text = SidekickNative.readText(item.filePath) ?? '';
-      if (!text.trim()) return { kind, name, at, error: 'This file is empty.' };
-      return { kind, name, at, text };
-    } catch (e) {
-      console.log(`[share] read failed: ${String(e)}`);
-      return { kind, name, at, error: "I couldn't read that file." };
-    } finally {
-      // The text is in the chat now; the copy in the cache isn't needed.
-      SidekickNative.deleteFile(item.filePath);
-    }
-  }
+  if (item.filePath)
+    return fileAttachment(item.filePath, item.fileName || 'Shared file', item.mime, at);
   const url = firstUrl(item.text ?? '');
   if (url) return { kind: 'page', name: item.subject?.trim() || siteOf(url), at, url };
   return null;
+}
+
+/**
+ * A file shared in or attached: read with the file readers (src/files), a PDF with the PDF
+ * reader, a recording or video's speech in the background. The copy in the cache is removed once
+ * read (a recording's or video's when its speech is read).
+ */
+export async function fileAttachment(
+  path: string,
+  name: string,
+  mime: string | undefined,
+  at: number,
+): Promise<Attachment> {
+  const guess = fileType(name, mime);
+  if (guess === 'audio') return startRecording(path, name, at);
+  if (guess === 'video') return startVideo(path, name, at);
+  let keepFile = false;
+  try {
+    const r = await readDeviceFile(path, name, mime);
+    const typeLabel = r.label;
+    switch (r.kind) {
+      case 'media':
+        if (r.type === 'audio') {
+          keepFile = true;
+          return startRecording(path, name, at);
+        }
+        if (r.type === 'video') {
+          keepFile = true;
+          return await startVideo(path, name, at);
+        }
+        if (r.type === 'image') {
+          keepFile = true;
+          return { kind: 'image', name, at, path, typeLabel };
+        }
+        {
+          const pdf = await readPdf(path);
+          if (!pdf.text.trim())
+            return { kind: 'pdf', name, at, error: "I couldn't find any text in this PDF." };
+          return { kind: 'pdf', name, at, text: pdf.text, partial: !pdf.complete };
+        }
+      case 'text':
+        return {
+          kind: 'text',
+          name: r.title || name,
+          at,
+          text: r.text,
+          partial: r.truncated,
+          typeLabel,
+        };
+      case 'sheet':
+        return {
+          kind: 'sheet',
+          name,
+          at,
+          text: r.text,
+          partial: r.truncated,
+          typeLabel,
+          sheets: r.sheets,
+          summary: r.summary,
+        };
+      default:
+        return { kind: 'file', name, at, typeLabel, error: r.text };
+    }
+  } catch (e) {
+    console.log(`[share] read failed: ${String(e)}`);
+    return { kind: 'file', name, at, error: "I couldn't read that file." };
+  } finally {
+    // The text is in the chat now; the copy in the cache isn't needed.
+    if (!keepFile) SidekickNative.deleteFile(path);
+  }
+}
+
+/** Files bigger than this aren't copied in (as for shares, PhoneExtras.kt). */
+const ATTACH_MAX_BYTES = 400_000_000;
+
+/**
+ * The paperclip: the system file picker (any kind of file, on both phones), the file copied into
+ * the cache like a share. Null if nothing was picked.
+ */
+export async function pickAttachment(): Promise<SharedItem | null> {
+  const r = await File.pickFileAsync({ mimeTypes: ['*/*'] });
+  if (r.canceled || !r.result) return null;
+  const picked = r.result;
+  const at = Date.now();
+  const name = picked.name || 'Attached file';
+  if ((picked.size ?? 0) > ATTACH_MAX_BYTES) return { fileError: name, at };
+  try {
+    const dir = new Directory(Paths.cache, 'attached');
+    if (!dir.exists) dir.create({ intermediates: true });
+    // Pictures stay for the questions after; anything left from earlier days goes.
+    for (const old of dir.list())
+      if (old instanceof File && at - (old.modificationTime ?? at) > 2 * 86_400_000) old.delete();
+    // A plain name for the copy (the real name travels with it), so its path needs no escaping.
+    const ext = extOf(name)
+      .replace(/[^a-z0-9]/g, '')
+      .slice(0, 8);
+    const copy = new File(dir, ext ? `${at}.${ext}` : String(at));
+    picked.copy(copy);
+    return {
+      filePath: copy.uri.replace(/^file:\/\//, ''),
+      fileName: name,
+      mime: picked.type || undefined,
+      at,
+    };
+  } catch (e) {
+    console.log(`[attach] copy failed: ${String(e)}`);
+    return { fileError: name, at };
+  }
+}
+
+// --- Videos: a few still pictures, and the speech like a recording ---
+
+/** Still pictures taken from a video (looked at when it is first asked about). */
+const VIDEO_FRAMES = 4;
+const FRAME_EDGE = 768;
+
+async function startVideo(path: string, name: string, at: number): Promise<Attachment> {
+  let frames: { path: string; atMs: number }[] = [];
+  try {
+    const dir = new Directory(Paths.cache, 'video-frames', `v${at}`).uri.replace(/^file:\/\//, '');
+    frames =
+      (await SidekickNative.videoFrames?.(path, VIDEO_FRAMES, dir, FRAME_EDGE))?.frames ?? [];
+  } catch (e) {
+    console.log(`[share] video frames failed: ${String(e)}`);
+  }
+  const speech = startRecording(path, name, at);
+  // Another recording still being read: try again after it.
+  if (speech.error && integrationsNative()?.recordingStart) {
+    SidekickNative.deleteFile(path);
+    frames.forEach((f) => SidekickNative.deleteFile(f.path));
+    return { ...speech, kind: 'video' };
+  }
+  const noSpeech = !speech.recordingId;
+  if (noSpeech) SidekickNative.deleteFile(path);
+  if (!frames.length && noSpeech)
+    return { kind: 'video', name, at, error: "I couldn't read this video on this phone." };
+  return {
+    kind: 'video',
+    name,
+    at,
+    typeLabel: 'Video',
+    frames,
+    recordingId: speech.recordingId,
+    progress: noSpeech ? 1 : 0,
+    noSpeech: noSpeech || undefined,
+  };
+}
+
+/** What a video's still pictures show (the chat model looks at each; once per video). */
+export async function describeFrames(
+  frames: { path: string; atMs: number }[],
+  onStatus: (line: string) => void,
+): Promise<string> {
+  const lines: string[] = [];
+  for (let i = 0; i < frames.length; i++) {
+    onStatus(`Looking at the video (${i + 1} of ${frames.length})…`);
+    const f = frames[i];
+    const r = await askLlm(DESCRIBE_PROMPT, f.path, () => {}, { maxTokens: 120, scratch: true });
+    const d = parseDescription(r.text);
+    if (d) lines.push(`[${clockOf(f.atMs)}] ${d}`);
+    SidekickNative.deleteFile(f.path);
+  }
+  return lines.join('\n');
 }
 
 // --- Recordings ---
@@ -328,6 +487,9 @@ export async function answerShared(
     onText(a.error);
     return { text: a.error, ms: 0 };
   }
+  if (a.kind === 'sheet' && a.sheets?.length)
+    return answerSheet(a, a.sheets, q, onText, onStatus, offRecord);
+  if (a.kind === 'video') return answerVideo(a, q, onText, onStatus, offRecord);
   if (a.kind === 'audio' && !a.text) {
     const st = a.recordingId ? recordingStatus(a.recordingId) : null;
     const pct = st && st.totalMs ? Math.round((st.doneMs / st.totalMs) * 100) : 0;
@@ -353,4 +515,99 @@ export async function answerShared(
   if (!offRecord && a.kind !== 'selection' && !('waitingOnline' in r && r.waitingOnline))
     await rememberExchange(`${q} (about ${docLabel(a)})`, r.text).catch(() => {});
   return r;
+}
+
+const remember = async (a: Attachment, q: string, text: string, offRecord: boolean) => {
+  if (!offRecord) await rememberExchange(`${q} (about ${docLabel(a)})`, text).catch(() => {});
+};
+
+const sheetAsk = async (prompt: string, system: string, maxTokens: number) =>
+  (await askLlm(prompt, null, () => {}, { system, maxTokens, scratch: true })).text;
+
+/**
+ * A question about a spreadsheet: worked out exactly with a formula (sheet-query.ts) when it is
+ * a calculation; otherwise read like a document (its summary, then its cells as text).
+ */
+async function answerSheet(
+  a: Attachment,
+  sheets: Sheet[],
+  q: string,
+  onText: (full: string) => void,
+  onStatus: (line: string) => void,
+  offRecord: boolean,
+): Promise<SharedAnswer> {
+  const t0 = Date.now();
+  if (q === SHEET_SUMMARY_QUESTION) {
+    const text = a.summary ?? sheetSummary(sheets);
+    onText(text);
+    return { text, ms: 0 };
+  }
+  onStatus('Working it out…');
+  const r = await answerSheetQuestion(q, sheets, 0, sheetAsk);
+  if (r.kind === 'read') {
+    const text = `${a.summary ?? sheetSummary(sheets)}\n\n${a.text ?? sheetText(sheets)}`;
+    const x = await answerFromText(docLabel(a), text, q, onText, onStatus);
+    await remember(a, q, x.text, offRecord);
+    return x;
+  }
+  onText(r.text);
+  await remember(a, q, r.text, offRecord);
+  const update: Partial<Attachment> | undefined =
+    r.kind === 'answer' && r.sheets
+      ? {
+          sheets: r.sheets,
+          changed: true,
+          summary: sheetSummary(r.sheets),
+          text: sheetText(r.sheets),
+        }
+      : undefined;
+  return { text: r.text, ms: Date.now() - t0, update };
+}
+
+/** A question about a video: its pictures looked at once, then answered with its speech. */
+async function answerVideo(
+  a: Attachment,
+  q: string,
+  onText: (full: string) => void,
+  onStatus: (line: string) => void,
+  offRecord: boolean,
+): Promise<SharedAnswer> {
+  if (a.recordingId && !a.text && (a.progress ?? 0) < 1) {
+    const st = recordingStatus(a.recordingId);
+    const pct = st && st.totalMs ? Math.round((st.doneMs / st.totalMs) * 100) : 0;
+    const text = `I'm still listening to the video (${pct}%). Ask again when it's done; I'll say when.`;
+    onText(text);
+    return { text, ms: 0 };
+  }
+  if (q === TRANSCRIPT_QUESTION && a.text) {
+    onText(a.text);
+    return { text: a.text, ms: 0 };
+  }
+  let frameNotes = a.frameNotes;
+  if (frameNotes === undefined && a.frames?.length)
+    frameNotes = await describeFrames(a.frames, onStatus);
+  const body = videoText({ ...a, frameNotes });
+  if (!body.trim()) {
+    const text =
+      "I couldn't find anything to go on in this video: no speech, and the pictures couldn't be read.";
+    onText(text);
+    return { text, ms: 0, update: { frameNotes: frameNotes ?? '' } };
+  }
+  const r = await answerFromText(docLabel(a), body, q, onText, onStatus);
+  await remember(a, q, r.text, offRecord);
+  return { ...r, update: frameNotes !== a.frameNotes ? { frameNotes, frames: [] } : undefined };
+}
+
+/** A spreadsheet with a new column, as a CSV file handed to the share sheet (save or send it). */
+export async function shareSheetCsv(a: Attachment): Promise<boolean> {
+  const sheet = a.sheets?.[0];
+  if (!sheet) return false;
+  const base = a.name.replace(/\.[^.]+$/, '') || 'sheet';
+  const file = new File(Paths.cache, `${base} (changed).csv`);
+  if (file.exists) file.delete();
+  file.create();
+  file.write(toCsv(sheet));
+  if (!(await Sharing.isAvailableAsync())) return false;
+  await Sharing.shareAsync(file.uri, { mimeType: 'text/csv', dialogTitle: `Save ${base}` });
+  return true;
 }

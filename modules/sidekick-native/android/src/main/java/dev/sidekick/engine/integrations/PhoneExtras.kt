@@ -291,6 +291,11 @@ object PhoneExtras {
       mime.startsWith("audio/ogg") || mime == "audio/opus" -> "ogg"
       mime == "audio/wav" || mime == "audio/x-wav" -> "wav"
       mime.startsWith("audio/") -> "audio"
+      mime == "video/mp4" -> "mp4"
+      mime == "video/quicktime" -> "mov"
+      mime == "video/webm" -> "webm"
+      mime == "video/3gpp" -> "3gp"
+      mime.startsWith("video/") -> "video"
       else -> "bin"
     }
 

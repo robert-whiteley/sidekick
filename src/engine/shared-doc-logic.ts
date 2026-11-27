@@ -4,6 +4,7 @@
  * share is, how a long text is cut to fit the model, the (small) prompts, and who said what in a
  * recording. Pure; tested in __tests__/shared-doc-test.ts.
  */
+import type { Sheet } from '@/files/sheet';
 import { chunkText } from '@/memory/sources-logic';
 import {
   cosine,
@@ -13,7 +14,8 @@ import {
   SHORT_CLIP_SIM,
 } from '@/memory/voices';
 
-export type AttachmentKind = 'pdf' | 'text' | 'audio' | 'page' | 'selection';
+export type AttachmentKind =
+  'pdf' | 'text' | 'sheet' | 'audio' | 'video' | 'image' | 'file' | 'page' | 'selection';
 
 /** What the next questions are about, shown above the composer until it is closed. */
 export type Attachment = {
@@ -35,6 +37,20 @@ export type Attachment = {
   replaceable?: boolean;
   /** Something went wrong reading it (shown instead of the chips). */
   error?: string;
+  /** What kind of file it is in words ("Word document", "Spreadsheet"). */
+  typeLabel?: string;
+  /** A spreadsheet's sheets (questions are worked out on them) and its summary. */
+  sheets?: Sheet[];
+  summary?: string;
+  /** A column was added: the sheet can be saved. */
+  changed?: boolean;
+  /** A picture to ask about (the Ask screen shows it as a shared picture). */
+  path?: string;
+  /** A video's still pictures, and what is in them once looked at. */
+  frames?: { path: string; atMs: number }[];
+  frameNotes?: string;
+  /** A video's speech can't be read on this phone (only its pictures are). */
+  noSpeech?: boolean;
 };
 
 /** The model's window is 4,096 tokens; one pass reads about 2,300 tokens of text at most. */
@@ -67,27 +83,6 @@ export function isJustLink(text: string, subject = ''): boolean {
   return rest.length <= 120 && rest.split(/\s+/).filter(Boolean).length <= 16;
 }
 
-/** A shared file's kind from its type and name, or null if Sidekick can't read it. */
-export function fileKind(
-  mime: string | undefined,
-  name: string | undefined,
-): AttachmentKind | null {
-  const m = (mime ?? '').toLowerCase();
-  const ext = (name ?? '').toLowerCase().split('.').pop() ?? '';
-  if (m === 'application/pdf' || ext === 'pdf') return 'pdf';
-  if (
-    m.startsWith('audio/') ||
-    ['m4a', 'mp3', 'aac', 'ogg', 'opus', 'wav', 'amr', '3gp', 'flac'].includes(ext)
-  )
-    return 'audio';
-  if (
-    m.startsWith('text/') ||
-    ['txt', 'md', 'csv', 'log', 'json', 'html', 'htm', 'srt', 'vtt'].includes(ext)
-  )
-    return 'text';
-  return null;
-}
-
 /** Suggested first questions, by kind (buttons above the composer; typing anything works too). */
 export function suggestions(a: Attachment): { label: string; question: string }[] {
   switch (a.kind) {
@@ -99,6 +94,17 @@ export function suggestions(a: Attachment): { label: string; question: string }[
         { label: 'Shorter', question: 'Make this shorter.' },
         { label: 'Summarise', question: 'Summarise this.' },
         { label: 'Draft a reply', question: 'Draft a short reply to this.' },
+      ];
+    case 'sheet':
+      return [
+        { label: "What's in it", question: SHEET_SUMMARY_QUESTION },
+        { label: 'Totals', question: 'What are the totals of the number columns?' },
+        { label: 'Summarise', question: 'Summarise this spreadsheet.' },
+      ];
+    case 'video':
+      return [
+        { label: 'Summarise', question: 'Summarise this video.' },
+        ...(a.text ? [{ label: 'Transcript', question: TRANSCRIPT_QUESTION }] : []),
       ];
     case 'audio':
       return [
@@ -122,11 +128,18 @@ export function suggestions(a: Attachment): { label: string; question: string }[
 /** The Transcript button shows the transcript itself (no model needed). */
 export const TRANSCRIPT_QUESTION = 'Show the transcript.';
 
+/** A spreadsheet's "What's in it" button: its sheets and columns, worked out in code. */
+export const SHEET_SUMMARY_QUESTION = 'What is in this spreadsheet?';
+
 /** How a share is named in prompts. */
 export function docLabel(a: Attachment): string {
   switch (a.kind) {
     case 'audio':
       return `the transcript of the recording "${a.name}"`;
+    case 'video':
+      return `the video "${a.name}" (what is seen and said in it)`;
+    case 'sheet':
+      return `the spreadsheet "${a.name}"`;
     case 'page':
       return `the web page "${a.name}"`;
     case 'selection':
@@ -250,6 +263,15 @@ export function clockOf(ms: number): string {
   const m = Math.floor((s % 3600) / 60);
   const ss = String(s % 60).padStart(2, '0');
   return h ? `${h}:${String(m).padStart(2, '0')}:${ss}` : `${m}:${ss}`;
+}
+
+/** A video as text: what its still pictures show, then what is said. */
+export function videoText(a: Pick<Attachment, 'frameNotes' | 'text' | 'noSpeech'>): string {
+  const parts: string[] = [];
+  if (a.frameNotes) parts.push(`What is seen (still pictures through the video):\n${a.frameNotes}`);
+  if (a.text) parts.push(`What is said:\n${a.text}`);
+  else if (a.noSpeech) parts.push("(The speech in it can't be read on this phone.)");
+  return parts.join('\n\n');
 }
 
 /** "[0:12] Speaker 1: …" with one speaker's lines in a row joined. */

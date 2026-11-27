@@ -119,6 +119,16 @@ declare class SidekickNativeModule extends NativeModule<SidekickNativeModuleEven
   voiceSetRate?(rate: number): void;
   /** Android: QR codes and barcodes in a JPEG (ZXing): JSON array of {format, text}. */
   scanCodes?(path: string): Promise<string>;
+  /**
+   * A few still pictures from a video, evenly spread, as JPEGs in [outDir] no larger than
+   * [maxEdge] px (Android MediaMetadataRetriever, iPhone AVAssetImageGenerator).
+   */
+  videoFrames?(
+    path: string,
+    count: number,
+    outDir: string,
+    maxEdge: number,
+  ): Promise<{ durationMs: number; frames: { path: string; atMs: number }[] }>;
   /** Android 11+: the system "Save this network?" sheet for a Wi-Fi QR code; false if not shown. */
   wifiAddNetwork?(ssid: string, password: string | null, security: string): boolean;
   /** Android: long-press app icon shortcuts (Ask, Listen, Camera, Remember this). */

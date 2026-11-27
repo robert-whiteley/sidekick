@@ -30,6 +30,7 @@ export const ICONS = {
   back5: { name: 'replay_5', code: 0xe05b },
   forward5: { name: 'forward_5', code: 0xe058 },
   share: { name: 'share', code: 0xe80d },
+  attach: { name: 'attach_file', code: 0xe226 },
   save: { name: 'download', code: 0xf090 },
   delete: { name: 'delete', code: 0xe872 },
   edit: { name: 'edit', code: 0xe3c9 },

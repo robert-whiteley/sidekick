@@ -10,7 +10,8 @@ import type { ChatTheme } from './theme';
  * "Ask Sidekick": the camera button on the left; a mic when the field is empty (hold to talk, or
  * tap to talk until tapped again), a send arrow when there is text. While answering, Stop sits
  * beside them: what is sent meanwhile waits its turn (send-queue.ts). Long-press send: Off the
- * record, or while answering, Send now. `large`: hands-free (driving / walking) sizes.
+ * record, or while answering, Send now. The paperclip attaches a file to ask about (any kind;
+ * not in hands-free). `large`: hands-free (driving / walking) sizes.
  */
 export function Composer({
   theme,
@@ -26,6 +27,7 @@ export function Composer({
   onMicOut,
   cameraOn,
   onCamera,
+  onAttach,
   large = false,
 }: {
   theme: ChatTheme;
@@ -41,6 +43,7 @@ export function Composer({
   onMicOut: () => void;
   cameraOn: boolean;
   onCamera: () => void;
+  onAttach?: () => void;
   large?: boolean;
 }) {
   const hasText = value.trim().length > 0;
@@ -75,6 +78,18 @@ export function Composer({
           multiline
           submitBehavior="submit"
         />
+        {onAttach && !large ? (
+          <Tappable
+            feedback="dim"
+            onPress={onAttach}
+            style={action}
+            accessibilityRole="button"
+            accessibilityLabel="Attach a file"
+            accessibilityHint="A document, spreadsheet, picture, recording, video or any file to ask about"
+          >
+            <Icon name="attach" size={icon} color={theme.icon} />
+          </Tappable>
+        ) : null}
         {answering ? (
           <Tappable
             feedback="dim"
