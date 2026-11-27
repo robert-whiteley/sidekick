@@ -313,6 +313,8 @@ export async function answer(
     return { text, usedPhoto: photoNow, sources: [], ms: Date.now() - t0, ttftMs: 0 };
   };
   let useClipboard = false;
+  // The model chose to play back a recording (play_recording): the heard line's clip is shown.
+  let wantsRecording = false;
   const routed = async (o: RouteOutcome): Promise<AnswerResult | null> => {
     switch (o.kind) {
       case 'reply':
@@ -337,6 +339,7 @@ export async function answer(
       }
       case 'answer':
         useClipboard = !!o.clipboard;
+        wantsRecording = !!o.recording;
         return null;
       case 'research': {
         // Several searches, pages read on the phone, one report with numbered sources.
@@ -669,6 +672,8 @@ export async function answer(
     momentId,
     media: recall?.media
       ? [{ momentAt: recall.media.at, kind: recall.media.kind, path: recall.media.path }]
-      : speechClipFor(question, sources),
+      : wantsRecording
+        ? speechClipFor(sources)
+        : undefined,
   };
 }

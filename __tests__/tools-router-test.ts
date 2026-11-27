@@ -119,6 +119,12 @@ describe('running a tool', () => {
       to: 'Spanish',
     });
   });
+  it('play_recording answers normally with the heard clip asked for', async () => {
+    expect(await runTool('play_recording', {}, 'play me that bit again', quiet, NOW)).toEqual({
+      kind: 'answer',
+      recording: true,
+    });
+  });
   it('sends an info tool to its own handler as canonical words', async () => {
     const out = await runTool('weather', { place: 'Leeds' }, 'umbrella needed in Leeds?', quiet);
     expect(out).toEqual({ kind: 'rules', text: "what's the weather in Leeds" });
