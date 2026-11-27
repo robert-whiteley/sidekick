@@ -11,7 +11,7 @@ internal import ExpoAppIntents
 struct AskSidekickIntent: AppIntent {
   static let title: LocalizedStringResource = "Ask Sidekick"
   static var description: IntentDescription {
-    IntentDescription("Opens Sidekick and asks your question. The answer is worked out on this iPhone.")
+    IntentDescription("Opens Sidekick and asks your question. The answer is worked out on the device, offline.")
   }
   static let openAppWhenRun: Bool = true
 
