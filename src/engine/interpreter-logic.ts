@@ -165,7 +165,7 @@ export function turnPrompt(
 
 /**
  * Might the owner be talking to Sidekick rather than to the other person? Only decides whether
- * the model is asked (controlPrompt, ~2 s on a Pixel 5); the model makes the call. Measured:
+ * the model is asked (controlPrompt, ~3.3 s on a Pixel 5); the model makes the call. Measured:
  * asked inside the translation itself, Gemma 4 E2B translated "stop interpreting" to the driver
  * in 34 of 35 cases (docs/BENCH.md "Interpreter").
  */

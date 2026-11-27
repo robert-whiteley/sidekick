@@ -605,3 +605,87 @@ peak memory. Decision and details in [ADR 10](decisions/0010-litert-lm-0.20.md).
   nothing was installed. Still to do with `sk-litert20.apk`: the Speed test bench by deep link,
   twice (the first run rebuilds the cache), with first word, words/s and peak memory
   (`dumpsys meminfo`) for text and photo, against 0.19.1.
+
+## Interpreter (26 Nov 2026)
+
+**What is measured.** 20 made-up travel turns (taxi, hotel, café, pharmacy, shop) in 7
+languages, each with an English and a foreign side (`bench/interpreter/phrases.json`), sent with
+the app's own prompts (`prompts.ts`); 10 owner lines said to Sidekick ("stop interpreting", "can
+you switch to French") among the ordinary ones for the control check; made-up speech for the
+same lines from Kokoro (Apache-2.0) for speech recognition. chrF (sacrebleu) against the
+reference; WER (CER for Japanese). Audio was deleted after the run.
+
+### Translation: Gemma 4 E2B vs Bergamot (laptop, 20 turns × 7 languages)
+
+chrF, into the language / into English:
+
+| Language   | Gemma 4 E2B     | Bergamot (Firefox Translations) |
+| ---------- | --------------- | ------------------------------- |
+| Arabic     | 70.5 / 71.8     | 70.0 / 69.9                     |
+| German     | 73.5 / 78.4     | 71.4 / 73.2                     |
+| Spanish    | 73.2 / 77.3     | 75.8 / 73.1                     |
+| French     | 74.8 / 81.0     | 74.5 / 80.3                     |
+| Italian    | 76.7 / 79.9     | 69.5 / 73.1                     |
+| Japanese   | 52.1 / 59.7     | 42.5 / 53.5                     |
+| Portuguese | 70.7 / 83.3     | 77.6 / 73.8                     |
+| **Mean**   | **70.2 / 75.9** | 68.7 / 71.0                     |
+
+Round trip English → language → English (Gemma): chrF 79.3 (Arabic 82.2, German 85.9, Spanish
+84.3, French 77.4, Italian 85.1, Japanese 59.4, Portuguese 80.9). Spot check by reading: no
+meaning errors from Gemma, no line left untranslated; small slips ("nueces"/"noci" for nuts in
+general, French "Est-ce pas grave", dropped greetings). Bergamot reversed a Japanese medical line
+("if the fever doesn't go down in three days" → "if you don't have a fever"). Bergamot takes
+130–360 ms a turn on one thread, about 10× faster.
+
+### On the phone (Pixel 5, CPU, Gemma 4 E2B via LiteRT-LM)
+
+| What                                                    | Result                                                                                               |
+| ------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| Translation turn (62 turns)                             | median 5.3 s, 90th percentile 6.0 s; first words after 3.2 s                                         |
+| Control check (60 owner lines)                          | 3.3 s each, only on the 30 lines with a trigger word                                                 |
+| chrF (Arabic, Japanese, Portuguese, 10 + 10 turns each) | 66.1 / 71.8, 53.1 / 57.6, 71.1 / 82.1 — within 5 points of the laptop                                |
+| Control decisions                                       | Same as the laptop (below)                                                                           |
+| English hearing (Parakeet v2, 20 clips)                 | 0.56 s median per line, 0.84 s worst                                                                 |
+| Peak app memory (PSS)                                   | 3.1 GB during the bench run (Gemma loaded)                                                           |
+| Downloads                                               | Whisper small 375 MB, Parakeet v3 487 MB (once, kept); Gemma and the voices are already on the phone |
+
+Logcat over Wi-Fi lost some lines, so 122 of the 200 translation cases were recovered (all
+three languages above fully, the others not). The phone runs of Parakeet v3 and Whisper small
+did not happen: the 652 MB Parakeet v3 encoder didn't finish copying to the phone and the phone
+slot ran out; their accuracy below is from the laptop.
+
+### Speech recognition (laptop, made-up audio)
+
+WER % (CER for Japanese):
+
+| Model         | en  | de   | es  | fr   | it   | pt   | ja    |
+| ------------- | --- | ---- | --- | ---- | ---- | ---- | ----- |
+| Parakeet v3   | 0.9 | 4.8  | 5.8 | 3.8  | 8.1  | 6.0  | –     |
+| Whisper small | 1.6 | 8.8  | 4.5 | 6.1  | 5.7  | 11.2 | 63.2  |
+| Whisper base  | 4.7 | 10.8 | 6.4 | 10.4 | 13.0 | 15.7 | 76.2  |
+| SenseVoice    | 9.1 | –    | –   | –    | –    | –    | 111.6 |
+
+Parakeet v3 for the European languages, Whisper small for the rest. Japanese is not verified:
+every model failed on Kokoro's Japanese voice, which points at the made-up audio.
+
+### Owner talking to Sidekick mid-conversation
+
+Asked inside the translation prompt, Gemma translated "stop interpreting" to the other person in
+34 of 35 cases. A separate short call ("who is this said to: OTHER / END / LANGUAGE"), only for
+lines with a trigger word, on Spanish, German and Japanese sessions:
+
+| Line said                               | Right                                                            |
+| --------------------------------------- | ---------------------------------------------------------------- |
+| To the other person                     | 45/45 (none ended the session, incl. "please stop the car here") |
+| Stop                                    | 9/9                                                              |
+| Switch to French                        | 3/3                                                              |
+| "Can you use Italian with her instead?" | 0/3 (kept translating)                                           |
+
+### Still weak / not measured
+
+- Parakeet v3 and Whisper small on the phone (speed and memory while hearing a language).
+- Anything heard out loud: real mic turns, a real speaker of the language, and the phone voices
+  speaking translations (no sound tests without the owner's go-ahead).
+- The interpreter screen on a phone, and everything on iPhone (Apple speech, voices; the iOS
+  code was not compiled here).
+- A turn of ~5 s is usable but slow; Bergamot is the faster fallback if it feels too slow.

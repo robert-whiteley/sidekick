@@ -210,7 +210,8 @@ Read this before proposing any of these again. Each line says why.
   ("if the fever doesn't go down in three days" → "if you don't have a fever"), Gemma made no
   meaning errors. Bergamot is ~10× faster but needs its own native engine on both phones
   (bergamot-translator C++ with ruy, not built for iOS yet) and two ~40 MB downloads per language.
-  Kept as the option if turns feel slow on the phone.
+  On the Pixel 5 a Gemma turn takes ~5.3 s, the first words showing after ~3.2 s; Bergamot stays
+  the option if that feels slow.
 - Rejected translation models: NLLB-200 and M2M-100 / SeamlessM4T (CC BY-NC, non-commercial),
   Opus-MT / Helsinki models (CC BY 4.0 weights but per-pair Marian builds and weaker than
   Bergamot), Google ML Kit translation (closed source, Google Play services), slimt (GPL-2.0),
