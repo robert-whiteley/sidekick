@@ -2,7 +2,12 @@ import { Conversation } from '@/engine/conversation';
 import { ANSWER_STYLE_MAX, questionPart, SYSTEM_PROMPT, withAnswerStyle } from '@/engine/prompts';
 import { forSpeech } from '@/engine/sentences';
 import { type ChatMessage, lastExchange, withoutExchange } from '@/features/ask/chat-logic';
-import { factPrompt, parseSensitive, sensitiveCheckPrompt } from '@/memory/fact-extraction';
+import {
+  factPrompt,
+  parseSensitive,
+  sensitiveCheckPrompt,
+  unmarked,
+} from '@/memory/fact-extraction';
 import { parseInline, parseMarkdown } from '@/ui/markdown-logic';
 
 // --- Edit and Try again: the last exchange only ---
@@ -150,6 +155,13 @@ test('owner facts: private topics are left out unless allowed', () => {
     'Leave out anything about health, religion or beliefs, sexuality, politics or money.',
   );
   expect(factPrompt(['my code is 4512'], true)).not.toContain('Leave out');
+});
+
+test('owner facts the check marks private are dropped; an unclear check drops all', () => {
+  const facts = ['My locker code is 4512.', 'My diagnosis is type 2 diabetes.'];
+  expect(unmarked(facts, parseSensitive('2', 2))).toEqual(['My locker code is 4512.']);
+  expect(unmarked(facts, parseSensitive('NONE', 2))).toEqual(facts);
+  expect(unmarked(facts, parseSensitive('not sure', 2))).toEqual([]);
 });
 
 test('person facts: the model says which lines are private', () => {

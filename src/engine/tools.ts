@@ -410,6 +410,8 @@ export type ToolPick = {
   tool: string | null;
   args: Record<string, unknown>;
   error?: string;
+  /** The model's last reply, when it declined or the call was refused (for benches). */
+  reply?: string;
   ms: number;
 };
 
@@ -444,13 +446,15 @@ export async function fillTool(
       `${prompt}\nYour reply ${r.reply.trim().slice(0, 200)} was refused: ${r.error}. Reply again.`,
     );
   const ms = Date.now() - t0;
-  if (r.none) return { offered: [tool], tool: 'none', args: {}, ms };
+  const reply = r.reply.trim().slice(0, 200);
+  if (r.none) return { offered: [tool], tool: 'none', args: {}, reply, ms };
   if (!r.error) return { offered: [tool], tool, args: r.args ?? {}, ms };
   return {
     offered: [tool],
     tool: r.error === 'unparsed' ? null : tool,
     args: r.args ?? {},
     error: r.error,
+    reply,
     ms,
   };
 }

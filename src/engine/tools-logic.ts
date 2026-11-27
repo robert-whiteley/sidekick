@@ -73,7 +73,8 @@ export const EDIT_TOOL: ToolSpec = {
     'change the photo: rotate (degrees 90 = clockwise, -90, 180), flip (mirror), crop to a ' +
     'shape, grayscale (black and white), enhance (brighter, clearer colours), background ' +
     '(remove, white, a colour, or blur), erase (remove an object or person from the photo), ' +
-    'upscale (make it bigger and sharper)',
+    'upscale (make it bigger and sharper). Only when asked to change the photo, not questions ' +
+    'about it',
   kind: 'action',
   args: {
     op: { type: 'string', values: [...EDIT_OPS], required: true },
@@ -575,7 +576,19 @@ export function fillPrompt(question: string, now: Date, tool: ToolSpec): string 
 Request: ${JSON.stringify(question)}
 Tool: ${catalogText([tool])}
 
-Reply with one JSON object of this tool's arguments, only those said or implied by the request. If this tool does not fit the request, reply {"none":true}.`;
+Reply with one JSON object of this tool's arguments, keyed by the argument names before the colons (for example ${argExample(tool)}), only those said or implied by the request. If this tool does not fit the request, reply {"none":true}.`;
+}
+
+/**
+ * A one-key example of the reply's shape, from the tool's first argument. Without it the model
+ * wrote edit_photo's choice as the key ({"crop":"square"}) instead of {"op":"crop"}, and every
+ * call was refused (phone bench, 27 Nov).
+ */
+export function argExample(tool: ToolSpec): string {
+  const [name, a] = Object.entries(tool.args)[0] ?? [];
+  if (!name || !a) return '{}';
+  const v = a.values?.[0] ?? (a.type === 'number' ? 1 : a.type === 'boolean' ? true : '...');
+  return JSON.stringify({ [name]: v }).replace(/":/g, '": ');
 }
 
 /** The reply to [fillPrompt] → a call to [tool], {tool:'none'}, or null (not JSON). */
@@ -637,6 +650,23 @@ export function validateCall(call: ToolCall, tools: ToolSpec[] = TOOLS): Validat
   for (const [name, a] of Object.entries(spec.args)) {
     let v = call.args[name];
     if (typeof v === 'string') v = v.trim();
+    // A choice written as a flag ({"grayscale": true} for {"op": "grayscale"}; seen on the phone
+    // even after a retry): taken when exactly one such key is there and it carries nothing else.
+    // Not for tools with an on/off argument, where the flag's value means something
+    // ({"torch": true} is the torch on: asked again instead).
+    if (
+      (v === undefined || v === null) &&
+      a.required &&
+      a.values &&
+      !Object.values(spec.args).some((x) => x.type === 'boolean')
+    ) {
+      const flag = (x: unknown) =>
+        x === true || x === 1 || (!!x && typeof x === 'object' && !Object.keys(x).length);
+      const keys = Object.keys(call.args).filter(
+        (k) => a.values!.includes(k.toLowerCase()) && flag(call.args[k]),
+      );
+      if (keys.length === 1) v = keys[0].toLowerCase();
+    }
     if (v === '' || v === null || v === undefined) {
       if (a.required) return { ok: false, error: `${name} missing` };
       continue;

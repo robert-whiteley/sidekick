@@ -6,6 +6,7 @@ import {
   parseFacts,
   parseSensitive,
   sensitiveCheckPrompt,
+  unmarked,
 } from '@/memory/fact-extraction';
 import { finishPersonFactCheck, uncheckedPersonFacts } from '@/memory/people';
 import { markFactsScanned, ownerLinesToScan, suggestFacts } from '@/memory/store';
@@ -33,12 +34,13 @@ export function inferFactsIfIdle(): Promise<void> {
     );
     const { text } = await askLlmInBackground(prompt, null, { maxTokens: 120 });
     if (cancelled) return; // partial output: try these lines again later
-    await suggestFacts(
-      parseFacts(
-        text,
-        lines.map((l) => l.text),
-      ),
+    const facts = parseFacts(
+      text,
+      lines.map((l) => l.text),
     );
+    const kept = sensitiveOk ? facts : await withoutPrivate(facts);
+    if (cancelled) return;
+    await suggestFacts(kept);
     await markFactsScanned(lines.map((l) => l.id));
   })()
     .catch((e) => {
@@ -74,6 +76,18 @@ async function checkPersonFacts() {
   const keep = facts.filter((f) => !drop.includes(f.id)).map((f) => f.id);
   console.log(`[facts] person facts checked: ${keep.length} kept, ${drop.length} private`);
   await finishPersonFactCheck(keep, drop);
+}
+
+/**
+ * The owner's suggested facts minus those the model marks as a private topic. The fact prompt
+ * also asks to leave them out, but on the phone the model still suggested 5 of 5 private ones
+ * (diagnosis, vote, debt, faith, partner; facts bench, 27 Nov), while this separate check, the
+ * same one as for other people's facts, caught them. An unclear reply drops them all.
+ */
+export async function withoutPrivate(facts: string[]): Promise<string[]> {
+  if (!facts.length) return facts;
+  const { text } = await askLlmInBackground(sensitiveCheckPrompt(facts), null, { maxTokens: 20 });
+  return unmarked(facts, parseSensitive(text, facts.length));
 }
 
 /** Stops a running fact pass so a question gets the model at once. */
