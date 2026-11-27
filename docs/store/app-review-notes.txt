@@ -8,8 +8,8 @@ No login or account. On first launch the app checks free space and downloads its
 The recording shows, from the chat screen:
 - A typed question: type in "Ask Sidekick" and send.
 - A spoken question: hold the mic button, speak, let go (Apple's on-device speech recognition). The answer is shown and read aloud.
-- Memory: say "I parked on level 3", later ask "Where did I park?".
-- Settings (gear icon) > Privacy: online lookup (off by default), Export everything, Delete everything.
+- Offline: with airplane mode on, a question is still answered on the phone.
+- Settings (gear icon) > Privacy: online lookup (off by default), Export everything, Delete everything (shown, not used).
 No sample files are needed.
 
 USER-GENERATED CONTENT
