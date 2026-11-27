@@ -73,8 +73,10 @@ section 10.
 - iPhone screenshots: `node scripts/iphone-screenshots.mjs <folder>` turns iPhone 13 mini screenshots
   into the 6.5" size (1284 × 2778 JPEG).
 
-**Review submission** (attach the newest build and submit): `node scripts/asc-submit.mjs` with the team's
-App Store Connect API key. On the laptop: `ASC_ENV_FILE=~/pocket_animals/frontend/fastlane/.env` (the key
+**Review submission**: `node scripts/asc-submit.mjs --video <screen-recording link>` sets the App Review
+notes (`docs/store/app-review-notes.txt`, the link goes in place of `{{RECORDING_LINK}}`), attaches the newest
+processed build and submits, or resubmits after a rejection. `--notes-only` and `--attach-only` stop
+earlier. Recording steps: `docs/store/APPLE-REVIEW-RECORDING.md`. It needs the team's App Store Connect API key. On the laptop: `ASC_ENV_FILE=~/pocket_animals/frontend/fastlane/.env` (the key
 Pocket Animals uses). From a cloud session this needs GitHub secrets `ASC_KEY_ID`, `ASC_ISSUER_ID` and
 `ASC_KEY_P8` added by the owner; until then submit from the laptop. Content rights are set on the app (no
 third-party content). An empty extra draft submission sits in App Store Connect; harmless.
@@ -99,7 +101,11 @@ goes through GitHub Actions instead, so it works the same from the cloud or the 
 - **Store builds and uploads:** `gh workflow run release.yml -f track=alpha`: both stores from one commit; starting it shows the owner an approval prompt in the chat. Direct EAS store builds and `scripts/release.sh ship --real` are blocked, and production promotions and quick fixes ask the owner (`scripts/claude-guard.py`).
   (`.github/workflows/release.yml`): EAS builds Android and iOS, uploads the AAB to Play (track
   `alpha` = closed test; `internal`, `beta`, `store` = production only after the owner's go) and the
-  iOS build to TestFlight. Watch with `gh run watch`.
+  iOS build to TestFlight. Watch with `gh run watch`, and after starting it run
+  `node scripts/store-status.mjs --watch build --run <run id>`: the session-start check then reports
+  TestFlight processing, the run, App Store review and the Play tracks, only when something changes or
+  is wrong, until nothing is outstanding (marker `.claude/store-pending.json`, git-ignored; offline or
+  without the keys it says nothing).
 - **Quick fixes (OTA):** every merge to `main` publishes an EAS update to the `preview` channel (CI).
   Promote with `eas update:republish --channel production` (needs `EXPO_TOKEN`; run it through a
   workflow from the cloud).
