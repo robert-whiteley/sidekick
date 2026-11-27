@@ -111,6 +111,7 @@ import { Conversation } from '@/engine/conversation';
 import { IPHONE, onIphone } from '@/engine/platform-text';
 import { asksAboutWhatIsInView, wantsCameraNow } from '@/memory/search-logic';
 import { embedWhenIdle } from '@/memory/embed-idle';
+import { indexPhotosWhenIdle } from '@/memory/gallery';
 import { syncSourcesIfDue } from '@/memory/sources';
 import {
   capturePhoto,
@@ -502,6 +503,8 @@ export function AskScreen({
         if (!busyRef.current) await inferNamesIfIdle();
         if (!busyRef.current) await translateHeardIfIdle();
         if (!busyRef.current) await updateConversationNotes();
+        // Phone search (only what the user allowed): a few photos read on the charger.
+        if (!busyRef.current) await indexPhotosWhenIdle(() => busyRef.current);
         void driveBackupIfDue();
       } catch (e) {
         console.log(`[memory] ingest failed: ${String(e)}`);

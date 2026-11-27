@@ -20,6 +20,11 @@ export default function SettingsScreen() {
         hint={platformText('settingsConnectionsHint')}
         href="/settings/connections"
       />
+      <NavRow
+        label="Phone search"
+        hint="Photos, folders and files Sidekick may search"
+        href="/settings/phone-search"
+      />
       <NavRow label="Privacy" hint={platformText('settingsPrivacyHint')} href="/settings/privacy" />
       <NavRow
         label="Phone features"

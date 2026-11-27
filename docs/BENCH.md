@@ -943,3 +943,49 @@ Android's contacts permission prompt, left unanswered when the phone work stoppe
   measured on the laptop only.
 - Speech recognition on the phone for languages other than English (needs Parakeet v3 / Whisper
   small downloaded and the made-up audio; not run 27 Nov).
+
+## Phone search: indexing speed and battery (27 Nov 2026, laptop)
+
+Laptop, 4 CPU threads, the app's own models (EmbeddingGemma 2 text+vision `.litertlm` through
+the LiteRT-LM Python runtime; PP-OCR detection and recognition through onnxruntime), 8 made-up
+photos (a receipt, train times, a parking sign, an invoice, a chat screenshot, a menu, and two
+photos with no text). Median per photo:
+
+| Step                                | Laptop        | Pixel 5 (from LIMITS.md)                  |
+| ----------------------------------- | ------------- | ----------------------------------------- |
+| Copy at 2048 px (decode, rotate)    | 212 ms        | not measured                              |
+| OCR detection                       | 427 ms        | 1.0–2.9 s for detection + recognition     |
+| OCR recognition (all lines)         | 423 ms        |                                           |
+| Image vector (512 px)               | 4.3 s (3.2–8) | ~6.5 s cool; 74–79 s when runs overlapped |
+| Embedder load / vision encoder load | 1.1 s / 3.4 s | not measured                              |
+| Question vector                     | 215 ms        | ~0.34 s                                   |
+
+Search on the 8 by the image vector alone: 6 of 8 right first (all 6 photos with text; the two
+made-up blobs "beach" and "dog" missed). With the OCR words added, every text photo is found.
+
+**Estimate for the phone:** about 8 s per photo (OCR ~2 s, vector ~6.5 s), so 1,000 photos take
+about 2 h 15 min on the charger and 10,000 about 22 h, spread over nights. Energy: ~2.5 W × 8 s
+≈ 20 J per photo, so 1,000 photos ≈ 5.6 Wh, about a third of a Pixel 5 battery (15.7 Wh). The
+index is about 1.3 KB per photo (13 MB for 10,000).
+
+### Tiers: what is searchable when (laptop, `tier_bench.py`)
+
+| Tier                    | Work                                         | Laptop cost                                                                  | When                                          |
+| ----------------------- | -------------------------------------------- | ---------------------------------------------------------------------------- | --------------------------------------------- |
+| 1. At once              | name words, date, folder into the word index | 0.002 ms a photo, 0.008 ms a 1,200-char passage; query 5 ms over 15,000 rows | when listed, and again at search time         |
+| 2. Soon, on battery too | text vector per file passage                 | 104 ms median (122 max)                                                      | normal idle embedding; 16 more at search time |
+| 3. Expensive            | photo OCR, then photo vector                 | ~0.85 s + ~4.3 s (phone ~8 s)                                                | charging: full speed; battery: budget         |
+| 4. On demand            | OCR of unread photos the request may mean    | ≤ 4 s, newest first, ≤ 6 photos                                              | at search time                                |
+
+Battery budget (tier 3): 2% of wall time on a full battery, falling to none at 30%, none in
+battery saver or when the phone is warm (thermal status light or more), each step paid at the
+cost the phone measured. At ~8 s a photo that is about 9 photos an hour on a full battery, about
+0.05 W or 0.3% of a Pixel 5 battery an hour, and photos read on battery are the newest ones. A
+photo from 10 minutes ago is found by its date at once, and its text is read when it is asked
+about (about 1-3 s on a Pixel 5, inside the 4 s budget).
+
+**Phone checks still needed:** the real speed and heat on the Pixel 5 over 100 photos while
+charging; the battery budget's real drain over an hour on battery; "the photo I just took" found
+within 4 s; a question while indexing (it should stop between photos); iCloud-only photos skipped
+on iPhone; Android "Add camera photos" opening DCIM/Camera and the place read from photos in a picked folder; a deleted photo leaving the index;
+"find my latest invoice" on a folder with several invoices; Open on Android.

@@ -651,3 +651,38 @@ usage." Accuracy wins over speed ("better to be slow than unreliable").
   phone stayed locked whenever this work had it. Thinking is switched on only if the data shows a
   clear win. iPhone: the bundled Swift LiteRT-LM has `ThinkingConfig`; `Llm.swift` doesn't pass
   it yet.
+
+## Phone search: photos, folders and files (built 27 Nov)
+
+Owner: Sidekick searches only what the user explicitly allowed: folders they picked, and photos
+only after they turn it on and grant the permission (all photos or only selected ones). Nothing is
+indexed by default; turning it off or removing a folder deletes its index.
+
+- **Built (both platforms):** Settings → Phone search. Photos: iPhone with the Photos permission
+  (full or limited library); Android from photo folders the user picks with the system folder
+  picker ("Add camera photos" opens DCIM/Camera, "Add screenshots" Pictures/Screenshots, or any
+  folder), which needs no permission. Found by name and date at once; read on the phone newest
+  first (fully while charging, a small measured budget on battery, at once for recent photos a
+  request asks about): OCR text,
+  place (offline list) and an image vector. Folders
+  and files: the system picker, one folder or file at a time (no all-files access). The
+  `find_on_phone` tool: the model decides when; it finds, picks and answers ("my latest invoice
+  from Acme, the cost"), with exact amounts listed from the text.
+- **Android:** the Download folder (and the storage root) can't be picked as a folder (Android
+  11+), so "Add files from Downloads" picks files there. Open hands the original to the phone's
+  own app.
+- **iPhone can't / doesn't:** no "Open in Photos" (iOS has no public way to open one photo in
+  the Photos app; the found photo is shown in the chat). iCloud-only photos (Optimize iPhone
+  Storage) are skipped, never downloaded. Picked files are copies (the document picker gives a
+  copy): they are read once and kept until removed; pick again to update. No PDFs yet on iPhone
+  (as for folders). Text files and photos work.
+- **Left out on Android: broad photo access** (`READ_MEDIA_IMAGES`, selected photos,
+  `ACCESS_MEDIA_LOCATION`, all still blocked in app.json). Play's Photo and video policy allows it
+  only for apps whose core is the gallery, and the owner wants store approval fast. Cost: photos
+  outside picked folders (e.g. from other apps' folders) are not found, and the user adds folders
+  by hand.
+- **Files:** picked files and folder files are all read through `readAnyFile`: PDFs by the
+  phone's PDF reader, everything else (text, Office, sheets, e-books…) by the one file reader in
+  `src/files/`.
+- **Later:** videos (a frame per clip), PDFs on iPhone (PDFKit), "Open" for files on iPhone
+  (Quick Look).

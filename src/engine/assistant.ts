@@ -70,6 +70,7 @@ import { makePicture, pictureFilesReady } from './picture';
 import { answerLocation } from './location';
 import { fillTool, resolveTimeWithModel, runTool, type RouteOutcome } from './tools';
 import { decideRequest } from './decide';
+import { findOnPhone } from './phone-search';
 import { decisionLabel, lockSafe, type Decision } from './decide-logic';
 import { NOT_IN_ROUTINES } from './tools-logic';
 import { forgetRanges } from '@/memory/time-range';
@@ -114,7 +115,8 @@ export type AnswerResult = {
   /** A picture made on the phone (shown with a Report button; picture.ts). */
   picture?: { prompt: string };
   /** A button under the answer that opens a screen in the app (e.g. the erase brush). */
-  link?: { label: string; href: string };
+  /** open: Android opens this original (a found photo or file) in the phone's own app. */
+  link?: { label: string; href: string; open?: string };
 };
 
 /**
@@ -387,6 +389,20 @@ export async function answer(
           // momentAt 0: a new file, not a stored moment, so no camera frames are shown around it.
           media: edit.path ? [{ momentAt: 0, kind: 'photo', path: edit.path }] : undefined,
           link: edit.link,
+        };
+      }
+      case 'find': {
+        // A photo or file the user allowed for phone search, found and read on the phone.
+        const r = await findOnPhone(question, o.req, onText, status);
+        return {
+          text: r.text,
+          usedPhoto: null,
+          sources: [],
+          ms: r.ms,
+          ttftMs: 0,
+          local: true,
+          media: r.photoPath ? [{ momentAt: 0, kind: 'photo', path: r.photoPath }] : undefined,
+          link: r.link,
         };
       }
       case 'picture': {

@@ -12,7 +12,7 @@
 import type { DB } from '@op-engineering/op-sqlite';
 import { getDb, vecTableSql } from './db';
 
-export const VEC_TABLES = ['moments_vec', 'photos_vec'] as const;
+export const VEC_TABLES = ['moments_vec', 'photos_vec', 'gallery_vec'] as const;
 /** vec0's default chunk size. */
 export const CHUNK_SLOTS = 1024;
 
@@ -74,6 +74,7 @@ export function reclaimSpace(opts: { force?: boolean } = {}): Promise<ReclaimRes
       }
       // Merges the word index's segments, dropping deleted words.
       await d.execute("INSERT INTO moments_fts(moments_fts) VALUES ('optimize')");
+      await d.execute("INSERT INTO gallery_fts(gallery_fts) VALUES ('optimize')");
       const free =
         num(await d.execute('SELECT freelist_count FROM pragma_freelist_count()')) * pageSize;
       const vacuumed = vacuumWorthIt(free, await fileBytes(), opts.force);

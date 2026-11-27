@@ -126,7 +126,7 @@ export const TOOLS: ToolSpec[] = [
   PICTURE_TOOL,
   {
     name: 'memory_search',
-    desc: 'what I saw, heard, said, was told, or have in notes, calendar, contacts or files',
+    desc: 'what I saw, heard, said, was told, or have in notes, calendar or contacts',
     kind: 'answer',
     args: {
       query: s('what to look for'),
@@ -134,6 +134,20 @@ export const TOOLS: ToolSpec[] = [
       to: when('end'),
       person: s('who'),
       place: s('where'),
+    },
+  },
+  {
+    name: 'find_on_phone',
+    desc:
+      "find a photo, screenshot, document or file saved on the phone (the user's gallery and " +
+      'chosen folders) and say what it shows or says, e.g. the latest invoice and its total',
+    kind: 'info',
+    args: {
+      what: req('what to look for, in a few words'),
+      type: oneOf(['photo', 'file', 'any']),
+      newest: { type: 'boolean', desc: 'true if the latest or most recent one is wanted' },
+      from: when('start, if a time is meant'),
+      to: when('end'),
     },
   },
   {

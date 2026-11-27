@@ -18,7 +18,7 @@
         "NSSpeechRecognitionUsageDescription": "Sidekick turns what you say into text on this iPhone while you hold the mic. Your voice is not sent to Apple or anyone else.",
         "NSFaceIDUsageDescription": "Sidekick uses Face ID to unlock the app when App lock is on.",
         "NSPhotoLibraryAddUsageDescription": "Sidekick saves a moment you choose into Photos.",
-        "NSPhotoLibraryUsageDescription": "Sidekick saves a moment you choose into an album in Photos. It does not read your other photos."
+        "NSPhotoLibraryUsageDescription": "Only if you turn on Phone search: Sidekick reads the photos you allow (all or only the ones you choose) on this phone so you can ask for them. Sidekick also saves a moment you choose into Photos. Nothing is sent anywhere."
       },
       "deploymentTarget": "16.4"
     },

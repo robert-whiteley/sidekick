@@ -59,5 +59,5 @@ Pod::Spec.new do |s|
   s.source_files = '*.swift', 'LiteRTLM/*.swift'
   s.vendored_frameworks = 'vendor/CLiteRTLM.xcframework'
   s.resource_bundles = { 'SidekickGeo' => ['Resources/places500.bin'] }
-  s.frameworks = 'Speech', 'Vision', 'PDFKit', 'AVFoundation', 'ImageIO', 'CryptoKit'
+  s.frameworks = 'Speech', 'Vision', 'PDFKit', 'AVFoundation', 'ImageIO', 'CryptoKit', 'Photos'
 end

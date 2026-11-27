@@ -205,6 +205,25 @@ declare class SidekickNativeModule extends NativeModule<SidekickNativeModuleEven
   /** Normalised photo embeddings in the same space as [embed] (needs the text+vision model). */
   embedImages(modelPath: string, photoPaths: string[], dims: number): Promise<number[][]>;
   embedUnload(): Promise<void>;
+  /**
+   * Phone search: a small upright JPEG copy of an allowed photo (Android: content:// or file://;
+   * iPhone: "ph://<id>" from Photos, never downloaded from iCloud) at most [maxEdge] px, with its
+   * EXIF/library date and place. Null when it can't be read (deleted, no access, only in iCloud).
+   */
+  galleryPrepare?(
+    ref: string,
+    maxEdge: number,
+    outPath: string,
+  ): Promise<{
+    path: string;
+    width: number;
+    height: number;
+    lat?: number | null;
+    lon?: number | null;
+    takenAt?: number | null;
+  } | null>;
+  /** Android: opens a found photo or file in the phone's own app; false if none can. */
+  openDocument?(ref: string, mime: string | null): boolean;
   /** Text lines read from a photo (PP-OCRv6 small, Android), top to bottom, with confidences. */
   ocrPhoto(
     detPath: string,
