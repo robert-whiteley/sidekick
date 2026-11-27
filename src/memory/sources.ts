@@ -24,7 +24,6 @@ import {
   notificationKey,
   notificationText,
   numberAnswer,
-  askedNumberOf,
   PDF_LIMITS,
   pdfUnchanged,
   pdfVer,
@@ -431,15 +430,11 @@ export async function clearContacts() {
 }
 
 /** Questions answered straight from the phone's data, with no model: "what's Sam's number". */
-export async function answerLocally(question: string): Promise<string | null> {
-  if (!getSettings().sourceContacts) return null;
-  const who = askedNumberOf(question);
-  if (!who) return null;
-  try {
-    return numberAnswer(who, await contactRows());
-  } catch {
-    return null;
-  }
+/** A contact's number or email by name (the model read the request; contacts must be on). */
+export async function contactDetails(name: string): Promise<string> {
+  if (!getSettings().sourceContacts)
+    return 'Contacts are off. Turn them on in Settings, Your data, to ask for numbers.';
+  return numberAnswer(name, await contactRows());
 }
 
 // --- Notifications (Android) ---

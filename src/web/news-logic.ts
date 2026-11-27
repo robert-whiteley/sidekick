@@ -5,9 +5,6 @@
  */
 import { clipText, type WebSource } from './lookup-logic';
 
-/** "latest / news / today / recent / what happened" style questions. */
-const NEWS =
-  /\b(latest|news|headlines?|today|today's|recent(ly)?|what('s| has| is)? happen(ed|ing)|this (week|morning)|breaking|current events)\b/i;
 /** News words that say "news" but aren't the topic. */
 const NEWS_WORDS =
   /\b(the |any )?(latest|news|headlines?|today|today's|recent(ly)?|current events|breaking|this (week|morning)|what('s| has| is)? happen(ed|ing)|update(s)?|so far|right now|now)\b/gi;
@@ -26,10 +23,6 @@ const HEADLINE_CHARS = 200;
 /** Feeds bigger than this are skipped (keeps parsing fast and memory small). */
 export const MAX_FEED_BYTES = 1_000_000;
 export const MAX_FEEDS = 10;
-
-export function isNewsQuestion(question: string): boolean {
-  return NEWS.test(question);
-}
 
 /** The topic words of a news query: "latest news on the Nvidia CEO" -> ["nvidia", "ceo"]. */
 export function topicWords(query: string): string[] {

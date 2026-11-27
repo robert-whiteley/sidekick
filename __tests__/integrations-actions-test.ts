@@ -1,4 +1,4 @@
-import { drafts, flushOutbox, planAction, runAction } from '../src/engine/actions';
+import { drafts, flushOutbox, planIntent, runAction } from '../src/engine/actions';
 import { setIntegrationsNative } from '../src/integrations/native';
 import { setPrefsStore, setSwitch } from '../src/integrations/prefs';
 
@@ -6,6 +6,7 @@ const mockQueued = new Map<
   string,
   { id: string; draft: string; tries: number; createdAt: number; lastError: null }
 >();
+jest.mock('../src/engine/llm', () => ({ askLlm: jest.fn() }));
 jest.mock('@op-engineering/op-sqlite', () => ({ open: jest.fn() }));
 jest.mock('../src/engine/settings', () => ({ getSettings: () => ({ actionSend: 'ask' }) }));
 jest.mock('../src/integrations/google-tasks', () => ({ syncGoogleTasks: async () => 0 }));
@@ -26,7 +27,6 @@ jest.mock('../src/integrations/contacts', () => ({
       ? { name: 'Sam Taylor', phones: ['+441234'], emails: ['sam@example.com'] }
       : null,
 }));
-jest.mock('../src/integrations/llm-parse', () => ({ intentFromLlm: async () => null }));
 jest.mock('expo-constants', () => ({
   expoConfig: { extra: { google: { androidClientId: 'id.apps.googleusercontent.com' } } },
 }));
@@ -74,7 +74,10 @@ beforeEach(() => {
 });
 
 it('drafts a message and sends nothing until Send', async () => {
-  const p = await planAction("text Sam Taylor I'm running late", { now });
+  const p = await planIntent(
+    { type: 'message', name: 'Sam Taylor', text: "I'm running late", app: 'auto' },
+    now,
+  );
   expect(p?.kind).toBe('draft');
   if (p?.kind !== 'draft' || p.draft.kind !== 'message') throw new Error();
   expect(p.draft.fields).toMatchObject({
@@ -91,50 +94,58 @@ it('drafts a message and sends nothing until Send', async () => {
 });
 
 it('"send it" runs the newest open draft; cancel cancels', async () => {
-  await planAction('call Sam', { now });
-  const r = await planAction('send it', { now });
+  await planIntent({ type: 'call', name: 'Sam' }, now);
+  expect(native.call).not.toHaveBeenCalled();
+  const r = await planIntent({ type: 'sendIt' }, now);
   expect(r).toEqual({ kind: 'reply', text: expect.any(String) });
   expect(native.call).toHaveBeenCalledWith('+441234', expect.any(Boolean));
-  await planAction('text Sam hello', { now });
-  expect(await planAction('cancel', { now })).toEqual({ kind: 'reply', text: 'Cancelled.' });
+  await planIntent({ type: 'message', name: 'Sam', text: 'hello', app: 'auto' }, now);
+  expect(await planIntent({ type: 'cancelIt' }, now)).toEqual({
+    kind: 'reply',
+    text: 'Cancelled.',
+  });
   expect(drafts.all().at(-1)?.status).toBe('cancelled');
-  expect(await planAction('send it', { now })).toBeNull();
+  expect(native.openMessage).not.toHaveBeenCalled();
+  expect(await planIntent({ type: 'sendIt' }, now)).toBeNull();
 });
 
 it('replies through the notification', async () => {
-  const p = await planAction('reply sounds good', { now });
+  const p = await planIntent({ type: 'reply', name: null, text: 'Sounds good' }, now);
   if (p?.kind !== 'draft') throw new Error();
+  expect(native.replyToMessage).not.toHaveBeenCalled();
   await runAction(p.draft.id);
   expect(native.replyToMessage).toHaveBeenCalledWith('k1', 'Sounds good');
 });
 
 it('sets alarms and timers at once, respects switches', async () => {
-  expect(await planAction('set an alarm for 6:30', { now })).toEqual({
+  expect(await planIntent({ type: 'alarm', hour: 6, minute: 30, label: '' }, now)).toEqual({
     kind: 'reply',
     text: 'Alarm set for 06:30.',
   });
   expect(native.setAlarm).toHaveBeenCalledWith(6, 30, '');
   setSwitch('alarms', 'set', false);
-  expect((await planAction('set a timer for 5 minutes', { now }))?.kind).toBe('reply');
+  expect((await planIntent({ type: 'timer', seconds: 300, label: '' }, now))?.kind).toBe('reply');
   expect(native.setTimer).not.toHaveBeenCalled();
 });
 
 it('asks for notification access when missing', async () => {
   native.notificationAccess.mockReturnValueOnce(false);
-  const r = await planAction('read my messages', { now });
+  const r = await planIntent({ type: 'readMessages', name: null }, now);
   expect(r).toMatchObject({ kind: 'reply', text: expect.stringMatching(/Notification access/) });
 });
 
-it("what's playing and plain questions", async () => {
-  expect(await planAction("what's playing", { now })).toEqual({
+it("what's playing", async () => {
+  expect(await planIntent({ type: 'nowPlaying' }, now)).toEqual({
     kind: 'reply',
     text: 'Playing: Song by Band (Spotify).',
   });
-  expect(await planAction('what is the capital of France', { now })).toBeNull();
 });
 
 it('queues an email offline and sends it when back online', async () => {
-  const p = await planAction('email Sam about Friday saying see you there', { now });
+  const p = await planIntent(
+    { type: 'email', name: 'Sam', subject: 'Friday', body: 'See you there' },
+    now,
+  );
   if (p?.kind !== 'draft') throw new Error();
   const fetchMock = jest.fn().mockRejectedValueOnce(new Error('offline'));
   globalThis.fetch = fetchMock as unknown as typeof fetch;

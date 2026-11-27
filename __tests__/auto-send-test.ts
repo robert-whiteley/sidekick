@@ -1,6 +1,7 @@
 import { AUTO_SEND_MS, autoSend, drafts, holdDraft } from '@/engine/actions';
 import type { Draft } from '@/integrations/types';
 
+jest.mock('@/engine/llm', () => ({ askLlm: jest.fn() }));
 jest.mock('@op-engineering/op-sqlite', () => ({ open: jest.fn() }));
 jest.mock('@/integrations/google-tasks', () => ({ syncGoogleTasks: async () => 0 }));
 jest.mock('@/memory/followups', () => ({ onFollowupsChange: () => () => {} }));

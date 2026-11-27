@@ -457,3 +457,80 @@ Edit / Try again, "How Sidekick answers", formatted answers, private facts kept 
   (and its memory row); the answer-style box obeyed ("call me Captain Nemo, metric units");
   `sidekick://bench?run=facts` (8 made-up owner lines and 8 person lines, half private) to see
   that the model leaves private ones out. Read aloud is audible: waits for the owner's OK.
+
+## Rules vs model, thinking (27 Nov 2026)
+
+Owner: "It should be dynamic and intelligent, hardcoding is brittle, unless it's always better
+like doing calculations etc." and "better to be slow than unreliable". So what a request needs is
+now read by the model, and code only computes (sums, units, dates, time zones) as tools.
+
+**What is measured.** The 143 cases above (`bench/answers/cases.ts`) plus 56 new ones
+(`bench/answers/decide-cases.ts`): the same tools in other words (26, "Pop a seven minute
+countdown on for the eggs", "Could you get me up at half six tomorrow?"), other languages (8),
+near-misses (14), look-ups (4) and plain questions (4). Each sorter is scored on whether it chose
+answer, lookup or the right tool. Pixel 5, CPU, Gemma 4 E2B. Run: `bash bench/answers/run-decide.sh
+decide <variant>` (bench/README.md).
+
+### Word lists in the app
+
+| `src`, regexes of 3+ alternatives | Before (main)    | After            |
+| --------------------------------- | ---------------- | ---------------- |
+| Regexes / alternatives / files    | 454 / 4,138 / 47 | 205 / 1,927 / 37 |
+
+Removed: the rule tracer and every list that read the user's words to choose what to do
+(phone commands, phone controls, extras, texts and calls, intents, scheduled sends, quick answers,
+translate, recap requests, feedback, read-back yes/no, lookup and news detection, the browser-link
+and date-line rules, the tool router's word lists). What is left, and why:
+
+- **Code reading text the app wrote itself** (never the user's): reminders, routines, location and
+  weather handlers parse the canonical request `tools.ts` builds from the model's arguments.
+- **Computing:** time spans ("last Tuesday" → dates), clock times, units and number words.
+- **Not yet moved (answer path, next):** recall intents, "something I saw", follow-ups, people
+  context, speech clips, the unusual-time-words check, camera-setting wording, the search-query
+  fallback.
+
+### Sorters tried (199 cases)
+
+| Variant (system prompt)                               | Prompt | Right                  | Median    | Mean  |
+| ----------------------------------------------------- | ------ | ---------------------- | --------- | ----- |
+| Old rules + tool router (main)                        | —      | 143/143 own set; below | —         | —     |
+| fused-lookup: the answer pass also says LOOKUP / DO   | 266 t  | 73/199                 | 1.8 s     | 2.6 s |
+| classify: tool names only                             | 164 t  | 113/199                | 1.7 s     | 3.5 s |
+| **catalog: one line per tool, cached, one word back** | 562 t  | **172/199**            | **1.7 s** | 4.0 s |
+| catalog + filling the chosen tool's arguments         | 562 t  | 166/199                | 6.3 s     | 7.8 s |
+
+The old rules' new-case numbers are offline (main's `route-trace-logic.ts` on the 56 cases): only
+26 were decided by a rule, 4 of them wrongly ("Could you get me up at half six tomorrow?" →
+navigation, "Is my phone about to die?" and "You're talking too fast for me" → answered); the
+other 30 waited ~5 s or more for the router, 2 of them without the right tool on offer and 7 of
+them plain questions. Their 143/143
+is on the wordings they were written for. Also tried: the full tool catalog in the answer prompt
+(slow, long prompt every turn) and nearest-neighbour on embeddings (needs labelled examples for
+each wording). Catalog by set: knowledge 15/15, arithmetic 12/12, dates 14/14, units 8/8,
+reasoning 8/8, tools 53/63, near-misses 10/14, refusals 2/5, multi-step 3/4; new: paraphrase
+21/26, other languages 7/8, near-misses 12/14, look-ups 3/4, questions 4/4. CPU for the whole
+catalog run: 180,354 ticks over 801 s.
+
+**Built: catalog.** Its ~560-token prompt is read once and kept in a second prefix cache next to
+the chat's (`cacheSystem` in `LlmEngine.kt`), so a request costs its own words and one word of
+reply. Where it still misses: alarm vs reminder ("wake me at 7", Spanish too), routine vs reminder
+for one-off routines, camera vs camera settings, "stop listening", "text me a fun fact" (the fill
+step refuses a message to "me", and the model then answers), talk about the weather on Mars.
+The fill step's misses in the run above were mostly arguments the schema refused (phone settings
+as `{torch: true}`); such a call is now asked once more with the reason it was refused (`fillTool`).
+Still to measure on the phone: the built version end to end (catalog with the lookup and news
+lines, plus fill), pending phone time.
+
+### Thinking
+
+Gemma 4's thinking mode (`thinkingBudget` per turn: off, a token budget, or -1 for no limit) is
+wired on Android (`LlmEngine.kt`, LiteRT-LM `ThinkingConfig`) and off by default. Benches:
+`thinking <budget|handoff>` (16 hard questions where working helps, 8 everyday ones,
+`bench/answers/thinking-cases.ts`) and `background <budget>` (15 note, fact, who-is-who, recap and
+photo tasks on made-up material, `bench/answers/background-cases.ts`). "handoff" lets the answer
+pass reply THINK and is then asked again with thinking on (`wantsThinking`, `decide-logic.ts`).
+
+Not yet measured: the phone was locked (keyguard) whenever this work had it, and the PIN is the
+owner's. Until there is data the app keeps the default (thinking off) everywhere. iPhone: the
+bundled Swift LiteRT-LM API has `ThinkingConfig` (enable + token budget), but `Llm.swift` does not
+pass `thinkingBudget` yet.

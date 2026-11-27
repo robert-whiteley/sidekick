@@ -84,9 +84,9 @@ test('typed answers may use markdown; spoken ones are marked plain', () => {
   expect(SYSTEM_PROMPT).toContain('markdown');
   expect(SYSTEM_PROMPT).not.toContain('no lists or markdown');
   const now = new Date(2026, 10, 26, 12);
-  expect(questionPart('a recipe for scones', now)).toBe('Question: a recipe for scones');
-  expect(questionPart('a recipe for scones', now, true)).toBe(
-    'Question (spoken): a recipe for scones',
+  expect(questionPart('a recipe for scones', now)).toMatch(/\nQuestion: a recipe for scones$/);
+  expect(questionPart('a recipe for scones', now, true)).toMatch(
+    /\nQuestion \(spoken\): a recipe for scones$/,
   );
 });
 

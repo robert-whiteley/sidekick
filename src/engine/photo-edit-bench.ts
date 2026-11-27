@@ -1,11 +1,14 @@
 /**
  * Dev-only photo-edit bench (sidekick://bench?run=photo-edit): a made-up photo pushed by adb to
- * the app's external files folder as `bench-photo.jpg`, edited for each request below. Logs the
- * edit the model picked, the time and the new file (`[photo-edit-bench] {...}`). The bench deletes
+ * the app's external files folder as `bench-photo.jpg`, edited for each request below (the
+ * app's path: the sorter with the photo, then the edit's arguments). Logs the edit the model picked, the time and the new file (`[photo-edit-bench] {...}`). The bench deletes
  * the new files at the end; the pushed photo is deleted by adb.
  */
 import SidekickNative from '../../modules/sidekick-native';
-import { maybeEditPhoto } from './photo-edit';
+import { decideRequest } from './decide';
+import { runPhotoEdit } from './photo-edit';
+import { editCall } from './photo-edit-logic';
+import { fillTool } from './tools';
 
 /** Request → the edit it should give (null: a question, answered normally). */
 export const PHOTO_EDIT_CASES: [string, string | null][] = [
@@ -35,7 +38,13 @@ export async function runPhotoEditBench(log: Log, dir: string): Promise<void> {
   const made: string[] = [];
   for (const [q, want] of PHOTO_EDIT_CASES) {
     const t0 = Date.now();
-    const r = await maybeEditPhoto(q, photo, () => {}).catch(() => null);
+    const d = await decideRequest(q, { photo: true }).catch(() => null);
+    const fill =
+      d?.decision.kind === 'do' && d.decision.tool === 'edit_photo'
+        ? await fillTool(q, 'edit_photo').catch(() => null)
+        : null;
+    const edit = fill && !fill.error && fill.tool === 'edit_photo' ? editCall(fill.args) : null;
+    const r = edit ? await runPhotoEdit(edit, photo, () => {}).catch(() => null) : null;
     const ok = want === null ? !r : !!r?.path && r.op === want;
     if (ok) right++;
     if (r?.path) made.push(r.path);

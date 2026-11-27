@@ -18,7 +18,6 @@ import {
   type RecapLine,
   recapPrompt,
   type RecapRequest,
-  recapRequest,
   relatedIds,
   spanLabel,
   STRETCH_GAP_MS,
@@ -104,18 +103,6 @@ const mentions = (text: string, topic: string) => {
   return words.length > 0 && words.some((w) => t.includes(w));
 };
 
-/** When the owner's day started: the first thing kept today after 04:00. */
-async function wakeAt(now: number): Promise<number | null> {
-  const d = new Date(now);
-  d.setHours(4, 0, 0, 0);
-  const db = await getDb();
-  const r = await db.execute('SELECT MIN(at) AS at FROM moments WHERE at >= ? AND at <= ?', [
-    d.getTime(),
-    now,
-  ]);
-  return (r.rows[0]?.at as number | null) ?? null;
-}
-
 type Span = { from: number; to: number; label: string; related: Set<number> | null };
 
 /** Which stretch of time (and which moments in it) the recap covers. */
@@ -176,17 +163,14 @@ async function resolveSpan(req: RecapRequest, now: number): Promise<Span | null>
 export type RecapAnswer = { text: string; ms: number; local: boolean };
 
 /**
- * Answers a recap question, or returns null if [question] isn't one. The answer starts with the
- * span covered ("Since 14:10: …") so the user knows where it started.
+ * A recap of the span and topic the model filled in (the recap tool, tools.ts). The answer starts
+ * with the span covered ("Since 14:10: …") so the user knows where it started.
  */
 export async function answerRecap(
-  question: string,
+  req: RecapRequest,
   onText: (full: string) => void,
   now = Date.now(),
 ): Promise<RecapAnswer | null> {
-  const wake = /\b(got up|woke)\b/i.test(question) ? await wakeAt(now) : null;
-  const req = recapRequest(question, new Date(now), { wakeAt: wake });
-  if (!req) return null;
   const span = await resolveSpan(req, now);
   const about = req.topic ? ` about ${req.topic}` : '';
   if (!span) {

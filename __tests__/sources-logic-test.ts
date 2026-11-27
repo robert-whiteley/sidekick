@@ -1,5 +1,4 @@
 import {
-  askedNumberOf,
   chunkText,
   eventItem,
   eventText,
@@ -180,16 +179,6 @@ describe('contacts', () => {
     { name: 'Alex Kim', phones: [] },
     { name: 'José García', phones: [{ label: 'work', number: '555' }] },
   ];
-
-  it('recognises number questions', () => {
-    expect(askedNumberOf("What's Sam Jones's number?")).toBe('Sam Jones');
-    expect(askedNumberOf('what is Alex’s phone number')).toBe('Alex');
-    expect(askedNumberOf("what's my mum's mobile number")).toBe('mum');
-    expect(askedNumberOf('number for Jose Garcia')).toBe('Jose Garcia');
-    expect(askedNumberOf('How do I call Sam?')).toBe('Sam');
-    expect(askedNumberOf('what did Sam say about the number of guests')).toBeNull();
-    expect(askedNumberOf('what is the time')).toBeNull();
-  });
 
   it('finds contacts by full name, then by words, ignoring accents', () => {
     expect(findContacts('sam jones', contacts).map((c) => c.name)).toEqual(['Sam Jones']);

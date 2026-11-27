@@ -4,46 +4,9 @@
  * __tests__/quick-answers-test.ts.
  */
 
-import { dateAnswer } from './date-answers';
-
 const LEAD =
   /^(?:hey |ok |okay )?(?:sidekick,? )?(?:please )?(?:(?:can|could) you (?:tell me |work out )?)?(?:what(?:'s| is| are)|whats|calculate|compute|work out|how much is|tell me)?\s*/i;
 const TAIL = /[\s,]*(?:please|thanks)?[?.!\s]*$/i;
-
-/** "Half of 87", "double 12", "a quarter of 30". */
-function fractionOf(question: string): string | null {
-  const m =
-    /^(half|a half|one half|a third|one third|a quarter|one quarter|double|twice|triple|three quarters)(?: of)? (-?[\d.,]+)$/.exec(
-      question.toLowerCase().replace(LEAD, '').replace(TAIL, '').trim(),
-    );
-  if (!m) return null;
-  const n = Number(m[2].replace(/,/g, ''));
-  if (!Number.isFinite(n)) return null;
-  const f: Record<string, number> = {
-    half: 0.5,
-    'a half': 0.5,
-    'one half': 0.5,
-    'a third': 1 / 3,
-    'one third': 1 / 3,
-    'a quarter': 0.25,
-    'one quarter': 0.25,
-    double: 2,
-    twice: 2,
-    triple: 3,
-    'three quarters': 0.75,
-  };
-  return formatNumber(n * f[m[1]]);
-}
-
-export function quickAnswer(question: string, now: Date = new Date()): string | null {
-  return (
-    timeIn(question, now) ??
-    fractionOf(question) ??
-    dateAnswer(question, now) ??
-    convertUnits(question) ??
-    calculate(question)
-  );
-}
 
 // --- Numbers ---
 
@@ -135,6 +98,12 @@ function tokenize(s: string): Tok[] | null {
     out.push(/^[\d.]/.test(v) ? { t: 'num', v: parseFloat(v) } : { t: 'op', v });
   }
   return out;
+}
+
+/** A sum in symbols ("(17*23)+4", "15%*240", "sqrt 2"), or null when it isn't one. */
+export function evaluateExpression(expression: string): number | null {
+  const toks = tokenize(expression.toLowerCase());
+  return toks && toks.length ? evaluate(toks) : null;
 }
 
 /** Recursive descent: + - over * / over ^ over unary, sqrt, %, brackets. */
@@ -318,43 +287,8 @@ function fromCelsius(v: number, u: 'c' | 'f' | 'k') {
 const unitName = (u: Unit, n: number) =>
   Math.abs(n) === 1 ? u.name : (u.plural ?? (u.name.includes('(') ? u.name : `${u.name}s`));
 
-function parseAmount(s: string): number | null {
-  const t = s.trim().replace(/,/g, '');
-  if (/^-?\d+(\.\d+)?$/.test(t)) return parseFloat(t);
-  if (t in WORD_NUMBERS) return WORD_NUMBERS[t];
-  const frac = /^(\d+)\/(\d+)$/.exec(t);
-  return frac && +frac[2] ? +frac[1] / +frac[2] : null;
-}
-
-/** "Convert 5 miles to km", "how many grams in a pound", "100 f in c". */
-export function convertUnits(question: string): string | null {
-  const q = question
-    .toLowerCase()
-    .replace(LEAD, '')
-    .replace(TAIL, '')
-    .replace(/^(?:convert|change|turn)\s+/, '')
-    .trim();
-  let amount: number | null;
-  let from: string;
-  let to: string;
-  // "How many ml are in 2.5 litres", "how many pounds is 2 kg", "how many feet in a mile".
-  const howMany =
-    /^how many (.+?) (?:(?:are |is )?(?:there )?(?:in|to|per)|is|are|make|makes) (?:an? |one )?(.+)$/.exec(
-      q,
-    );
-  let m: RegExpExecArray | null;
-  if (howMany) {
-    to = howMany[1];
-    const first = /^(\S+)\s+(.+)$/.exec(howMany[2]);
-    const n = first ? parseAmount(first[1]) : null;
-    amount = n ?? 1;
-    from = n !== null && first ? first[2] : howMany[2];
-  } else if ((m = /^(-?[\d.,/]+|[a-z]+)\s*(.+?) (?:in|to|into|as) (.+)$/.exec(q))) {
-    amount = parseAmount(m[1]);
-    from = m[2];
-    to = m[3];
-  } else return null;
-  if (amount === null) return null;
+/** [amount] [from] in [to] units ("2.5", "litres", "ml"), or null when the units don't fit. */
+export function convertAmount(amount: number, from: string, to: string): string | null {
   const f = from.trim();
   const t = to.trim().replace(/^(?:degrees? )/, 'degrees ');
   const tf = TEMPS[f] ?? TEMPS[f.replace(/^degrees? /, '')];
@@ -533,14 +467,8 @@ export function zoneOffsetMinutes(zone: string, now: Date): number | null {
   }
 }
 
-/** "What time is it in Tokyo", "time in New York": the local time there, and the difference. */
-export function timeIn(question: string, now: Date): string | null {
-  const m =
-    /\b(?:what(?:'s| is) the )?time(?: is it)? (?:now |right now )?in ([a-z .'ãé-]+?)(?: now| right now)?[?.!\s]*$/i.exec(
-      question,
-    ) ?? /^what time is it (?:now )?in ([a-z .'ãé-]+?)[?.!\s]*$/i.exec(question);
-  if (!m) return null;
-  const place = m[1].trim().toLowerCase().replace(/^the /, '');
+/** The time now in a ZONES place ("tokyo"), or null when it isn't known. */
+export function timeInZone(place: string, now: Date): string | null {
   const zone = ZONES[place];
   if (!zone) return null;
   const there = zoneOffsetMinutes(zone, now);

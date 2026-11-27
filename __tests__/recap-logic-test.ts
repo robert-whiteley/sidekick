@@ -2,8 +2,6 @@ import {
   findStretch,
   RECAP_BUDGET,
   recapPrompt,
-  recapRequest,
-  recapTopic,
   relatedIds,
   spanLabel,
   withoutTimeWords,
@@ -13,56 +11,7 @@ const NOW = new Date(2026, 10, 25, 15, 0); // Wednesday
 const t = NOW.getTime();
 const MIN = 60_000;
 
-test('recognises recap questions with a range, a topic or a stretch', () => {
-  expect(recapRequest('What did we talk about today?', NOW)).toMatchObject({
-    range: { label: 'today' },
-    topic: null,
-    stretch: false,
-  });
-  expect(recapRequest('recap the last 2 hours', NOW)!.range!.from).toBe(t - 120 * MIN);
-  expect(recapRequest('Summarise my conversations last week', NOW)!.range!.label).toBe('last week');
-  expect(recapRequest('give me a recap of what we have been working on', NOW)).toMatchObject({
-    range: null,
-    topic: null,
-    stretch: true,
-  });
-  expect(recapRequest('what have I been up to?', NOW)).toMatchObject({ stretch: true });
-  expect(recapRequest('recap what we discussed about the budget yesterday', NOW)).toMatchObject({
-    range: { label: 'yesterday' },
-    topic: 'budget',
-    stretch: false,
-  });
-  expect(recapRequest('what have I been doing on the garden project', NOW)).toMatchObject({
-    topic: 'garden project',
-    stretch: true,
-  });
-  expect(recapRequest('recap the marketing meeting', NOW)).toMatchObject({
-    topic: 'marketing meeting',
-    stretch: true,
-  });
-  expect(recapRequest('catch me up', NOW)).toMatchObject({
-    range: null,
-    topic: null,
-    stretch: false,
-  });
-});
-
-test('other questions are not recaps', () => {
-  for (const q of [
-    'What did Sam say about the car?',
-    'what time is it',
-    'summarise this article',
-    'summarize the photo',
-    'what did I do with my keys',
-    'remind me to call Sam',
-  ])
-    expect(recapRequest(q, NOW)).toBeNull();
-});
-
 test('topics leave out time words and empty words', () => {
-  expect(recapTopic('what did we talk about on Tuesday')).toBeNull();
-  expect(recapTopic('What did I talk about with Hamid?')).toBe('hamid');
-  expect(recapTopic('recap our chat about holidays over the weekend')).toBe('holidays');
   expect(withoutTimeWords('the budget in the last 2 hours')).toBe('the budget');
   expect(withoutTimeWords('what did I see 5 minutes ago')).toBe('what did I see');
 });

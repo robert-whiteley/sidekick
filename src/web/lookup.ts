@@ -1,22 +1,17 @@
 import { getNetworkStateAsync } from 'expo-network';
 
-import { askLlmAside, cancelLlm, ensureLlm, undoLastTurn } from '@/engine/llm';
+import { askLlmAside, cancelLlm, ensureLlm } from '@/engine/llm';
 import { getSettings } from '@/engine/settings';
 import { listSpeakers } from '@/memory/store';
 import {
   buildQuery,
   cleanModelQuery,
-  decideLookup,
   duckDuckGoUrl,
   LOOKUP_FAILED_NOTE,
-  LOOKUP_HINT,
   LOOKUP_TIMEOUT_MS,
   NEWS_TIMEOUT_MS,
-  searchTopic,
-  withoutLookupTail,
   mergeSources,
   MAX_SOURCES,
-  mightBeLookup,
   MODEL_QUERY_BUDGET_MS,
   MODEL_QUERY_MAX_TOKENS,
   modelQueryPrompt,
@@ -24,7 +19,6 @@ import {
   parseDuckDuckGo,
   parseSearx,
   parseWikipedia,
-  requestsLookup,
   searxUrl,
   USER_AGENT,
   webContext,
@@ -36,7 +30,6 @@ import {
   feedSources,
   gdeltUrl,
   interleave,
-  isNewsQuestion,
   MAX_FEED_BYTES,
   MAX_FEEDS,
   normaliseFeedUrl,
@@ -229,9 +222,10 @@ export async function queryFromModel(
   write: (prompt: string) => Promise<string>,
   cancel: () => void,
   budgetMs = MODEL_QUERY_BUDGET_MS,
+  previous?: string,
 ): Promise<string | null> {
   let timer: ReturnType<typeof setTimeout> | undefined;
-  const gen = write(modelQueryPrompt(question)).then(
+  const gen = write(modelQueryPrompt(question, previous)).then(
     (t) => ({ t }),
     () => null,
   );
@@ -285,9 +279,8 @@ export type LookupDeps = {
    */
   unreachable?: () => boolean;
   /** Gemma's search words (names already stripped), or null to use the rule-based query. */
-  writeQuery: (question: string, names: string[]) => Promise<string | null>;
-  /** Drops the model's last chat turn (its "LOOKUP" reply) so follow-ups never see it. */
-  undoLast: () => void;
+  /** [previous]: the earlier spoken question, for a follow-up that leans on it. */
+  writeQuery: (question: string, names: string[], previous?: string) => Promise<string | null>;
   now: () => Date;
 };
 
@@ -313,22 +306,20 @@ const defaultDeps: LookupDeps = {
   },
   unreachable: () => lastUnreachable,
   // Loading the model isn't counted in the budget: the answer needs it next anyway.
-  writeQuery: async (question, names) => {
+  writeQuery: async (question, names, previous) => {
     await ensureLlm();
-    return queryFromModel(question, names, writeAside, cancelLlm);
-  },
-  undoLast: () => {
-    undoLastTurn();
+    return queryFromModel(question, names, writeAside, cancelLlm, undefined, previous);
   },
   now: () => new Date(),
 };
 
 /**
- * Asks the model, looking things up online first when the rules say so, or when Gemma replies
- * LOOKUP. `build` makes the full prompt around the web part. Only search words go online: Gemma's
- * short query for the question (in a throwaway chat that sees nothing else), or the rule-based one,
- * with known names taken out of both. Any lookup failure falls back to the offline answer.
- * `webQuery` is the query used, if a lookup ran (for the browser link).
+ * Asks the model, looking things up online first when [opts.force] (the model chose a lookup,
+ * decide.ts, or the question waited until back online). `build` makes the full prompt around the
+ * web part. Only search words go online: Gemma's short query for the question (in a throwaway
+ * chat that sees nothing else), or a trimmed question if that is late, with known names taken
+ * out of both. Any lookup failure falls back to the offline answer. `webQuery` is the query
+ * used, if a lookup ran (for the browser link).
  */
 export async function askWithLookup<T extends Asked>(
   question: string,
@@ -346,16 +337,16 @@ export async function askWithLookup<T extends Asked>(
   previous?: string,
   /** Progress lines as they happen ("Looking it up online…"). */
   onStatus?: (line: string) => void,
-  /** force: look it up whatever the rules say (a question kept until back online). */
-  opts: { force?: boolean } = {},
+  /**
+   * force: look it up (the model asked for it, or a question kept until back online); news: the
+   * model read it as a news question, so news feeds are searched too.
+   */
+  opts: { force?: boolean; news?: boolean } = {},
 ): Promise<T & { web: WebSource[]; webQuery?: string; offline?: boolean }> {
-  const enabled = deps.enabled();
-  if (!enabled || photo) return { ...(await ask(build(''), onText)), web: [] };
+  if (!deps.enabled() || photo || !opts.force)
+    return { ...(await ask(build(''), onText)), web: [] };
   const names = await deps.knownNames().catch(() => [] as string[]);
-  const decision = opts.force
-    ? 'lookup'
-    : decideLookup(question, { enabled, photo, knownNames: names });
-  if (decision === 'none') return { ...(await ask(build(''), onText)), web: [] };
+  const wantNews = !!opts.news;
 
   let webQuery: string | undefined;
   /** A lookup was wanted but there was no internet (the question can wait for it). */
@@ -367,15 +358,14 @@ export async function askWithLookup<T extends Asked>(
     }
     onStatus?.('Looking it up online…');
     const t0 = Date.now();
-    const topic = searchTopic(question, previous);
-    const fromModel = await deps.writeQuery(topic, names).catch(() => null);
-    const q = fromModel ?? buildQuery(topic, names);
+    const fromModel = await deps.writeQuery(question, names, previous).catch(() => null);
+    const q = fromModel ?? buildQuery(question, names);
     if (!q) return [];
     webQuery = q;
     const tWords = Date.now() - t0;
     const opts: SearchOptions = {
       searx: deps.searxUrl(),
-      news: isNewsQuestion(question),
+      news: wantNews,
       feeds: deps.feeds(),
       now: deps.now(),
     };
@@ -393,45 +383,9 @@ export async function askWithLookup<T extends Asked>(
     return found;
   };
 
-  if (decision === 'lookup') {
-    const web = await lookup();
-    return { ...(await ask(build(webContext(web, deps.now())), onText)), web, webQuery, offline };
-  }
-
-  // 'ask-model': hold the streamed text back while it could still be "LOOKUP".
-  let shown = false;
-  let lastShown = '';
-  const first = await ask(
-    build(LOOKUP_HINT),
-    (full) => {
-      if (!shown && mightBeLookup(full)) return;
-      const visible = withoutLookupTail(full);
-      if (!visible) return;
-      shown = true;
-      lastShown = visible;
-      onText(visible);
-    },
-    { undoable: true },
-  );
-  if (!requestsLookup(first.text)) {
-    if (!shown && first.text) onText(first.text);
-    else if (first.text !== lastShown) onText(first.text); // a held-back "L…" was a word
-    return { ...first, web: [] };
-  }
-  // The hidden "LOOKUP" turn leaves the chat: a spoken follow-up sees only question and answer.
-  deps.undoLast();
   const web = await lookup();
-  const second = await ask(
-    build(web.length ? webContext(web, deps.now()) : LOOKUP_FAILED_NOTE),
-    onText,
-  );
   return {
-    ...second,
-    stats: {
-      ...second.stats,
-      totalMs: first.stats.totalMs + second.stats.totalMs,
-      ttftMs: first.stats.totalMs + second.stats.ttftMs,
-    },
+    ...(await ask(build(web.length ? webContext(web, deps.now()) : LOOKUP_FAILED_NOTE), onText)),
     web,
     webQuery,
     offline,

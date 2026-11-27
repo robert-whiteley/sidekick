@@ -1,6 +1,6 @@
 /**
- * Runs phone controls (phone-controls-logic.ts) and the code-worked answers (quick-answers.ts)
- * for planAction. Each control has its own switch in Settings → Connections → Phone controls.
+ * Runs phone controls (phone-controls-logic.ts) for the model's tool calls (tools.ts). Each
+ * control has its own switch in Settings → Connections → Phone controls.
  */
 import type { PlannedAction } from './types';
 import { integrationsNative } from './native';
@@ -11,13 +11,8 @@ import {
   MEDIA_APPS,
   matchApp,
   PANEL_NAMES,
-  parseControl,
-  safeWhenLocked,
   stepBrightness,
 } from './phone-controls-logic';
-import { quickAnswer } from './quick-answers';
-import { commandSafeWhenLocked, parseVoiceCommand } from '@/engine/quick-commands-logic';
-import { extraSafeWhenLocked } from './extras';
 
 type Native = NonNullable<ReturnType<typeof integrationsNative>>;
 
@@ -40,28 +35,12 @@ function installedApps(native: Native): LaunchableApp[] {
   return list;
 }
 
-/** Locked phone and a request that needs personal data or acts for the user: unlock first. */
-export function lockedReply(question: string): string | null {
-  const native = integrationsNative();
-  if (!native?.isLocked?.()) return null;
-  const c = parseControl(question);
-  if (safeWhenLocked(c, question, quickAnswer(question) !== null)) return null;
-  if (extraSafeWhenLocked(question)) return null;
-  // Pause / resume / stop the camera, stop listening: what the lock-screen notification does.
-  if (commandSafeWhenLocked(parseVoiceCommand(question))) return null;
-  return 'Unlock your phone first, then ask me again.';
+/** The phone is locked (screen off, hands-free): only lock-safe tools run (decide-logic.ts). */
+export function phoneLocked(): boolean {
+  return !!integrationsNative()?.isLocked?.();
 }
 
-export async function planPhoneControl(
-  question: string,
-  now = new Date(),
-): Promise<PlannedAction | null> {
-  const quick = quickAnswer(question, now);
-  if (quick) return reply(quick);
-  const c = parseControl(question);
-  if (!c) return null;
-  return runControl(c);
-}
+export const UNLOCK_FIRST = 'Unlock your phone first, then ask me again.';
 
 export async function runControl(c: Control): Promise<PlannedAction | null> {
   const n = integrationsNative();
@@ -76,8 +55,7 @@ export async function runControl(c: Control): Promise<PlannedAction | null> {
       if (!isOn('phone', 'apps')) return off('Opening apps');
       if (!n.openApp || !n.launchableApps) return reply(NOT_HERE);
       const app = matchApp(c.name, installedApps(n));
-      // Not an installed app: leave it to the other rules and the model ("open the door").
-      if (!app) return null;
+      if (!app) return reply(`I can't find an app called ${c.name} on this phone.`);
       return reply(n.openApp(app.pkg) ? `Opening ${app.label}.` : `I couldn't open ${app.label}.`);
     }
     case 'torch': {

@@ -3,11 +3,12 @@
  * calendar", "set a timer for 10 minutes", "what did Jo say?".
  *
  * How the chat uses it (docs/decisions/0008-integrations.md):
- * - Before answering a question, call `planAction(question)`. null → not an action, answer as
- *   usual. `{kind:'reply'}` → say/show the text (already done, or an answer). `{kind:'draft'}`
- *   → show the draft as a card (Send / Edit / Cancel / Open in app) and say `draftSummary()`.
+ * - The model picks a tool and fills its arguments (decide.ts, tools.ts), which become an intent:
+ *   `planIntent(intent)`. `{kind:'reply'}` → say/show the text (already done, or an answer).
+ *   `{kind:'draft'}` → show the draft as a card (Send / Edit / Cancel / Open in app) and say
+ *   `draftSummary()`.
  * - Card Send → `runAction(draft.id)`; Edit → `drafts.update(id, fields)`; Cancel →
- *   `drafts.cancel(id)`. Saying "send it" / "cancel" goes through planAction too.
+ *   `drafts.cancel(id)`. A spoken answer to a read-back goes through `answerReadBack`.
  * - Cards re-render from `drafts.subscribe` (status: draft → queued/sent/failed, with `note`).
  * - Call `startIntegrations()` once at app start: queued emails go when the phone is online,
  *   and Google Tasks sync runs (when switched on).
@@ -19,9 +20,8 @@ import { onFollowupsChange } from '@/memory/followups';
 import * as outbox from '@/memory/outbox';
 import { syncGoogleTasks } from '@/integrations/google-tasks';
 import { calendarAllowed, findEvent, saveEvent } from '@/integrations/calendar';
-import { contactNameList, findContact } from '@/integrations/contacts';
+import { findContact } from '@/integrations/contacts';
 import { gmailConfigured, OfflineError, sendGmail } from '@/integrations/gmail';
-import { intentFromLlm } from '@/integrations/llm-parse';
 import {
   APP_LABEL,
   chooseApp,
@@ -31,28 +31,25 @@ import {
   threadFor,
 } from '@/integrations/messages';
 import { integrationsNative, messageThreads, nowPlaying } from '@/integrations/native';
-import { mightBeAction, parseIntent, type Intent } from '@/integrations/parse';
+import type { Intent } from '@/integrations/parse';
 import { isOn } from '@/integrations/prefs';
-import { planPhoneControl } from '@/integrations/phone-controls';
-import { sendsAtText, splitSchedule } from '@/integrations/schedule-logic';
+import { sendsAtText } from '@/integrations/schedule-logic';
 import type { Draft, DraftKind, DraftFieldsByKind, PlannedAction } from '@/integrations/types';
 import type { MessageThread } from '@/integrations/native';
-import { planExtra } from '@/integrations/extras';
 import { answerCalls, lastCaller } from '@/integrations/calllog';
 import { answerTexts } from '@/integrations/sms';
-import { parseTelephony } from '@/integrations/sms-logic';
+import type { TelephonyAsk } from '@/integrations/sms-logic';
 import { notices } from './notices';
 import {
   confirmFromModel,
   confirmPrompt,
   type ConfirmReply,
   editedFields,
-  mightBeConfirmReply,
-  parseConfirmReply,
   READ_BACK_REPLY_MS,
   READ_BACK_TTL_MS,
   readBackText,
 } from './readback-logic';
+import { askLlm } from './llm';
 import { getSettings } from './settings';
 
 export type { Draft, PlannedAction } from '@/integrations/types';
@@ -409,10 +406,8 @@ async function fromIntent(intent: Intent, now: Date): Promise<PlannedAction | nu
   }
 }
 
-async function planTelephony(
-  tel: NonNullable<ReturnType<typeof parseTelephony>>,
-  now: Date,
-): Promise<PlannedAction | null> {
+/** Texts and call history (sms.ts, calllog.ts); needs Sidekick as the default assistant. */
+export async function planTelephony(tel: TelephonyAsk, now: Date): Promise<PlannedAction | null> {
   if (!integrationsNative()) return null;
   const t = now.getTime();
   if (tel.type === 'texts') return answerTexts(tel, t);
@@ -424,22 +419,20 @@ async function planTelephony(
   return { kind: 'draft', draft };
 }
 
-/** "Move the dentist to 4pm" / "reschedule lunch with Jo to Friday". */
-async function moveEvent(question: string, now: Date): Promise<PlannedAction | null> {
-  const m =
-    /^(?:please )?(?:move|reschedule|push|change|shift) (?:my |the )?(.+?) (?:to|until|till) (.+?)[.!?]*$/i.exec(
-      question.trim(),
-    );
-  if (!m || !isOn('calendar', 'write')) return null;
-  const to = parseWhen(m[2], now);
-  if (!to) return null;
+/** "Move the dentist to 4pm": [what] and [when] as the model read them (tools.ts). */
+export async function moveEventTo(
+  what: string,
+  when: string,
+  now: Date,
+): Promise<PlannedAction | null> {
+  if (!isOn('calendar', 'write'))
+    return { kind: 'reply', text: 'Changing events is off in Settings → Connections.' };
+  const to = parseWhen(when, now);
+  if (!to) return { kind: 'reply', text: `When should "${what}" move to? Say a day and time.` };
   if (!(await calendarAllowed(true)))
     return { kind: 'reply', text: 'I need Calendar access to change events.' };
-  const ev = await findEvent(
-    m[1].replace(/^(appointment|meeting|event) (with |for )?/i, ''),
-    now.getTime(),
-  );
-  if (!ev) return null;
+  const ev = await findEvent(what, now.getTime());
+  if (!ev) return { kind: 'reply', text: `I can't find "${what}" in your calendar.` };
   const len = ev.end - ev.start;
   const start =
     to.allDay && !ev.allDay
@@ -464,60 +457,12 @@ async function moveEvent(question: string, now: Date): Promise<PlannedAction | n
   return { kind: 'draft', draft };
 }
 
-/**
- * Is [question] a phone action? Rules first (instant); the model only for action-like wording
- * the rules miss, and only when `useModel` (default true).
- */
-export async function planAction(
-  question: string,
-  /** guess: let the model read a request the rules miss (off when the tool router does it). */
-  opts: { now?: Date; useModel?: boolean; guess?: boolean; routine?: boolean } = {},
-): Promise<PlannedAction | null> {
-  const now = opts.now ?? new Date();
-  // An answer to a read-back ("yes", "cancel", "change it to …") comes first; never from a
-  // routine or queued run (its text isn't the user's reply, e.g. an incoming message "yes ok").
-  if (!opts.routine) {
-    const confirm = await answerReadBack(question, now.getTime(), opts.useModel !== false);
-    if (confirm) return confirm;
-  }
-  const contacts = /\b(text|message|tell|email|e-mail|whatsapp|reply|let)\b/i.test(question)
-    ? await contactNameList()
-    : [];
-  // "Text Sam at 6pm …": the draft sends at that time (kept in the outbox until then).
-  const sched = splitSchedule(question, now);
-  if (sched) {
-    const si = parseIntent(sched.rest, now, contacts);
-    if (si && (si.type === 'message' || si.type === 'email')) {
-      const planned = await fromIntent(si, now);
-      if (planned?.kind === 'draft') {
-        const draft = { ...planned.draft, scheduledAt: sched.at } as Draft;
-        drafts.put(draft);
-        return { kind: 'draft', draft };
-      }
-      return planned;
-    }
-  }
-  // Texts and call history (src/integrations/sms.ts, calllog.ts): "read my last text from Mum",
-  // "who called me", "call them back". Needs Sidekick as the default assistant; else falls back.
-  const tel = parseTelephony(question, now);
-  if (tel) {
-    const planned = await planTelephony(tel, now).catch(() => null);
-    if (planned) return planned;
-  }
-  // Phone info, find my phone, birthdays, rides, Waze, search in apps (src/integrations/extras.ts):
-  // narrow phrases, checked before the general rules so "… with Waze" isn't a Maps hand-off.
-  const extra = await planExtra(question, now).catch(() => null);
-  if (extra) return extra;
-  const intent = parseIntent(question, now, contacts);
-  if (intent) return fromIntent(intent, now);
-  // Sums, conversions, the time elsewhere, and phone controls (src/integrations/phone-controls.ts).
-  const control = await planPhoneControl(question, now).catch(() => null);
-  if (control) return control;
-  const moved = await moveEvent(question, now).catch(() => null);
-  if (moved) return moved;
-  if (opts.useModel === false || opts.guess === false || !mightBeAction(question)) return null;
-  const guessed = await intentFromLlm(question, now);
-  return guessed ? fromIntent(guessed, now) : null;
+/** A message or email draft held in the outbox until [at] ("text Sam at 6pm …"). */
+export function scheduleDraft(plan: PlannedAction | null, at: number): PlannedAction | null {
+  if (plan?.kind !== 'draft') return plan;
+  const draft = { ...plan.draft, scheduledAt: at } as Draft;
+  drafts.put(draft);
+  return { kind: 'draft', draft };
 }
 
 // --- Read back before sending ---
@@ -571,7 +516,6 @@ export function readBackDone(id: string, now = Date.now()) {
 
 async function confirmFromLlm(text: string, heard: string): Promise<ConfirmReply | null> {
   try {
-    const { askLlm } = await import('@/engine/llm');
     const r = await askLlm(confirmPrompt(text, heard), null, () => {}, {
       system: 'You read a yes/no answer for a phone assistant. Reply with JSON only.',
       maxTokens: 120,
@@ -583,15 +527,18 @@ async function confirmFromLlm(text: string, heard: string): Promise<ConfirmReply
   }
 }
 
-async function answerReadBack(
+/**
+ * The user's spoken answer to the draft just read back ("yes", "no, cancel", "change it to …"),
+ * read by the model in any wording; null when no read-back is waiting or it isn't an answer.
+ * Never from a routine or queued run (its text isn't the user's reply).
+ */
+export async function answerReadBack(
   heard: string,
-  now: number,
-  useModel: boolean,
+  now = Date.now(),
 ): Promise<PlannedAction | null> {
   const id = awaitingReadBack(now);
   if (!id || !awaiting) return null;
-  let r = parseConfirmReply(heard);
-  if (!r && useModel && mightBeConfirmReply(heard)) r = await confirmFromLlm(awaiting.text, heard);
+  const r = await confirmFromLlm(awaiting.text, heard);
   if (!r) return null;
   if (r.kind === 'yes') {
     awaiting = null;

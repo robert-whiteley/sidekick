@@ -1,11 +1,10 @@
-import { autoSend, beginReadBack, draftSummary, planAction } from '@/engine/actions';
+import { answerReadBack, autoSend, beginReadBack, draftSummary, drafts } from '@/engine/actions';
 import { readBackOn } from './hands-free';
-import { runQuickCommand, trackAnswer } from './quick-commands';
+import { trackAnswer } from './quick-commands';
 import { postCodeCards, scanCodes } from './codes';
 import { codePromptLine } from './codes-logic';
 import { answerRecap } from './recap';
 import { recallContext } from '@/memory/recall';
-import { routineFirst } from './route-trace-logic';
 import { postRoutineCard, routineRequest } from './routines-store';
 import SidekickNative from '../../modules/sidekick-native';
 import {
@@ -40,18 +39,16 @@ import {
   deleteMoment,
   rememberExchange,
   rememberPhotoQuestion,
-  saveFact,
   savedFacts,
   searchMemory,
 } from '@/memory/store';
-import { asksAboutSomethingSeen, wantsCameraNow } from '@/memory/search-logic';
+import { asksAboutSomethingSeen } from '@/memory/search-logic';
 import { ocrPromptLine } from '@/memory/photo-text';
 import { photoTextOrNull } from './photo-ocr';
 import { memoryStatus } from './progress';
-import { lockedReply } from '@/integrations/phone-controls';
+import { phoneLocked, UNLOCK_FIRST } from '@/integrations/phone-controls';
 import { withClipboard } from '@/integrations/extras';
-import { parseTranslate, translatePrompt } from '@/integrations/translate';
-import { answerLocally } from '@/memory/sources';
+import { translatePrompt } from '@/integrations/translate';
 import {
   asksAboutFollowups,
   followupContext,
@@ -65,19 +62,19 @@ import { queueOnline } from '@/engine/online-queue';
 import { answerAboutPage } from './shared-doc';
 import { firstUrl } from './shared-doc-logic';
 import { askWithLookup, type WebSource } from '@/web/lookup';
-import { webLinkWanted } from '@/web/lookup-logic';
 import { research } from '@/web/research';
-import { maybeEditPhoto } from './photo-edit';
+import { runPhotoEdit } from './photo-edit';
 import { answerLocation } from './location';
-import { feedbackRule, resolveTimeWithModel, routeWithTools, type RouteOutcome } from './tools';
+import { fillTool, resolveTimeWithModel, runTool, type RouteOutcome } from './tools';
+import { decideRequest } from './decide';
+import { decisionLabel, lockSafe, type Decision } from './decide-logic';
+import { NOT_IN_ROUTINES } from './tools-logic';
 import { forgetRanges } from '@/memory/time-range';
 import type { PlannedAction } from '@/integrations/types';
 
 export { SYSTEM_PROMPT, memoryContext };
 
 export const DEFAULT_PHOTO_QUESTION = 'What am I looking at?';
-
-const REMEMBER = /^(please )?remember(?: that)? (.+)$/i;
 
 export type AnswerResult = {
   text: string;
@@ -258,23 +255,12 @@ export async function answer(
     return { text, usedPhoto: null, sources: [], ms: 0, ttftMs: 0, local: true };
   };
   if (!opts?.routed) forgetRanges();
-  // Phone locked (screen off, hands-free): nothing personal until it is unlocked.
-  // Routine and back-online runs are the user's own standing requests: they answer into a
-  // notification (shown privately on the lock screen) instead of asking to unlock.
-  const locked = opts?.routine ? null : lockedReply(question);
-  if (locked) return done(locked);
-  // Speech speed, repeat, "what can you do?", listening/camera on/off, watches, scan (no model).
-  const command = await runQuickCommand(question, photoNow).catch(() => null);
-  if (command) return done(command);
-  // iPhone: no live camera (ADR 0006), so "what am I looking at?" needs a photo first; the
-  // model would only guess (or talk about other phones). The Ask screen opens the camera.
-  if (onIphone() && !photoNow && wantsCameraNow(question)) return done(IPHONE.takePhotoFirst);
   const offRecord = opts?.offTheRecord ?? getSettings().offTheRecord ?? false;
   if (!offRecord) offRecordStarted = false;
-  // Time words the rules can't read ("over Christmas"): the model gives the span once, and
+  // Time words a fixed reader can't parse ("over Christmas"): the model gives the span once, and
   // search, recall, recaps and location all use it (tools.ts).
   if (!photoNow && !opts?.routed) await resolveTimeWithModel([question]).catch(() => null);
-  // Plan cards and replies from rules or tools: read-back, countdown, the card in the chat.
+  // Plan cards and replies from tools: read-back, countdown, the card in the chat.
   const finishPlan = (plan: PlannedAction): AnswerResult => {
     const draftId = plan.kind === 'draft' ? plan.draft.id : undefined;
     // Driving-style read-back: "Text to Sam: I'm running late. Send it?" then the countdown.
@@ -298,9 +284,30 @@ export async function answer(
       browserQuery: plan.kind === 'reply' ? plan.browserQuery : undefined,
     };
   };
+  // Translation of [given] (or, from the camera, the text in view read exactly by OCR).
+  const translate = async (
+    given: string,
+    target: string,
+    fromView: boolean,
+  ): Promise<AnswerResult> => {
+    let source = given;
+    if (fromView) {
+      if (!photoNow) return done(platformText('translateNeedsPhoto'));
+      status('Reading the text…');
+      source = (await photoTextOrNull(photoNow)) ?? '';
+      if (!source.trim()) return done("I can't see any text to translate.");
+    }
+    status(`Translating into ${target}…`);
+    const t0 = Date.now();
+    const { text } = await askLlm(translatePrompt(source, target), null, onText, {
+      system: SYSTEM_PROMPT,
+      maxTokens: 400,
+      scratch: true,
+    });
+    return { text, usedPhoto: photoNow, sources: [], ms: Date.now() - t0, ttftMs: 0 };
+  };
+  let useClipboard = false;
   const routed = async (o: RouteOutcome): Promise<AnswerResult | null> => {
-    if (opts?.dryActions && (o.kind === 'plan' || o.kind === 'rules'))
-      return done(`[dry] ${o.kind === 'rules' ? o.text : 'action'}`);
     switch (o.kind) {
       case 'reply':
         return done(o.text);
@@ -308,11 +315,26 @@ export async function answer(
         return finishPlan(o.plan);
       case 'rules':
         return answer(o.text, null, onText, { ...opts, routed: true });
+      case 'translate':
+        return translate(o.text, o.to, !o.text.trim());
+      case 'recap': {
+        const recap = await answerRecap(o.req, onText);
+        if (!recap) return null;
+        return {
+          text: recap.text,
+          usedPhoto: null,
+          sources: [],
+          ms: recap.ms,
+          ttftMs: 0,
+          ...(recap.local ? { local: true } : {}),
+        };
+      }
       case 'answer':
+        useClipboard = !!o.clipboard;
         return null;
       case 'research': {
         // Several searches, pages read on the phone, one report with numbered sources.
-        const r = await research(o.topic, onText, status);
+        const r = await research(o.topic, onText, status, undefined, !!o.news);
         if (!offRecord && !r.local) await rememberExchange(question, r.text).catch(() => {});
         return {
           text: r.text,
@@ -327,139 +349,63 @@ export async function answer(
           ...(r.local ? { local: true } : {}),
         };
       }
+      case 'edit_photo': {
+        // "Make the background white", "turn it the right way up": a new, edited copy.
+        if (!photoNow) return null;
+        const edit = await runPhotoEdit(o.edit, photoNow, status);
+        onText(edit.text);
+        return {
+          text: edit.text,
+          usedPhoto: photoNow,
+          sources: [],
+          ms: edit.ms,
+          ttftMs: 0,
+          local: true,
+          // momentAt 0: a new file, not a stored moment, so no camera frames are shown around it.
+          media: edit.path ? [{ momentAt: 0, kind: 'photo', path: edit.path }] : undefined,
+        };
+      }
     }
   };
-  // Where am I / was I / did I park, "call this place the gym", the weather (location.ts).
-  // Before "remember …" so "remember this place as …" names a place instead of saving a fact.
-  // Not for a routine about them ("every Monday at 8 tell me the weather"): that's set up below.
-  const isRoutine = !photoNow && !opts?.routine && !offRecord && routineFirst(question, new Date());
-  const loc =
-    photoNow || isRoutine ? null : await answerLocation(question, { offRecord }).catch(() => null);
-  // Nothing in location history ("where did I park?", "where was I on Tuesday?"): the notes may
-  // still say ("parked on level 4"), so memory answers; the reason is given if it has nothing.
-  const noPlace = loc?.empty ? loc.text : null;
-  if (loc && !noPlace) {
-    onText(loc.text);
-    return {
-      text: loc.text,
-      usedPhoto: null,
-      sources: [],
-      ms: 0,
-      ttftMs: 0,
-      local: !loc.web,
-      web: loc.web,
-      waitingOnline: loc.waitingOnline,
-    };
-  }
-  const remember = REMEMBER.exec(question.trim());
-  if (remember && offRecord && !photoNow && !question.trim().endsWith('?')) {
-    const text =
-      "You're off the record, so I won't keep that. Leave Off the record and say it again.";
-    onText(text);
-    return { text, usedPhoto: null, sources: [], ms: 0, ttftMs: 0, local: true };
-  }
-  if (remember && !photoNow && !question.trim().endsWith('?')) {
-    await saveFact(remember[2].replace(/[.!]+$/, ''));
-    const text = "Got it, I'll remember that.";
-    onText(text);
-    return { text, usedPhoto: null, sources: [], ms: 0, ttftMs: 0, local: true };
-  }
 
-  // "Translate this" (the text in view, read exactly by OCR) or "translate … into French".
-  const tr = parseTranslate(question);
-  if (tr && (!photoNow || tr.fromView)) {
-    let source = tr.text;
-    if (tr.fromView) {
-      if (!photoNow) return done(platformText('translateNeedsPhoto'));
-      status('Reading the text…');
-      source = (await photoTextOrNull(photoNow)) ?? '';
-      if (!source.trim()) return done("I can't see any text to translate.");
-    }
-    status(`Translating into ${tr.target}…`);
-    const t0 = Date.now();
-    const { text } = await askLlm(translatePrompt(source, tr.target), null, onText, {
-      system: SYSTEM_PROMPT,
-      maxTokens: 400,
-      scratch: true,
-    });
-    return { text, usedPhoto: photoNow, sources: [], ms: Date.now() - t0, ttftMs: 0 };
-  }
-
-  // "Make the background white", "turn it the right way up": a new, edited copy of the photo
-  // (the model picks the edit; photo-edit.ts). Plain photo questions go on to the answer.
-  if (photoNow && !opts?.routine) {
-    const edit = await maybeEditPhoto(question, photoNow, status).catch(() => null);
-    if (edit) {
-      onText(edit.text);
+  // A tool's own handler, given the words tools.ts wrote for it ("remind me to call Jo at 17:00",
+  // "what's the weather in Leeds tomorrow"): never the user's words, which the model read.
+  let noPlace: string | null = null;
+  if (opts?.routed) {
+    const loc = await answerLocation(question, { offRecord }).catch(() => null);
+    noPlace = loc?.empty ? loc.text : null;
+    if (loc && !noPlace) {
+      onText(loc.text);
       return {
-        text: edit.text,
-        usedPhoto: photoNow,
+        text: loc.text,
+        usedPhoto: null,
         sources: [],
-        ms: edit.ms,
+        ms: 0,
         ttftMs: 0,
-        local: true,
-        // momentAt 0: a new file, not a stored moment, so no camera frames are shown around it.
-        media: edit.path ? [{ momentAt: 0, kind: 'photo', path: edit.path }] : undefined,
+        local: !loc.web,
+        web: loc.web,
+        waitingOnline: loc.waitingOnline,
       };
     }
-  }
-
-  // "Remind me to … at …": scheduled for real, here, so the reply never claims what didn't happen.
-  const reminder = photoNow ? null : parseReminderRequest(question, new Date());
-  if (reminder) {
-    await addFollowup(reminder);
-    // "tomorrow 09:00" → "tomorrow at 09:00"
-    const due = reminder.repeat
-      ? `${repeatLabel(reminder.repeat)} at ${new Date(reminder.dueAt!).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}`
-      : formatDue(reminder, new Date()).replace(/ (\d{1,2}[:.]\d{2}\D*)$/, ' at $1');
-    const what = reminder.title.charAt(0).toLowerCase() + reminder.title.slice(1);
-    const text = due
-      ? `OK, I'll remind you to ${what} ${due}.`
-      : `I've added "${reminder.title}" to your to-dos. Say a time if you want a reminder.`;
-    onText(text);
-    return { text, usedPhoto: null, sources: [], ms: 0, ttftMs: 0, local: true };
-  }
-
-  // "Every day at 6pm give me a recap", "whenever Sam messages me, read it out": a routine.
-  const routine = photoNow || opts?.routine || offRecord ? null : routineRequest(question);
-  if (routine) {
-    if (routine.routineId) postRoutineCard(routine.routineId);
-    return done(routine.text);
-  }
-
-  // "Send feedback: the camera is slow": an email draft to the makers (feedback.ts).
-  const feedback = photoNow ? null : await feedbackRule(question).catch(() => null);
-  if (feedback) {
-    const r = await routed(feedback);
-    if (r) return r;
-  }
-
-  // "Text Sam I'm running late", "add lunch with Jo tomorrow at 1": a draft card, sent only on OK.
-  // The model's reading of requests the rules miss is the tool router's job below.
-  const plan = photoNow
-    ? null
-    : await planAction(question, { guess: false, routine: !!opts?.routine }).catch(() => null);
-  if (plan) return finishPlan(plan);
-
-  // Recaps over any range or topic ("what did we talk about last Tuesday", "recap the last 2
-  // hours", "recap what we've been working on"), summarised by the model (src/engine/recap.ts).
-  const recap = photoNow ? null : await answerRecap(question, onText);
-  if (recap) {
-    return {
-      text: recap.text,
-      usedPhoto: null,
-      sources: [],
-      ms: recap.ms,
-      ttftMs: 0,
-      ...(recap.local ? { local: true } : {}),
-    };
-  }
-
-  // "What's Sam's number": straight from contacts (when on), no model needed.
-  const local = photoNow ? null : await answerLocally(question).catch(() => null);
-  if (local) {
-    onText(local);
-    return { text: local, usedPhoto: null, sources: [], ms: 0, ttftMs: 0, local: true };
+    const reminder = parseReminderRequest(question, new Date());
+    if (reminder) {
+      await addFollowup(reminder);
+      // "tomorrow 09:00" → "tomorrow at 09:00"
+      const due = reminder.repeat
+        ? `${repeatLabel(reminder.repeat)} at ${new Date(reminder.dueAt!).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}`
+        : formatDue(reminder, new Date()).replace(/ (\d{1,2}[:.]\d{2}\D*)$/, ' at $1');
+      const what = reminder.title.charAt(0).toLowerCase() + reminder.title.slice(1);
+      return done(
+        due
+          ? `OK, I'll remind you to ${what} ${due}.`
+          : `I've added "${reminder.title}" to your to-dos. Say a time if you want a reminder.`,
+      );
+    }
+    const routine = opts.routine || offRecord ? null : routineRequest(question);
+    if (routine) {
+      if (routine.routineId) postRoutineCard(routine.routineId);
+      return done(routine.text);
+    }
   }
 
   // A link in the question ("summarise https://…"): that one page is read (Online on) and the
@@ -480,18 +426,45 @@ export async function answer(
     };
   }
 
-  // No rule knew it: the model may pick a tool (any phrasing; tools-logic.ts). Plain questions
-  // skip this and go straight to the answer below.
-  if (!photoNow && !opts?.routed && !noPlace) {
-    const outcome = await routeWithTools(question, {
-      routine: opts?.routine,
-      offRecord,
-      // A chain's step through the rules (weather, location): saved nowhere, said nowhere.
-      viaRules: async (t) =>
-        (await answer(t, null, () => {}, { ...opts, routed: true, offTheRecord: true })).text,
-    }).catch(() => null);
-    const r = outcome ? await routed(outcome) : null;
-    if (r) return r;
+  // What the request needs, decided by the model in any wording or language (decide.ts): an
+  // answer, an online lookup (offered only while lookup is on), or one phone tool, whose
+  // arguments the model then fills in for that tool alone and code checks (tools.ts).
+  let lookupWanted = !!opts?.forceLookup;
+  let newsWanted = false;
+  if (!opts?.routed && !opts?.forceLookup) {
+    // A spoken answer to the draft just read back ("yes", "change it to …"): only while one is
+    // waiting, never from a routine run (its text isn't the user's reply).
+    const readBack = opts?.routine ? null : await answerReadBack(question).catch(() => null);
+    if (readBack) return finishPlan(readBack);
+    const draftOpen = !!drafts.latestOpen();
+    const { decision, ms, reply } = await decideRequest(question, {
+      draftOpen,
+      photo: !!photoNow,
+    }).catch(() => ({ decision: { kind: 'answer' } as Decision, ms: 0, reply: '' }));
+    console.log(`[decide] ${decisionLabel(decision)} (${reply}) in ${ms} ms`);
+    // Phone locked (screen off, hands-free): nothing personal until it is unlocked. Routine and
+    // back-online runs are the user's own standing requests: they answer into a notification.
+    const locked = !opts?.routine && phoneLocked();
+    if (decision.kind === 'do' && !(opts?.routine && NOT_IN_ROUTINES.has(decision.tool))) {
+      const fill = await fillTool(question, decision.tool).catch(() => null);
+      console.log(`[decide] ${decision.tool} args ${fill?.error ?? fill?.tool ?? 'none'}`);
+      if (fill && fill.tool === decision.tool && !fill.error) {
+        if (locked && !lockSafe(fill.tool, fill.args)) return done(UNLOCK_FIRST);
+        if (opts?.dryActions) return done(`[dry] ${fill.tool} ${JSON.stringify(fill.args)}`);
+        // iPhone: no live camera (ADR 0006); a photo is taken on the Ask screen instead.
+        if (onIphone() && fill.tool === 'camera' && fill.args.on === true)
+          return done(IPHONE.takePhotoFirst);
+        const outcome = await runTool(fill.tool, fill.args, question, {
+          routine: opts?.routine,
+          offRecord,
+        }).catch(() => null);
+        const r = outcome ? await routed(outcome) : null;
+        if (r) return r;
+      }
+    }
+    if (locked) return done(UNLOCK_FIRST);
+    lookupWanted = decision.kind === 'lookup';
+    newsWanted = decision.kind === 'lookup' && !!decision.news;
   }
 
   let sources: Moment[] = [];
@@ -570,7 +543,7 @@ export async function answer(
     question,
     !!image,
     (webPart) =>
-      `${agenda}${person}${webPart}${notes}${seenText}${recallPart}${questionPart(fitQuestion(recall?.modelQuestion ?? withClipboard(question) ?? question), new Date(), !!opts?.voiceAnswer)}`,
+      `${agenda}${person}${webPart}${notes}${seenText}${recallPart}${questionPart(fitQuestion(recall?.modelQuestion ?? (useClipboard ? withClipboard(question) : null) ?? question), new Date(), !!opts?.voiceAnswer)}`,
     async (prompt, t, o) => {
       // Would overflow the model's chat (compaction kept being interrupted): start fresh from
       // the summary and the last turns.
@@ -607,7 +580,7 @@ export async function answer(
     undefined,
     recent ? lastQuestion : undefined,
     status,
-    { force: opts?.forceLookup },
+    { force: lookupWanted, news: newsWanted },
   );
   const { stats, web, webQuery } = looked;
   let { text } = looked;
@@ -655,7 +628,7 @@ export async function answer(
     webLink:
       !looked.offline &&
       !image &&
-      (getSettings().webLookup ? !!webQuery && !web.length : webLinkWanted(question)),
+      (getSettings().webLookup ? !!webQuery && !web.length : lookupWanted),
     waitingOnline: (looked.offline && !offRecord) || undefined,
     momentId,
     media: recall?.media

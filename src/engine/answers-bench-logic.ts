@@ -1,118 +1,16 @@
 /**
- * Scoring for the answers + routing bench (cases in bench/answers/cases.ts): what a rule or the
- * model router chose, as one canonical tool with canonical arguments, checked against the case;
+ * Scoring for the answers + routing bench (cases in bench/answers/cases.ts): what the model
+ * chose, as one canonical tool with canonical arguments, checked against the case;
  * and the answer text checked by its rules. Pure; used by __tests__/answers-bench-test.ts and the
  * dev bench screen (src/app/bench.tsx).
  */
 import { parseFrames } from './camera-settings-logic';
-import type { RuleTrace } from './route-trace-logic';
 
 export type Canon = { tool: string; args: Record<string, unknown>; offered?: string[] };
 
 const str = (v: unknown) => (typeof v === 'string' ? v : '');
 
-/** A rule's parse result as a canonical tool call. */
-export function canonFromTrace(t: RuleTrace): Canon {
-  const d = (t.detail ?? {}) as Record<string, unknown>;
-  switch (t.stage) {
-    case 'command':
-      switch (d.type) {
-        case 'speed':
-          return { tool: 'speech_speed', args: typeof d.rate === 'number' ? { rate: d.rate } : {} };
-        case 'listening':
-        case 'camera':
-          return { tool: d.type, args: { on: d.on } };
-        case 'watch':
-          return { tool: 'watch', args: { what: d.what } };
-        case 'unwatch':
-          return { tool: 'stop_watching', args: {} };
-        case 'cameraSetting':
-          return { tool: 'camera_setting', args: { ...(d.change as object) } };
-        default:
-          return { tool: String(d.type), args: {} };
-      }
-    case 'weather':
-      return { tool: 'weather', args: { place: d.town, day: d.when } };
-    case 'location':
-      return { tool: d.kind === 'name' ? 'name_place' : 'location', args: { kind: d.kind } };
-    case 'reminder':
-      return { tool: 'reminder', args: { what: d.title, timed: d.dueAt != null } };
-    case 'routine': {
-      if (d.ok === false) return { tool: 'routine', args: { refused: d.reason } };
-      const when = d.when as { type?: string } | undefined;
-      return { tool: 'routine', args: { repeat: when?.type !== 'once', action: d.action } };
-    }
-    case 'scheduled_send':
-      return { tool: String(d.type), args: { to: d.name, text: d.text ?? d.body } };
-    case 'extra':
-      switch (d.type) {
-        case 'battery':
-        case 'storage':
-        case 'steps':
-          return { tool: 'phone_info', args: { what: d.type } };
-        case 'screenTime':
-          return { tool: 'phone_info', args: { what: 'screen_time' } };
-        case 'clipboardRead':
-          return { tool: 'phone_info', args: { what: 'clipboard' } };
-        case 'findPhone':
-          return { tool: 'find_phone', args: {} };
-        case 'birthday':
-          return { tool: 'birthdays', args: {} };
-        case 'ride':
-          return { tool: 'ride', args: { destination: d.destination } };
-        case 'search':
-          return { tool: 'app_search', args: { app: d.app, query: d.query } };
-        default:
-          return { tool: `extra:${String(d.type)}`, args: {} };
-      }
-    case 'intent':
-      switch (d.type) {
-        case 'message':
-          return { tool: 'message', args: { to: d.name, text: d.text } };
-        case 'email':
-          return { tool: 'email', args: { to: d.name, text: d.body } };
-        case 'call':
-          return { tool: 'call', args: { to: d.name } };
-        case 'alarm':
-          return { tool: 'alarm', args: { hour: d.hour, minute: d.minute } };
-        case 'timer':
-          return { tool: 'timer', args: { seconds: d.seconds } };
-        case 'navigate':
-          return { tool: 'navigate', args: { destination: d.destination, mode: d.mode } };
-        case 'event':
-          return { tool: 'event', args: { title: d.title } };
-        default:
-          return { tool: String(d.type), args: {} };
-      }
-    case 'control':
-      switch (d.type) {
-        case 'torch':
-        case 'volume':
-        case 'dnd':
-        case 'brightness':
-          return { tool: 'phone_setting', args: { setting: d.type } };
-        case 'panel':
-          return { tool: 'phone_setting', args: { setting: d.kind } };
-        case 'openApp':
-          return { tool: 'open_app', args: { name: d.name } };
-        default:
-          return { tool: String(d.type), args: {} };
-      }
-    case 'move_event':
-      return { tool: 'event', args: {} };
-    case 'contact_number':
-      return { tool: 'contact', args: {} };
-    case 'quick_answer':
-      return { tool: 'quick_answer', args: { text: t.detail } };
-    case 'router':
-      return { tool: 'router', args: {}, offered: t.tools };
-    case 'answer':
-      return { tool: 'none', args: {} };
-    default:
-      return { tool: t.stage, args: {} };
-  }
-}
-
+/** Bench scoring only: does the model's routine time say it repeats. */
 const REPEATS = /\b(every|each|whenever|daily|weekly|hourly|any ?time|each time)\b/i;
 
 /** The model router's validated call as a canonical tool call. */

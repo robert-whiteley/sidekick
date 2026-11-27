@@ -1,13 +1,10 @@
 import { bestContact } from '../src/integrations/contacts';
 import { base64, gmailConfigured, rawEmail } from '../src/integrations/gmail';
-import { intentFromModel } from '../src/integrations/llm-parse';
 import { chooseApp, describeThreads, threadFor } from '../src/integrations/messages';
 import type { MessageThread } from '../src/integrations/native';
 import { isOn, setPrefsStore, setSwitch } from '../src/integrations/prefs';
 import { INTEGRATIONS } from '../src/integrations/registry';
 import { pickCalendar } from '../src/integrations/calendar';
-
-const now = new Date(2025, 10, 24, 14, 0);
 
 describe('registry and prefs', () => {
   beforeEach(() => {
@@ -72,27 +69,6 @@ describe('gmail', () => {
     const body = text.split('\r\n\r\n')[1];
     expect(decodeURIComponent(escape(atob(body)))).toBe('Hi ✓');
     expect(() => rawEmail('a@b.co\r\nBcc: x@y.z', 's', 'b')).toThrow();
-  });
-});
-
-describe('model intents', () => {
-  it('reads JSON and rejects junk', () => {
-    expect(
-      intentFromModel('Sure! {"type":"message","name":"Sam","text":"Hi","app":"whatsapp"}', now),
-    ).toEqual({
-      type: 'message',
-      name: 'Sam',
-      text: 'Hi',
-      app: 'whatsapp',
-    });
-    expect(intentFromModel('{"type":"none"}', now)).toBeNull();
-    expect(intentFromModel('no json', now)).toBeNull();
-    expect(intentFromModel('{"type":"message","name":"Sam"}', now)).toBeNull();
-    const e = intentFromModel(
-      '{"type":"event","title":"Lunch","when":"tomorrow at 1pm","location":"Cafe"}',
-      now,
-    );
-    expect(e).toMatchObject({ type: 'event', title: 'Lunch', location: 'Cafe' });
   });
 });
 

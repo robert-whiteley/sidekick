@@ -505,10 +505,6 @@ export const progress = {
 
 export const siteName = (s: WebSource) => s.domain || host(s.url) || s.name;
 
-/** Request phrasing the router's word filter offers the research tool for (the model decides). */
-export const RESEARCH_WORDS =
-  /\b(research|report|look into|dig into|deep dive|investigate|in depth|in-depth|find out (everything|all|more)|compare|comparison|pros and cons|overview of|background on|read up)\b/;
-
 export const RESEARCH_OFFLINE =
   'Research needs Online on (tap Offline above the chat). Only search words and the pages ' +
   'found are fetched; nothing about you is sent.';

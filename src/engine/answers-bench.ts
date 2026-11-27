@@ -1,7 +1,7 @@
 /**
  * Dev-only answers, routing and recall bench, run on the phone from the speed-test screen
- * (src/app/bench.tsx) or by deep link (sidekick://bench?run=answers). Nothing is done: routing
- * is traced (rules) or asked of the model without running the tool, answers use throwaway chats,
+ * (src/app/bench.tsx) or by deep link (sidekick://bench?run=answers). Nothing is done: the model
+ * decides (decide.ts) and fills the tool's arguments (tools.ts) without running the tool, answers use throwaway chats,
  * and recall questions run off the record with actions reported, not done. One JSON line per
  * case on logcat: `[answers] {...}` / `[recall] {...}`.
  */
@@ -9,7 +9,6 @@ import { CASES, type BenchCase } from '../../bench/answers/cases';
 import { benchMemories, recallQuestions } from '../../bench/recall/generate';
 import {
   canonFromCall,
-  canonFromTrace,
   scoreAnswer,
   scoreRoute,
   summarise,
@@ -19,8 +18,8 @@ import {
 import { answer, leaveOffTheRecord } from './assistant';
 import { askLlm } from './llm';
 import { questionPart, SYSTEM_PROMPT } from './prompts';
-import { traceRules } from './route-trace-logic';
-import { pickToolOnly } from './tools';
+import { decideRequest } from './decide';
+import { fillTool } from './tools';
 import {
   addBenchRows,
   benchKeys,
@@ -52,11 +51,13 @@ async function modelAnswer(q: string, now: Date) {
 async function runCase(c: BenchCase, log: Log): Promise<BenchLine> {
   const now = new Date();
   const t0 = Date.now();
-  const trace = traceRules(c.q, now);
-  let got: Canon = canonFromTrace(trace);
-  let pick: Awaited<ReturnType<typeof pickToolOnly>> = null;
-  if (got.tool === 'router') {
-    pick = await pickToolOnly(c.q, { now }).catch(() => null);
+  const { decision } = await decideRequest(c.q).catch(() => ({
+    decision: { kind: 'answer' as const },
+  }));
+  let got: Canon = { tool: 'none', args: {} };
+  let pick: Awaited<ReturnType<typeof fillTool>> = null;
+  if (decision.kind === 'do') {
+    pick = await fillTool(c.q, decision.tool, { now }).catch(() => null);
     got =
       pick?.tool && pick.tool !== 'none' && !pick.error
         ? canonFromCall(pick.tool, pick.args)
@@ -160,13 +161,12 @@ export async function runRecallBench(log: Log, only?: string): Promise<void> {
     const rank = ranked.findIndex((k) => rq.keys.includes(k));
     if (rank >= 0) searchHits++;
     if (rank >= 0 && rank < 4) top4++;
-    const trace = traceRules(rq.q, now);
     let text = '';
     let firstMs = 0;
     let totalMs = 0;
     let ownInContext = false;
     let ctx: string[] = [];
-    if (['answer', 'router', 'recap', 'location', 'weather'].includes(trace.stage)) {
+    {
       leaveOffTheRecord();
       const a0 = Date.now();
       const r = await answer(
@@ -183,9 +183,7 @@ export async function runRecallBench(log: Log, only?: string): Promise<void> {
       ctx = [...srcKeys.values()].map((k) => k ?? 'own');
       // Recaps and location answers don't list what they read: they may hold the owner's own.
       ownInContext =
-        ctx.includes('own') ||
-        !!r.usedPhoto ||
-        (!r.sources.length && ['recap', 'location'].includes(trace.stage));
+        ctx.includes('own') || !!r.usedPhoto || (!r.sources.length && 'local' in r && !!r.local);
     }
     const ok = rq.any.some((re) => new RegExp(re, 'i').test(text));
     if (ok) correct++;
@@ -193,7 +191,6 @@ export async function runRecallBench(log: Log, only?: string): Promise<void> {
       `[recall] ${JSON.stringify({
         id: rq.id,
         q: rq.q,
-        stage: trace.stage,
         ok,
         rank,
         ranked: ranked.slice(0, 6),

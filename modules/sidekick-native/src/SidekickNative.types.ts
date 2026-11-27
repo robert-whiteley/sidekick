@@ -29,6 +29,14 @@ export type GenerateOptions = {
    * is; the next main-chat turn closes the off-the-record one.
    */
   offRecord?: boolean;
+  /**
+   * Gemma's thinking mode for this turn: omitted leaves the default (off), 0 turns it off, a
+   * positive number turns it on with at most that many thinking tokens. Thoughts are never
+   * streamed or kept in the chat history. Android only for now.
+   */
+  thinkingBudget?: number;
+  /** With scratch: keep the system prompt read in for next time (the request sorter). Android. */
+  cacheSystem?: boolean;
 };
 
 /** The one voice this phone uses (see Voice.kt). */
@@ -64,6 +72,10 @@ export type LlmStats = {
   decodeTokens: number;
   decodeTokensPerSec: number;
   totalMs: number;
+  /** From the request to the first answer text (thoughts excluded), ms (Android; 0 if unknown). */
+  firstTextMs?: number;
+  /** Characters of thinking written before the answer (Android; 0 with thinking off). */
+  thoughtChars?: number;
 };
 
 export type DeviceInfo = {

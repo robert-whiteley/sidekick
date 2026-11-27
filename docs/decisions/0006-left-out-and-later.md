@@ -460,3 +460,42 @@ Built now: "what can you do?" mentions research and photo edits.
 | YouTube / video summaries                   | Left out: needs YouTube's transcripts (against its terms without the API, and the API needs a key).      |
 | Agent mode (browsing, filling forms)        | Out of scope (SPEC: no autonomous agents; actions need the user's OK).                                   |
 | Custom GPTs / plugins marketplace           | Left out: accounts and servers.                                                                          |
+
+## The model understands, code computes (27 Nov; details in docs/BENCH.md)
+
+Owner: "It should be dynamic and intelligent, hardcoding is brittle, unless it's always better
+like doing calculations etc., but that should probably be a hand-off. We want as few rules and
+bloat/context in the chat as possible, to maximise intelligence, speed, efficiency, battery
+usage." Accuracy wins over speed ("better to be slow than unreliable").
+
+- **Built:** every request goes through one short model pass, the "catalog" sorter (decide.ts):
+  its system prompt is the tool list with one line each (~560 tokens), kept read in a second
+  prefix cache next to the chat's, and it replies with one word (answer, lookup, news, or a tool).
+  Then the model fills that one tool's arguments (it may still say none), code checks them against
+  the schema (a refused call is asked once more, with the reason), and the tool runs. Sums, units,
+  dates and time zones are tools that compute in code (`src/integrations/compute.ts`). What is
+  offered follows the app's state only: "draft" (send or cancel) only while a draft waits;
+  routines never get sending, calling back, moving events, the clipboard, or phone controls; with
+  the phone locked only lock-safe calls run (decide-logic.ts lockSafe).
+- **Removed:** the rule tracer and every word list that read the user's words to choose what to
+  do: phone commands ("stop listening", speech speed, camera), phone controls, extras, texts and
+  calls, intents, scheduled sends, quick answers, translate, recap requests, feedback, read-back
+  yes/no, lookup and news detection, the browser-link rule and the date-line rule. 454 word-list
+  regexes (4,138 alternatives) in src before, 205 (1,927) after.
+- **Tried and rejected** (Pixel 5, 199 cases): fused (the answer pass also says DO/LOOKUP:
+  misses actions), fused-lookup (73/199: LOOKUP on knowledge and date questions), classify
+  without descriptions (113/199), the full tool catalog in the answer prompt (slow, long
+  prompt), embedding nearest-neighbour (needs labelled examples per wording), and the old rules
+  (143/143 on the set they were tuned to; on the 56 new wordings a rule decided only 26, 4 of
+  them wrongly, and the rest waited ~5 s or more for the router). The catalog: 172/199, median
+  1.7 s.
+- **Known gaps:** multi-step chains ("check the forecast and text Sam") are gone: one tool per
+  request. Recall helpers on the answer path still use word lists (recall intents, "something
+  seen", follow-ups, speech clips, people context, the unusual-time-words check); the handlers
+  for reminders, routines, location and weather still parse the canonical words tools.ts writes
+  for them (never the user's). Both are next.
+- **Thinking: default (off) kept, not yet measured.** Benches are built (thinking off / budget /
+  no limit / a THINK hand-off on 24 questions; background tasks with a budget on 15), but the
+  phone stayed locked whenever this work had it. Thinking is switched on only if the data shows a
+  clear win. iPhone: the bundled Swift LiteRT-LM has `ThinkingConfig`; `Llm.swift` doesn't pass
+  it yet.

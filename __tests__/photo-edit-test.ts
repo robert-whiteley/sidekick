@@ -1,37 +1,19 @@
-import {
-  editPrompt,
-  editReply,
-  mightBeEdit,
-  needsSegModel,
-  parseEditReply,
-} from '@/engine/photo-edit-logic';
+import { EDIT_TOOL, editCall, editReply, needsSegModel } from '@/engine/photo-edit-logic';
+import { NOT_IN_ROUTINES } from '@/engine/tools-logic';
 
-describe('mightBeEdit (only saves a model pass; the model decides)', () => {
-  test.each([
-    'make the background white',
-    'remove the background',
-    'blur the background',
-    'turn it the right way up',
-    'rotate it left',
-    'crop it square',
-    'make it black and white',
-    'can you brighten this',
-    'mirror it',
-  ])('%s', (q) => expect(mightBeEdit(q)).toBe(true));
-  test.each([
-    'what is this?',
-    'how many calories is that?',
-    'who painted this',
-    'what colour is the car?',
-  ])('%s', (q) => expect(mightBeEdit(q)).toBe(false));
-});
+/** The model's {"tool":"edit_photo","args":{…}} → its checked edit. */
+const parseEditReply = (json: string) => {
+  try {
+    const o = JSON.parse(json) as { tool?: string; args?: Record<string, unknown> };
+    return o.tool === 'edit_photo' && o.args ? editCall(o.args) : null;
+  } catch {
+    return null;
+  }
+};
 
-test('prompt offers only the edit tool and says when to say none', () => {
-  const p = editPrompt('make the background white', new Date('2026-11-26T10:00:00'));
-  expect(p).toContain('edit_photo(op: rotate|flip|crop|grayscale|enhance|background');
-  expect(p).toContain('A photo is attached');
-  expect(p).toContain('{"tool":"none"}');
-  expect(p).not.toContain('message(');
+test('edit_photo is offered to the sorter only with a photo, and never to routines', () => {
+  expect(EDIT_TOOL.name).toBe('edit_photo');
+  expect(NOT_IN_ROUTINES.has('edit_photo')).toBe(true);
 });
 
 describe('parseEditReply', () => {

@@ -22,7 +22,6 @@ import {
   type Extra,
   gigabytes,
   offlineSearchLine,
-  parseExtra,
   RANGE_WORDS,
   rangeStart,
   type RideApp,
@@ -54,18 +53,6 @@ const reply = (text: string): PlannedAction => ({ kind: 'reply', text });
 const off = (what: string, where = 'Phone info') =>
   reply(`${what} is off in Settings → Connections → ${where}.`);
 const NOT_HERE = "That isn't possible on this phone yet.";
-
-/** Things that are fine to answer with the phone locked (no personal data). */
-export function extraSafeWhenLocked(question: string): boolean {
-  const e = parseExtra(question);
-  return !!e && (e.type === 'battery' || e.type === 'findPhone' || e.type === 'stopRing');
-}
-
-export async function planExtra(question: string, now = new Date()): Promise<PlannedAction | null> {
-  const e = parseExtra(question);
-  if (!e) return null;
-  return runExtra(e, now);
-}
 
 export async function runExtra(e: Extra, now = new Date()): Promise<PlannedAction | null> {
   const n = integrationsNative();
@@ -435,11 +422,10 @@ function ride(
 
 /**
  * A question about the copied text ("summarise what I copied", "translate the clipboard into
- * French"): the copied text added as untrusted context for the model. Null when not asked.
+ * French"; the model chose the clipboard tool): the copied text added as untrusted context for
+ * the model. Null when clipboard reading is off or nothing is copied.
  */
 export function withClipboard(question: string): string | null {
-  if (!/\b(what i('ve| have)? (just )?copied|(my|the) clipboard)\b/i.test(question)) return null;
-  if (parseExtra(question)) return null;
   if (!isOn('phoneInfo', 'clipboard')) return null;
   const t = integrationsNative()?.clipboardText?.();
   if (!t) return null;

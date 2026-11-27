@@ -11,7 +11,7 @@ import { listSpeakers } from '@/memory/store';
 
 import { fetchJson, fetchText, isOnline, searchWeb, type SearchOptions } from './lookup';
 import { mergeSources, USER_AGENT, type WebSource } from './lookup-logic';
-import { isNewsQuestion, topicWords } from './news-logic';
+import { topicWords } from './news-logic';
 import { isWikimedia, politeFetch, wikimedia } from './rate-limit';
 import {
   chooseReads,
@@ -204,6 +204,8 @@ export async function research(
   onText: (full: string) => void,
   onStatus: (line: string) => void = () => {},
   deps: ResearchDeps = defaultDeps,
+  /** The model's reading: the topic is recent news (news sources searched too). */
+  news = false,
 ): Promise<ResearchResult> {
   const t0 = Date.now();
   const timings = { planMs: 0, searchMs: 0, readMs: 0, writeMs: 0 };
@@ -233,7 +235,6 @@ export async function research(
 
   // 2. Search, one query after another (GDELT allows one request per 5 s; a gentle pace for all).
   const t1 = Date.now();
-  const news = isNewsQuestion(topic);
   const found: { source: WebSource; query: string }[] = [];
   const seen = new Set<string>();
   for (let i = 0; i < queries.length && !cancelled(); i++) {

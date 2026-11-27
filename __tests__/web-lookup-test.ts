@@ -6,15 +6,12 @@ import wiki from './fixtures/web/wikipedia-search.json';
 import {
   buildQuery,
   clipText,
-  decideLookup,
   duckDuckGoUrl,
   mergeSources,
-  mightBeLookup,
   normaliseSearxUrl,
   parseDuckDuckGo,
   parseSearx,
   parseWikipedia,
-  requestsLookup,
   SOURCE_CHARS,
   stripNames,
   webContext,
@@ -32,37 +29,6 @@ jest.mock('@/engine/llm', () => ({
 
 // eslint-disable-next-line import/first
 import { askWithLookup, fetchJson, type LookupDeps, searchWeb } from '@/web/lookup';
-
-const ctx = { enabled: true, photo: false, knownNames: ['Sam', 'Priya Shah'] };
-
-describe('decideLookup', () => {
-  test.each([
-    ['Who is the president of France?', 'lookup'],
-    ['What is the latest version of Android?', 'lookup'],
-    ['When was the Eiffel Tower built?', 'lookup'],
-    ['How tall is Mount Everest?', 'lookup'],
-    ['Look up the boiling point of ethanol', 'lookup'],
-    ['Search online for Sam Smith songs', 'lookup'],
-    ['What did I say about the car?', 'none'],
-    ['Where are my keys?', 'none'],
-    ['What do I need to do today?', 'none'],
-    ['What did Sam say yesterday?', 'none'],
-    ['Is Priya Shah coming?', 'none'],
-    ['What time is it?', 'none'],
-    ['Why do cats purr?', 'ask-model'],
-    ['Explain photosynthesis', 'ask-model'],
-  ])('%s -> %s', (q, want) => {
-    expect(decideLookup(q, ctx)).toBe(want);
-  });
-
-  test('off, photo or empty never looks up', () => {
-    expect(decideLookup('Who is the president of France?', { ...ctx, enabled: false })).toBe(
-      'none',
-    );
-    expect(decideLookup('Look this up', { ...ctx, photo: true })).toBe('none');
-    expect(decideLookup('  ', ctx)).toBe('none');
-  });
-});
 
 describe('query building', () => {
   test('strips question words, polite lead-ins and known names', () => {
@@ -159,18 +125,6 @@ describe('parsing recorded responses', () => {
   });
 });
 
-describe('Gemma asking for a lookup', () => {
-  test('LOOKUP detection', () => {
-    expect(requestsLookup('LOOKUP')).toBe(true);
-    expect(requestsLookup(' Lookup.')).toBe(true);
-    expect(requestsLookup('Looking at it, cats purr when happy.')).toBe(false);
-    expect(mightBeLookup('LOO')).toBe(true);
-    expect(mightBeLookup('Look')).toBe(true);
-    expect(mightBeLookup('Looki')).toBe(false);
-    expect(mightBeLookup('Cats')).toBe(false);
-  });
-});
-
 describe('fetch and orchestration', () => {
   const stats = (ms: number) => ({ totalMs: ms, ttftMs: ms / 2 });
   const deps = (over: Partial<LookupDeps> = {}): LookupDeps => ({
@@ -181,7 +135,6 @@ describe('fetch and orchestration', () => {
     online: async () => true,
     search: jest.fn(async () => [parseWikipedia(wiki)!]),
     writeQuery: async () => null,
-    undoLast: jest.fn(),
     now: () => new Date('2026-11-23T00:00:00Z'),
     ...over,
   });
@@ -204,7 +157,17 @@ describe('fetch and orchestration', () => {
     expect(d.search).not.toHaveBeenCalled();
   });
 
-  test('rule says look up: only the question words are searched', async () => {
+  test('not asked for: one plain answer, nothing searched', async () => {
+    const d = deps();
+    const ask = jest.fn(async (p: string) => ({ text: 'a', stats: stats(10), prompt: p }));
+    const r = await askWithLookup('Why do cats purr?', false, build, ask, () => {}, d);
+    expect(r.web).toEqual([]);
+    expect(ask).toHaveBeenCalledTimes(1);
+    expect(ask.mock.calls[0][0]).toBe('Question: q');
+    expect(d.search).not.toHaveBeenCalled();
+  });
+
+  test('the model asked for a lookup: only the question words are searched', async () => {
     const d = deps();
     const ask = jest.fn(async () => ({ text: 'Macron.', stats: stats(10) }));
     const r = await askWithLookup(
@@ -214,6 +177,9 @@ describe('fetch and orchestration', () => {
       ask,
       () => {},
       d,
+      undefined,
+      undefined,
+      { force: true },
     );
     expect(d.search).toHaveBeenCalledWith(
       'president of France',
@@ -234,6 +200,9 @@ describe('fetch and orchestration', () => {
       ask,
       () => {},
       d,
+      undefined,
+      undefined,
+      { force: true },
     );
     expect(r.offline).toBe(true);
     const found = deps({ search: jest.fn(async () => []), unreachable: () => false });
@@ -244,6 +213,9 @@ describe('fetch and orchestration', () => {
       ask,
       () => {},
       found,
+      undefined,
+      undefined,
+      { force: true },
     );
     expect(r2.offline).toBe(false);
   });
@@ -258,51 +230,39 @@ describe('fetch and orchestration', () => {
       ask,
       () => {},
       d,
+      undefined,
+      undefined,
+      { force: true },
     );
     expect(r.web).toEqual([]);
     expect(d.search).not.toHaveBeenCalled();
-    expect((ask.mock.calls[0] as unknown[])[0]).toBe('Question: q');
+    expect((ask.mock.calls[0] as unknown[])[0]).toContain('could not check');
   });
 
-  test('Gemma says LOOKUP: hidden from the user, then answered with results', async () => {
-    const d = deps();
-    const shown: string[] = [];
-    const replies = ['LOOKUP', 'Cats purr to communicate.'];
-    const ask = jest.fn(
-      async (_p: string, onText: (t: string) => void, _o?: { undoable?: boolean }) => {
-        const text = replies.shift()!;
-        onText(text.slice(0, 3));
-        onText(text);
-        return { text, stats: stats(100) };
-      },
+  test('news and follow-ups: the model reading is passed on', async () => {
+    const writeQuery = jest.fn(async () => 'mars rover landing date');
+    const d = deps({ writeQuery });
+    const ask = jest.fn(async () => ({ text: 'a', stats: stats(10) }));
+    await askWithLookup(
+      'and when did it land?',
+      false,
+      build,
+      ask,
+      () => {},
+      d,
+      'what is the new Mars rover called?',
+      undefined,
+      { force: true, news: true },
     );
-    const r = await askWithLookup('Why do cats purr?', false, build, ask, (t) => shown.push(t), d);
-    expect(shown).toEqual(['Cat', 'Cats purr to communicate.']);
-    expect(r.text).toBe('Cats purr to communicate.');
-    expect(r.stats.totalMs).toBe(200);
-    expect(d.search).toHaveBeenCalledWith('cats purr', expect.objectContaining({ news: false }));
-    expect(r.webQuery).toBe('cats purr');
-    // The hidden LOOKUP turn is dropped from the chat before the real answer.
-    expect(ask.mock.calls[0][2]).toEqual({ undoable: true });
-    expect(d.undoLast).toHaveBeenCalledTimes(1);
-    expect((d.undoLast as jest.Mock).mock.invocationCallOrder[0]).toBeLessThan(
-      (d.search as jest.Mock).mock.invocationCallOrder[0],
+    expect(writeQuery).toHaveBeenCalledWith(
+      'and when did it land?',
+      ['Sam'],
+      'what is the new Mars rover called?',
     );
-  });
-
-  test('Gemma answers directly: streamed as usual, no lookup', async () => {
-    const d = deps();
-    const shown: string[] = [];
-    const ask = jest.fn(async (_p: string, onText: (t: string) => void) => {
-      onText('Cats');
-      return { text: 'Cats', stats: stats(10) };
-    });
-    const r = await askWithLookup('Why do cats purr?', false, build, ask, (t) => shown.push(t), d);
-    expect(shown).toEqual(['Cats']);
-    expect(r.web).toEqual([]);
-    expect(d.search).not.toHaveBeenCalled();
-    // A direct answer is a real turn: it stays in the chat.
-    expect(d.undoLast).not.toHaveBeenCalled();
+    expect(d.search).toHaveBeenCalledWith(
+      'mars rover landing date',
+      expect.objectContaining({ news: true }),
+    );
   });
 
   test('searchWeb survives a failing source', async () => {

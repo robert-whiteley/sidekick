@@ -62,33 +62,6 @@ export type ConfirmReply =
   | { kind: 'replace'; text: string }
   | { kind: 'append'; text: string };
 
-const YES =
-  /^(yes|yeah|yep|yup|ya|sure|ok|okay|correct|right|that's right|that's fine|fine|go ahead|go|send|send it|do it|confirm|perfect|sounds good|looks good|great)\b/i;
-const NO =
-  /^(no|nope|nah|don't|do not|stop|cancel|cancel it|never mind|nevermind|forget it|abort|wait)\b/i;
-const REPLACE =
-  /^(?:no,? )?(?:change|make|set|edit) (?:it|that|the (?:message|text|email|body|title|event)) (?:to|so it says|to say|say) (.+)$/i;
-const REPLACE2 = /^(?:no,? )?(?:say|write|it should say|instead say|instead) (.+)$/i;
-const APPEND = /^(?:and )?(?:add|also (?:say|add)|plus|and say) (?:that )?(.+)$/i;
-
-/** The answer to a read-back, or null when it is something else (a new question). */
-export function parseConfirmReply(heard: string): ConfirmReply | null {
-  const t = heard
-    .trim()
-    .replace(/^(hey |ok |okay )?sidekick,? /i, '')
-    .replace(/[.!?]+$/, '')
-    .trim();
-  if (!t) return null;
-  const r = REPLACE.exec(t) ?? REPLACE2.exec(t);
-  if (r) return { kind: 'replace', text: r[1].trim() };
-  const a = APPEND.exec(t);
-  if (a) return { kind: 'append', text: a[1].trim() };
-  // "No" followed by a long sentence is a correction the rules can't place: not a plain no.
-  if (NO.test(t) && t.split(' ').length <= 4) return { kind: 'no' };
-  if (YES.test(t) && t.split(' ').length <= 5) return { kind: 'yes' };
-  return null;
-}
-
 const cap = (s: string) => `${s.charAt(0).toUpperCase()}${s.slice(1)}`;
 
 const join = (a: string, b: string) => {
@@ -113,12 +86,6 @@ export function editedFields(d: Draft, edit: ConfirmReply): Partial<Draft['field
 }
 
 // --- When the rules can't tell: a short scratch pass of the model ---
-
-/** Worth asking the model? Only short replies; long ones are a new question. */
-export function mightBeConfirmReply(heard: string): boolean {
-  const words = heard.trim().split(/\s+/).filter(Boolean).length;
-  return words > 0 && words <= 14;
-}
 
 export function confirmPrompt(readBack: string, heard: string): string {
   return `The assistant asked: ${JSON.stringify(readBack)}

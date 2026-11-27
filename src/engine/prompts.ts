@@ -49,5 +49,5 @@ export const ALL_SPOKEN = ' Every question here is spoken: plain spoken sentence
  */
 export function questionPart(asked: string, now: Date = new Date(), spoken = false): string {
   // The model doesn't know today's date: give it when the question is about dates or time.
-  return `${nowLine(asked, now)}Question${spoken ? ' (spoken)' : ''}: ${asked}`;
+  return `${nowLine(now)}Question${spoken ? ' (spoken)' : ''}: ${asked}`;
 }

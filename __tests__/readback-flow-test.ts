@@ -1,14 +1,15 @@
 import {
+  answerReadBack,
   AUTO_SEND_MS,
   awaitingReadBack,
   beginReadBack,
   drafts,
   flushOutbox,
-  planAction,
   readBackDone,
   runAction,
 } from '@/engine/actions';
 import { READ_BACK_REPLY_MS } from '@/engine/readback-logic';
+import { askLlm } from '@/engine/llm';
 import { sendMessage } from '@/integrations/messages';
 import type { Draft } from '@/integrations/types';
 import * as outbox from '@/memory/outbox';
@@ -20,7 +21,7 @@ jest.mock('@/integrations/contacts', () => ({
   contactNameList: async () => [],
   findContact: async () => null,
 }));
-jest.mock('@/integrations/llm-parse', () => ({ intentFromLlm: async () => null }));
+jest.mock('@/engine/llm', () => ({ askLlm: jest.fn() }));
 jest.mock('@/integrations/native', () => ({
   integrationsNative: () => null,
   messageThreads: () => [],
@@ -61,8 +62,13 @@ beforeEach(() => {
   drafts.clear();
   rows.length = 0;
   (sendMessage as jest.Mock).mockClear();
+  (askLlm as jest.Mock).mockReset();
 });
 afterEach(() => jest.useRealTimers());
+
+/** The model's reading of the spoken answer (confirmPrompt's JSON). */
+const modelSays = (o: object) =>
+  (askLlm as jest.Mock).mockResolvedValueOnce({ text: JSON.stringify(o) });
 
 test('read-back: countdown starts only after the voice, then sends', async () => {
   drafts.put(msg('a'));
@@ -77,37 +83,46 @@ test('read-back: countdown starts only after the voice, then sends', async () =>
   expect(drafts.get('a')?.status).toBe('sent');
 });
 
-test('voice answers: yes sends, no cancels, "change it to" edits and reads back again', async () => {
+test('voice answers: the model reads yes, no and changes in any wording', async () => {
   drafts.put(msg('y'));
   beginReadBack('y');
-  expect(await planAction('yes send it', { useModel: false })).toEqual({
-    kind: 'reply',
-    text: 'Sent',
-  });
+  modelSays({ answer: 'yes' });
+  expect(await answerReadBack('yeah go on')).toEqual({ kind: 'reply', text: 'Sent' });
   expect(drafts.get('y')?.status).toBe('sent');
 
   drafts.put(msg('n'));
   beginReadBack('n');
-  expect(await planAction('no', { useModel: false })).toEqual({
-    kind: 'reply',
-    text: 'Cancelled.',
-  });
+  modelSays({ answer: 'no' });
+  expect(await answerReadBack('nah leave it')).toEqual({ kind: 'reply', text: 'Cancelled.' });
   expect(drafts.get('n')?.status).toBe('cancelled');
 
   drafts.put(msg('c'));
   beginReadBack('c');
-  const r = await planAction('change it to on my way', { useModel: false });
-  expect(r).toEqual({ kind: 'reply', text: 'Text to Sam: On my way. Send it?', readBackId: 'c' });
-  expect(drafts.get('c')).toMatchObject({ status: 'draft', fields: { text: 'On my way' } });
-  const a = await planAction('add see you soon', { useModel: false });
-  expect(a?.kind === 'reply' && a.text).toBe('Text to Sam: On my way. See you soon. Send it?');
+  modelSays({ answer: 'replace', text: 'on my way' });
+  const r = await answerReadBack('make it on my way instead');
+  expect(r).toMatchObject({ kind: 'reply', readBackId: 'c' });
+  expect(drafts.get('c')).toMatchObject({ status: 'draft' });
+  expect((drafts.get('c')?.fields as { text: string }).text.toLowerCase()).toBe('on my way');
+});
+
+test('not an answer, or a model failure: nothing is sent', async () => {
+  drafts.put(msg('o'));
+  beginReadBack('o');
+  modelSays({ answer: 'other' });
+  expect(await answerReadBack('what time is it?')).toBeNull();
+  (askLlm as jest.Mock).mockRejectedValueOnce(new Error('busy'));
+  expect(await answerReadBack('yes')).toBeNull();
+  expect(drafts.get('o')?.status).toBe('draft');
+  expect(sendMessage).not.toHaveBeenCalled();
 });
 
 test('no read-back pending: "yes" is not taken as an answer', async () => {
   drafts.put(msg('z'));
   expect(awaitingReadBack()).toBeNull();
-  // Plain "yes" with no draft read back falls through (no action).
-  expect(await planAction('yes', { useModel: false })).toBeNull();
+  modelSays({ answer: 'yes' });
+  expect(await answerReadBack('yes')).toBeNull();
+  expect(askLlm).not.toHaveBeenCalled();
+  expect(drafts.get('z')?.status).toBe('draft');
 });
 
 test('scheduled send: queued until its time, then sent; cancel removes it', async () => {

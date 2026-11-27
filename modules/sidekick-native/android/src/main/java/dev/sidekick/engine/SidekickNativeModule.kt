@@ -22,6 +22,8 @@ class GenerateOptionsRecord : Record {
   @Field val scratch: Boolean = false
   @Field val undoable: Boolean = false
   @Field val offRecord: Boolean = false
+  @Field val thinkingBudget: Int? = null
+  @Field val cacheSystem: Boolean = false
 }
 
 class LlmTuningRecord : Record {
@@ -108,7 +110,7 @@ class SidekickNativeModule : Module() {
       llm.generate(
         prompt,
         imagePath,
-        GenerateOptions(opts?.maxTokens, opts?.keepHistory ?: false, opts?.system, opts?.scratch ?: false, opts?.undoable ?: false, opts?.offRecord ?: false),
+        GenerateOptions(opts?.maxTokens, opts?.keepHistory ?: false, opts?.system, opts?.scratch ?: false, opts?.undoable ?: false, opts?.offRecord ?: false, opts?.thinkingBudget, opts?.cacheSystem ?: false),
         onText = { sendEvent("onLlmText", mapOf("requestId" to requestId, "text" to it)) },
         onFinish = { s ->
           promise.resolve(
@@ -119,6 +121,8 @@ class SidekickNativeModule : Module() {
               "decodeTokens" to s.decodeTokens,
               "decodeTokensPerSec" to s.decodeTokensPerSec,
               "totalMs" to s.totalMs,
+              "firstTextMs" to s.firstTextMs,
+              "thoughtChars" to s.thoughtChars,
             )
           )
         },

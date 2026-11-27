@@ -1,11 +1,9 @@
-/** The model tool router: which tools are offered, how calls are checked, and the chain loop. */
-import { planIntent } from '@/engine/actions';
-import { parseFeedback } from '@/engine/feedback';
-import { feedbackRule, locationPhrase, resolveTimeWithModel, routeWithTools } from '@/engine/tools';
+/** Tool calls: how the model's arguments are checked, and what each tool does with them. */
+import { planIntent, planTelephony } from '@/engine/actions';
+import { fillTool, locationPhrase, resolveTimeWithModel, runTool } from '@/engine/tools';
 import {
   parseRangeReply,
   parseToolReply,
-  relevantTools,
   validateCall,
   wantsModelRange,
 } from '@/engine/tools-logic';
@@ -13,7 +11,15 @@ import { forgetRanges, parseTimeRange } from '@/memory/time-range';
 
 // jest hoists these above the imports.
 jest.mock('@/engine/llm', () => ({ askLlm: jest.fn() }));
-jest.mock('@/engine/actions', () => ({ planIntent: jest.fn() }));
+jest.mock('@/engine/actions', () => ({
+  planIntent: jest.fn(),
+  planTelephony: jest.fn(),
+  moveEventTo: jest.fn(),
+  // The real one also stores the draft; here it only marks the send time.
+  scheduleDraft: (plan: { kind: string; draft?: object } | null, at: number) =>
+    plan?.kind === 'draft' ? { kind: 'draft', draft: { ...plan.draft, scheduledAt: at } } : plan,
+}));
+jest.mock('@/memory/sources', () => ({ contactDetails: jest.fn() }));
 jest.mock('@/engine/quick-commands', () => ({ runParsedCommand: jest.fn() }));
 jest.mock('@/integrations/extras', () => ({ runExtra: jest.fn() }));
 jest.mock('@/integrations/phone-controls', () => ({ runControl: jest.fn() }));
@@ -29,7 +35,6 @@ jest.mock('expo-application', () => ({
 }));
 
 const NOW = new Date(2026, 10, 25, 12, 0);
-const names = (q: string, o = {}) => relevantTools(q, o).map((t) => t.name);
 const quiet = { log: () => {}, now: NOW };
 
 /** A fake model that gives these replies in turn. */
@@ -42,37 +47,8 @@ const replies = (...r: string[]) => {
 
 beforeEach(() => {
   jest.mocked(planIntent).mockReset();
+  jest.mocked(planTelephony).mockReset();
   forgetRanges();
-});
-
-describe('which tools are offered', () => {
-  it('skips plain knowledge questions', () => {
-    expect(names('what is the capital of France')).toEqual([]);
-    expect(names('why is the sky blue')).toEqual([]);
-  });
-  it('offers the tools the words point at', () => {
-    expect(names('ping my sister that I will be late')).toContain('message');
-    expect(names('could you wake me at seven')).toContain('alarm');
-    expect(names('do I need an umbrella in Leeds tomorrow')[0]).toBe('weather');
-  });
-  it('offers everything for an unknown instruction, nothing for an unknown question', () => {
-    expect(names('sort out the thing for Jo').length).toBeGreaterThan(10);
-    expect(names('is it nice')).toEqual([]);
-  });
-  it('never offers an action for a general request with no action word (pancake case)', () => {
-    for (const q of [
-      'Give me a quick recipe for pancakes',
-      'Write one about autumn',
-      'Give me a packing checklist in five items',
-    ])
-      expect(relevantTools(q).some((t) => t.kind === 'action')).toBe(false);
-    expect(names('search the web for pancake recipes')).toContain('app_search');
-  });
-  it('never offers reply first, nor routines in a routine or places off the record', () => {
-    expect(names('sort out the thing for Jo')).not.toContain('reply');
-    expect(names('every morning read my day', { routine: true })).not.toContain('routine');
-    expect(names('call this spot the gym', { offRecord: true })).not.toContain('name_place');
-  });
 });
 
 describe('checking a call', () => {
@@ -108,77 +84,150 @@ describe('checking a call', () => {
   });
 });
 
-describe('the router loop', () => {
+describe('running a tool', () => {
   it('turns a camera-setting call into the camera command', async () => {
     const { runParsedCommand } = jest.requireMock('@/engine/quick-commands') as {
       runParsedCommand: jest.Mock;
     };
     runParsedCommand.mockResolvedValue('Using the front camera.');
-    const ask = replies('{"tool":"camera_setting","args":{"lens":"front","frames":"more"}}');
-    const out = await routeWithTools('switch to the selfie camera and film more', {
-      ...quiet,
-      ask,
-    });
+    const q = 'switch to the selfie camera and film more';
+    const out = await runTool('camera_setting', { lens: 'front', frames: 'more' }, q, quiet, NOW);
     expect(out).toEqual({ kind: 'reply', text: 'Using the front camera.' });
     expect(runParsedCommand).toHaveBeenCalledWith(
-      {
-        type: 'cameraSetting',
-        change: { frames: 'more', lens: 'front', detail: undefined },
-      },
-      'switch to the selfie camera and film more',
+      { type: 'cameraSetting', change: { frames: 'more', lens: 'front', detail: undefined } },
+      q,
       null,
     );
   });
-  it('runs one action through the normal draft path', async () => {
+  it('runs an action through the normal draft path', async () => {
     const plan = { kind: 'reply', text: 'Timer set for 5 minutes.' };
     jest.mocked(planIntent).mockResolvedValue(plan as never);
-    const ask = replies('{"tool":"timer","args":{"minutes":5}}');
-    const out = await routeWithTools('give me five minutes on the clock', { ...quiet, ask });
+    const out = await runTool('timer', { minutes: 5 }, 'five minutes on the clock', quiet, NOW);
     expect(out).toEqual({ kind: 'plan', plan });
     expect(planIntent).toHaveBeenCalledWith({ type: 'timer', seconds: 300, label: '' }, NOW);
-    expect(ask).toHaveBeenCalledTimes(1);
   });
-  it('falls back to the normal answer on none, bad JSON or a bad call', async () => {
-    for (const r of ['{"tool":"none"}', 'hmm', '{"tool":"message","args":{"to":"Sam"}}']) {
-      const out = await routeWithTools('ping Sam', { ...quiet, ask: replies(r) });
-      expect(out).toBeNull();
-    }
+  it('sends an info tool to its own handler as canonical words', async () => {
+    const out = await runTool('weather', { place: 'Leeds' }, 'umbrella needed in Leeds?', quiet);
+    expect(out).toEqual({ kind: 'rules', text: "what's the weather in Leeds" });
+  });
+  it('drafts feedback to support with the words and phone details', async () => {
+    jest.mocked(planIntent).mockResolvedValue({ kind: 'draft', draft: { id: 'f' } } as never);
+    await runTool('feedback', { text: 'the camera is slow' }, 'tell the makers…', quiet, NOW);
+    const intent = jest.mocked(planIntent).mock.calls[0][0] as {
+      name: string;
+      subject: string;
+      body: string;
+    };
+    expect(intent.name).toBe('support@example.com');
+    expect(intent.subject).toBe('Sidekick feedback');
+    expect(intent.body.startsWith('the camera is slow')).toBe(true);
+    expect(intent.body).toContain('2.0.0');
+  });
+  it('a message with a time is a draft that waits until then', async () => {
+    const draft = { id: 'm', kind: 'message', status: 'draft' };
+    jest.mocked(planIntent).mockResolvedValue({ kind: 'draft', draft } as never);
+    const out = await runTool(
+      'message',
+      { to: 'Sam', text: 'on my way', at: 'today at 6pm' },
+      'text Sam at six saying on my way',
+      quiet,
+      NOW,
+    );
+    expect(planIntent).toHaveBeenCalledWith(
+      { type: 'message', name: 'Sam', text: 'on my way', app: 'auto' },
+      NOW,
+    );
+    expect(out).toEqual({
+      kind: 'plan',
+      plan: {
+        kind: 'draft',
+        draft: { ...draft, scheduledAt: new Date(2026, 10, 25, 18, 0).getTime() },
+      },
+    });
+  });
+  it('a message time already past is asked again, nothing drafted', async () => {
+    const out = await runTool(
+      'message',
+      { to: 'Sam', text: 'hi', at: 'today at 9am' },
+      'q',
+      quiet,
+      NOW,
+    );
+    expect(out?.kind).toBe('reply');
     expect(planIntent).not.toHaveBeenCalled();
   });
-  it('chains an info result into the next step', async () => {
-    const plan = { kind: 'draft', draft: { id: 'd1', title: 'Text to Sam' } };
-    jest.mocked(planIntent).mockResolvedValue(plan as never);
-    const ask = replies(
-      '{"tool":"weather","args":{"place":"Leeds","day":"tomorrow"}}',
-      '{"tool":"message","args":{"to":"Sam","text":"Rain tomorrow, bring a coat"}}',
+  it('the open draft: send or cancel', async () => {
+    jest.mocked(planIntent).mockResolvedValue({ kind: 'reply', text: 'ok' } as never);
+    await runTool('draft', { do: 'send' }, 'yes send it', quiet, NOW);
+    await runTool('draft', { do: 'cancel' }, 'forget it', quiet, NOW);
+    expect(jest.mocked(planIntent).mock.calls.map((c) => c[0])).toEqual([
+      { type: 'sendIt' },
+      { type: 'cancelIt' },
+    ]);
+  });
+  it('media "what" asks what is playing', async () => {
+    jest.mocked(planIntent).mockResolvedValue({ kind: 'reply', text: 'Playing: x' } as never);
+    await runTool('media', { command: 'what' }, 'what song is this', quiet, NOW);
+    expect(planIntent).toHaveBeenCalledWith({ type: 'nowPlaying' }, NOW);
+  });
+  it('the clipboard is added to a normal answer', async () => {
+    expect(await runTool('clipboard', {}, 'what did I copy?', quiet, NOW)).toEqual({
+      kind: 'answer',
+      clipboard: true,
+    });
+  });
+  it('texts are read through the phone', async () => {
+    const plan = { kind: 'reply', text: 'Sam: hi' };
+    jest.mocked(planTelephony).mockResolvedValue(plan as never);
+    const out = await runTool(
+      'texts',
+      { from: 'Sam', last: true },
+      'last text from Sam',
+      quiet,
+      NOW,
     );
-    const viaRules = jest.fn(async () => 'Rain tomorrow in Leeds.');
-    const out = await routeWithTools('check the forecast for Leeds and then text Sam about it', {
-      ...quiet,
-      ask,
-      viaRules,
-    });
-    expect(viaRules).toHaveBeenCalledWith("what's the weather in Leeds tomorrow");
-    expect(ask).toHaveBeenCalledTimes(2);
-    expect(ask.mock.calls[1][0]).toContain('Rain tomorrow in Leeds.');
     expect(out).toEqual({ kind: 'plan', plan });
+    expect(planTelephony).toHaveBeenCalledWith(
+      { type: 'texts', name: 'Sam', last: true, unread: false, range: null },
+      NOW,
+    );
+    jest.mocked(planTelephony).mockResolvedValue(null);
+    expect((await runTool('texts', {}, 'any texts?', quiet, NOW))?.kind).toBe('reply');
   });
-  it('stops after three steps and says the last result', async () => {
-    const ask = jest.fn(async () => '{"tool":"weather","args":{"place":"Leeds"}}');
-    const out = await routeWithTools('check the weather and then check it again', {
-      ...quiet,
-      ask,
-      viaRules: async () => 'Sunny.',
-    });
-    expect(ask).toHaveBeenCalledTimes(3);
-    expect(out).toEqual({ kind: 'reply', text: 'Sunny.' });
+});
+
+describe('filling one tool', () => {
+  it('asks for that tool alone and checks the call', async () => {
+    const ask = replies('{"minutes":5}');
+    const out = await fillTool('give me five minutes on the clock', 'timer', { ask, now: NOW });
+    expect(out).toMatchObject({ tool: 'timer', args: { minutes: 5 }, offered: ['timer'] });
+    expect(ask.mock.calls[0][0]).toContain('timer');
   });
-  it('a single info request goes back through the rules', async () => {
-    const out = await routeWithTools('umbrella needed in Leeds?', {
-      ...quiet,
-      ask: replies('{"tool":"weather","args":{"place":"Leeds"}}'),
+  it('lets the model say the tool does not fit, and reports a bad call', async () => {
+    expect((await fillTool('ping Sam', 'message', { ask: replies('{"none":true}') }))?.tool).toBe(
+      'none',
+    );
+    const bad = await fillTool('ping Sam', 'message', {
+      ask: replies('{"to":"Sam"}', '{"to":"Sam"}'),
     });
-    expect(out).toEqual({ kind: 'rules', text: "what's the weather in Leeds" });
+    expect(bad?.error).toBeTruthy();
+    expect((await fillTool('ping Sam', 'message', { ask: replies('hmm', 'hmm') }))?.error).toBe(
+      'unparsed',
+    );
+  });
+  it('asks once more with the reason when the schema refuses the call', async () => {
+    const ask = replies('{"torch":true}', '{"setting":"torch","on":true}');
+    const out = await fillTool('torch on', 'phone_setting', { ask, now: NOW });
+    expect(out).toMatchObject({ tool: 'phone_setting', args: { setting: 'torch', on: true } });
+    expect(ask).toHaveBeenCalledTimes(2);
+    expect(ask.mock.calls[1][0]).toContain('was refused: setting missing');
+  });
+  it('does not ask again about a message to the user themselves', async () => {
+    const ask = replies('{"to":"me","text":"a fun fact"}');
+    expect((await fillTool('text me a fun fact', 'message', { ask }))?.error).toBe(
+      'to is the user',
+    );
+    expect(ask).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -211,28 +260,6 @@ describe('time spans the rules miss', () => {
     expect(parseTimeRange(q, NOW)?.label).toBe('Christmas');
     forgetRanges();
     expect(parseTimeRange(q, NOW)).toBeNull();
-  });
-});
-
-describe('feedback', () => {
-  it('reads feedback requests', () => {
-    expect(parseFeedback('send feedback: the camera is slow')).toBe('the camera is slow');
-    expect(parseFeedback('tell the developers that I love it')).toBe('I love it');
-    expect(parseFeedback('report a bug the timer froze')).toBe('the timer froze');
-    expect(parseFeedback('what is feedback')).toBeNull();
-  });
-  it('drafts an email to support with the words and phone details', async () => {
-    jest.mocked(planIntent).mockResolvedValue({ kind: 'draft', draft: { id: 'f' } } as never);
-    await feedbackRule('send feedback: the camera is slow');
-    const intent = jest.mocked(planIntent).mock.calls[0][0] as {
-      name: string;
-      subject: string;
-      body: string;
-    };
-    expect(intent.name).toBe('support@example.com');
-    expect(intent.subject).toBe('Sidekick feedback');
-    expect(intent.body.startsWith('the camera is slow')).toBe(true);
-    expect(intent.body).toContain('2.0.0');
   });
 });
 

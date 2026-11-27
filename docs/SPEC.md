@@ -2,6 +2,8 @@
 
 Sidekick is a general-purpose, fully on-device camera + audio assistant with the context of your life. Every feature is user-toggleable.
 
+**Principle: the model understands, code computes.** Owner: "It should be dynamic and intelligent, hardcoding is brittle, unless it's always better like doing calculations etc., but that should probably be a hand-off. We want as few rules and bloat/context in the chat as possible, to maximise intelligence, speed, efficiency, battery usage." So working out what the user means (which tool, whether to look something up, whether to think harder) is the model's job, in any wording or language, never a word list; code only does exact work the model hands off with structured arguments (sums, unit conversion, calendar maths, time zones). Accuracy wins over speed: better slow than unreliable. Measured in docs/BENCH.md ("Rules vs model, thinking").
+
 ## Features (MVP unless marked later)
 
 1. **Ask** — wake word (default "Hey Sidekick", changeable) and a big button; Android: Quick Settings tile and widget; iPhone: Siri, the Shortcuts app, the Action Button and Control Center ("Ask Sidekick", "Start voice question", "What am I looking at?"; they open the app). Voice or typed. Streaming answer, spoken and shown as text. Typed answers may use simple formatting (lists, steps, bold, small tables) when it helps; spoken ones are plain sentences. Long-press the last question to Edit it, or the last answer to Try again (only the last exchange, which is taken out of the chat and memory first); any answer can be read aloud, copied or shared. "How Sidekick answers" (Settings → Assistant, up to 300 characters, e.g. "keep answers short, call me Rob, metric units") is followed in every answer, stays on the phone and is in the export.

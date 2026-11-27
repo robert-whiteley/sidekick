@@ -4,7 +4,7 @@ import {
   planCameraChange,
   type CameraState,
 } from '../src/engine/camera-settings-logic';
-import { NOT_IN_ROUTINES, relevantTools, validateCall } from '../src/engine/tools-logic';
+import { NOT_IN_ROUTINES, validateCall } from '../src/engine/tools-logic';
 
 const OPTIONS = [0.5, 1, 2];
 const REC = { fps: 1, imageDetail: 'medium' as const };
@@ -52,20 +52,8 @@ describe('camera settings by voice', () => {
 });
 
 describe('the camera_setting tool', () => {
-  it('is offered for camera-setting wording, any phrasing', () => {
-    for (const q of [
-      'switch to the selfie camera',
-      'make the picture sharper',
-      'record more frames',
-      'lower the resolution please',
-    ])
-      expect(relevantTools(q).map((t) => t.name)).toContain('camera_setting');
-  });
   it('is never offered to routines (it changes the camera at once)', () => {
     expect(NOT_IN_ROUTINES.has('camera_setting')).toBe(true);
-    expect(relevantTools('flip the camera', { routine: true }).map((t) => t.name)).not.toContain(
-      'camera_setting',
-    );
   });
   it('drops values outside its schema and rejects an out-of-range rate', () => {
     const ok = validateCall({
