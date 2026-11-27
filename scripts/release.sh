@@ -123,6 +123,7 @@ case "$CMD" in
     fi
     run bundle exec fastlane android upload_to_track track:"$TRACK" version_code:"$CODE" status:draft
     [[ $REAL == 1 ]] && echo "Uploaded as a draft. Review and roll it out in Play Console, or: scripts/release.sh promote …"
+    [[ $REAL == 1 ]] && node scripts/store-status.mjs --watch play
     ;;
 
   update)

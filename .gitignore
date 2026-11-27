@@ -61,3 +61,6 @@ vendor/bundle/
 modules/sidekick-native/ios/vendor/
 modules/sidekick-native/ios/Resources/
 /.claude/worktrees/
+
+# store-status marker: what is waiting on the stores (scripts/store-status.mjs)
+/.claude/store-pending.json

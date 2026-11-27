@@ -1,0 +1,28 @@
+SCREEN RECORDING (physical iPhone, latest iOS, from app launch): {{RECORDING_LINK}}
+
+PURPOSE AND AUDIENCE
+Sidekick is a private AI assistant that runs entirely on the iPhone. It is for adults who want an AI assistant for everyday questions and for remembering things, without sending their words, voice or photos to a cloud service. The value: it works offline, needs no account, and what the user says, shows and saves stays on the phone. No ads, no tracking, no in-app purchases, no paid content.
+
+SETUP AND MAIN FEATURES
+No login or account. On first launch the app checks free space and downloads its AI models, about 3 GB in total (the Gemma 4 E2B chat model and a small memory-search model), from Hugging Face. Please use Wi-Fi: it takes about 5 to 10 minutes on typical home Wi-Fi (50 to 100 Mbit/s). It asks before using mobile data. A short explainer shows while it downloads, then the chat opens with example questions to tap. After that it works offline, even in airplane mode.
+The recording shows, from the chat screen:
+- A typed question: type in "Ask Sidekick" and send.
+- A spoken question: hold the mic button, speak, let go (Apple's on-device speech recognition). The answer is shown and read aloud.
+- Memory: say "I parked on level 3", later ask "Where did I park?".
+- Settings (gear icon) > Privacy: online lookup (off by default), Export everything, Delete everything.
+No sample files are needed.
+
+USER-GENERATED CONTENT
+None shared: no accounts, no user-to-user features, nothing is posted or shown to other users, so there is nothing to report or block. Making pictures with AI is not available on iPhone.
+
+EXTERNAL SERVICES
+All AI runs on the iPhone; no AI cloud service is used. No analytics, crash reporting, ads or tracking SDKs, and no servers of our own.
+- huggingface.co: one-time model downloads (files only).
+- Online lookup, off until the user turns it on in Settings > Privacy: Wikipedia (Wikimedia) and DuckDuckGo instant answers (only the search words are sent), GDELT for news headlines, MET Norway (api.met.no) for weather (location rounded to about 1 km), and a web page only when the user pastes or shares its link.
+- Expo (u.expo.dev): checks for small app fixes (EAS Update). Sends only the app's version details. Can be turned off in Settings > Advanced > Get quick fixes.
+
+REGIONAL DIFFERENCES
+None: the app and its features are the same in every country where it is offered. It is not offered in mainland China. The only setting that depends on where the phone is: if the user turns on listening for conversations, consent mode starts on in places whose law needs everyone's consent to record (for example the EU and California).
+
+REGULATED INDUSTRIES AND THIRD-PARTY MATERIAL
+Not in a regulated industry (no medical, financial, legal or gambling service) and it gives no professional advice. It contains no protected third-party material (no music, films, books, logos or other people's media). Models: Gemma 4 and EmbeddingGemma from Google, Apache-2.0 licence. The picture model (SDXS-512, CreativeML OpenRAIL++-M, with its use terms shown in the app) is Android only and is not in the iPhone app. All licences: Settings > About Sidekick > Licences.
