@@ -554,3 +554,30 @@ made-up prompts in the app's own prompt formats, answers scored blind (0–2 eac
   0.20.0.
 - LiteRT-LM 0.20.0 gives Gemma about 24% faster writing, but about 0.8 GB more peak memory here.
 - Load: Gemma 2.9 s (warm cache); Qwen 2B 86 s the first time (builds a 2.8 GB cache), then 14 s.
+
+## LiteRT-LM 0.20.0 (27 Nov 2026)
+
+Moving from 0.19.1, after the chat-model bench (ADR 9) found Gemma 4 E2B writes about 24% faster
+on 0.20.0 (Pixel 5, CPU: 8.3 against 6.7 tok/s, same blind score) but with about 0.8 GB higher
+peak memory. Decision and details in [ADR 10](decisions/0010-litert-lm-0.20.md).
+
+- **The extra memory came from the bench, not the runtime.** The 0.20.0 run built its weights
+  cache in the same process (10 s load instead of 2.9 s), and the bench reports the highest memory
+  the process ever reached. Building the cache costs about 0.9 GB at the peak on the Pixel 5 with
+  either version: Qwen3.5-2B on 0.19.1 reached 4.32 GB after a load that built the cache, and
+  3.42 GB after a load from it.
+- PC check (same Gemma file, Python `litert-lm`, fresh process each time): 0.20.0 uses slightly less
+  memory than 0.19.1 at every context size, and writes 15–130% faster. The default context is
+  4096 tokens in both.
+
+| Gemma 4 E2B on a PC (x86 CPU) | 0.19.1, after load / text / photo | 0.20.0, after load / text / photo |
+| ----------------------------- | --------------------------------- | --------------------------------- |
+| Cache built in the run        | 1.51 / 1.59 / 2.11 GB             | 1.37 / 1.45 / 1.95 GB             |
+| Cache already there           | 1.38 / 1.46 / 1.98 GB             | 1.36 / 1.44 / 1.96 GB             |
+
+- The cache format changed, so the first load after the update rebuilds it once, like a first
+  install. App settings unchanged (default 4096-token context, 140 image tokens per photo).
+- **Phone: not checked yet.** When the phone lock was taken the Pixel 5 was on its lock screen, so
+  nothing was installed. Still to do with `sk-litert20.apk`: the Speed test bench by deep link,
+  twice (the first run rebuilds the cache), with first word, words/s and peak memory
+  (`dumpsys meminfo`) for text and photo, against 0.19.1.

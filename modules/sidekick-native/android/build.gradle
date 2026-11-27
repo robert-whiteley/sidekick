@@ -34,8 +34,10 @@ android {
 }
 
 dependencies {
-  // Google LiteRT-LM (Apache-2.0): on-device Gemma with CPU / GPU / NPU backends.
-  implementation "com.google.ai.edge.litertlm:litertlm-android:0.19.1"
+  // Google LiteRT-LM (Apache-2.0): on-device Gemma with CPU / GPU / NPU backends. Since 0.20 it
+  // pulls in Google LiteRT 2.4.0 (litert, litert-gpu, litert-api; Apache-2.0) for libLiteRt.so.
+  // Keep in step with LITERTLM_TAG in ../ios/SidekickNative.podspec. ADR 10.
+  implementation "com.google.ai.edge.litertlm:litertlm-android:0.20.0"
   // sherpa-onnx (Apache-2.0): VAD, wake word, speech-to-text, speaker embeddings. JitPack re-hosts
   // the official release AAR (v2.0.3's JitPack build failed, so v2.0.2).
   implementation "com.github.k2-fsa.sherpa-onnx:sherpa-onnx:v2.0.2"
