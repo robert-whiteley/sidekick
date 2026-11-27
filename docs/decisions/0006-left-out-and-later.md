@@ -307,7 +307,7 @@ Left out on iPhone, with why (users see the reason in Phone features, Connection
   (Google ones: "Not on iPhone yet: Google sign-in isn't set up for iPhone").
 - **Natural voice (Pocket TTS):** not ported (ONNX Runtime iOS build not added); the iPhone's own voice
   reads answers.
-- **GPU/NPU for the model:** the LiteRT-LM xcframework used (v0.19.1) is CPU only for the Swift API;
+- **GPU/NPU for the model:** the LiteRT-LM xcframework used (checked with v0.19.1; the app now uses v0.20.0) is CPU only for the Swift API;
   the iPhone downloads only the generic model (3.0 GB vs 3.5 GB on Android).
 - **Background audio mode** (`UIBackgroundModes: audio`) removed: the iPhone app answers only while
   open, and Apple rejects background modes an app doesn't need.

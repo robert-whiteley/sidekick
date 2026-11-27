@@ -4,9 +4,9 @@ require 'fileutils'
 # Google LiteRT-LM (Apache-2.0) for the on-device chat model and memory search vectors. The Swift
 # wrapper is vendored in LiteRTLM/ (same tag); the prebuilt C library (~96 MB zip) is fetched here at
 # `pod install` time (on the EAS build machine), checked against its pinned SHA-256 and never
-# committed. Keep the tag in step with the Android dependency in android/build.gradle.
-LITERTLM_TAG = 'v0.19.1'
-LITERTLM_ZIP_SHA256 = '21cf294b3dfdd9c8166b0f7934ed392d5c69c8bfa57cd1a20e341a7d16874017'
+# committed. Keep the tag in step with the Android dependency in android/build.gradle (ADR 10).
+LITERTLM_TAG = 'v0.20.0'
+LITERTLM_ZIP_SHA256 = 'ae6b2b2ea3e46964152110ad5bd64b754f39273add2eb4cc417bbbbd72c5e6e7'
 
 vendor_dir = File.join(__dir__, 'vendor')
 xcframework = File.join(vendor_dir, 'CLiteRTLM.xcframework')
