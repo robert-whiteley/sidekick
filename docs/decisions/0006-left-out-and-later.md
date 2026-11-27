@@ -441,8 +441,13 @@ prompts", must comply with its content policies, "prohibiting and preventing the
 Restricted Content (child exploitation is the example given; the examples page,
 answer/14094294, adds non-consensual sexual deepfakes and sexually gratifying apps), and "must
 contain in-app user reporting or flagging features" so users can report offensive content
-"without needing to exit the app". So Sidekick refuses sexual or nude requests (checked on the
-request and on the model's description; picture-logic.ts) and has the Report button. Nothing
+"without needing to exit the app". So Sidekick refuses sexual or nude pictures, and anyone under 18 in a sexual
+or suggestive way, and has the Report button. The model judges this, not a word list: after it
+picks `make_picture`, a short scratch-chat check asks it yes or no about the request and its
+description (picture.ts `pictureAllowed`), so rewordings and other languages are caught and "a
+sexy sports car" is not refused. It fails closed: anything but a clear "no" (an unreadable reply,
+a failed call) refuses. A word list was tried first and dropped (owner rule: no word rules;
+brittle both ways). Nothing
 else is filtered: violence, politics, real people and so on are left to the licence terms and
 reports. Risk noted: the report is picked in the app but sent from the email app; if review
 objects, an in-app send needs a server, which Sidekick doesn't have.

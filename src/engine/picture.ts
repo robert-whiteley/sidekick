@@ -9,7 +9,7 @@ import { Platform } from 'react-native';
 
 import SidekickNative from '../../modules/sidekick-native';
 import { downloadFile, isDownloaded, modelPath, wifiOnlyDownloads } from './downloads';
-import { unloadLlm } from './llm';
+import { askLlm, unloadLlm } from './llm';
 import { PICTURE_FILES } from './models';
 import {
   PICTURE_BLOCKED,
@@ -18,7 +18,9 @@ import {
   PICTURE_NO_CPU,
   PICTURE_NOT_HERE,
   PICTURE_STOPPED,
-  pictureBlocked,
+  PICTURE_CHECK_SYSTEM,
+  pictureCheckAllows,
+  pictureCheckPrompt,
   pictureOffer,
   picturePrompt,
   pictureReply,
@@ -118,6 +120,23 @@ export function stopPicture() {
   }
 }
 
+/**
+ * The model's own judgement of the one thing Google Play requires blocking (picture-logic.ts):
+ * a scratch-chat yes/no on the request and the description. Unreadable or failed: refused.
+ */
+export async function pictureAllowed(question: string, prompt: string): Promise<boolean> {
+  const reply = await askLlm(pictureCheckPrompt(question, prompt), null, () => {}, {
+    system: PICTURE_CHECK_SYSTEM,
+    maxTokens: 3,
+    scratch: true,
+  })
+    .then((r) => r.text)
+    .catch(() => '');
+  const ok = pictureCheckAllows(reply);
+  console.log(`[picture] check ${ok ? 'ok' : 'refused'} (${reply.trim().slice(0, 12)})`);
+  return ok;
+}
+
 /** Draws what the model described ([described]) for [question]. */
 export async function makePicture(
   question: string,
@@ -134,12 +153,17 @@ export async function makePicture(
     ...extra,
   });
   if (!SidekickNative.pictureMake) return res(PICTURE_NOT_HERE);
-  if (pictureBlocked(question, prompt)) return res(PICTURE_BLOCKED);
   if (!cpuOk()) return res(PICTURE_NO_CPU);
   if (!pictureFilesReady()) return res(PICTURE_GET, { needsDownload: true });
   if (running) return res('Already making a picture; one at a time.');
   running = true;
   stopped = false;
+  onStatus('Checking the request…');
+  const allowed = await pictureAllowed(question, prompt);
+  if (!allowed || stopped) {
+    running = false;
+    return res(allowed ? PICTURE_STOPPED : PICTURE_BLOCKED);
+  }
   onStatus('Getting ready to draw…');
   const sub = SidekickNative.addListener('onPicture', (e) =>
     onStatus(pictureStatus(e.stage, e.done, e.total)),

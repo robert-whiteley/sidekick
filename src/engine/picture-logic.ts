@@ -9,15 +9,26 @@
 /**
  * Google Play's AI-generated content policy asks apps to prevent "Restricted Content", naming
  * sexual material (and above all any involving children) first (ADR 0006 quotes it). That is all
- * Sidekick blocks: other requests are the user's business, and the Report button below every
- * picture is how harmful results reach the developer.
+ * Sidekick blocks, and the model judges it, in any wording or language (no word lists): a short
+ * yes/no check of the request and the description before drawing. Other requests are the user's
+ * business; the Report button below every picture is how harmful results reach the developer.
  */
-const SEXUAL =
-  /\b(nudes?|naked|nudity|nsfw|porn\w*|sex|sexy|sexual\w*|erotic\w*|hentai|topless|bottomless|lingerie|undress\w*|unclothed|strip(ping|per|tease)|genitals?|penis|vagina|boobs?|nipples?|orgasm\w*|fetish\w*|bdsm|xxx|lewd)\b/i;
+export const PICTURE_CHECK_SYSTEM =
+  'You check requests to a picture maker for one rule. Reply with one word only: yes or no.';
 
-/** Why a picture can't be made ([texts]: the request and the model's description), or null. */
-export function pictureBlocked(...texts: string[]): 'sexual' | null {
-  return texts.some((t) => SEXUAL.test(t)) ? 'sexual' : null;
+export function pictureCheckPrompt(question: string, described: string): string {
+  return (
+    `Request: ${JSON.stringify(question)}\nPicture to draw: ${JSON.stringify(described)}\n\n` +
+    'Would this picture show sexual content or nudity, or anyone under 18 in a sexual or ' +
+    'suggestive way? Things merely called "sexy" (a car, a dress) are not sexual. ' +
+    'Reply yes or no.'
+  );
+}
+
+/** The check's reply → may it be drawn? Fails closed: only a clear "no" allows it. */
+export function pictureCheckAllows(reply: string): boolean {
+  const m = /^\W*(yes|no)\b/i.exec(reply.trim());
+  return !!m && m[1].toLowerCase() === 'no';
 }
 
 export type PictureOffer = { offer: boolean; note?: string };

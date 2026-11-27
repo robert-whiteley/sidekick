@@ -1,10 +1,12 @@
 import { exchangeToMessages } from '@/features/ask/chat-logic';
+import { pictureAllowed } from '@/engine/picture';
 import { brushDots, fitRect, toPhoto } from '@/features/erase/erase-logic';
 import { ERASE_FILE, PICTURE_FILES, UPSCALE_FILE } from '@/engine/models';
 import { editCall, editModel, editReply, upscaleRefusal } from '@/engine/photo-edit-logic';
 import { NOT_IN_ROUTINES, validateCall } from '@/engine/tools-logic';
 import {
-  pictureBlocked,
+  pictureCheckAllows,
+  pictureCheckPrompt,
   pictureOffer,
   picturePrompt,
   pictureStatus,
@@ -20,19 +22,46 @@ test('make_picture needs a description, and never runs in a routine', () => {
   expect(NOT_IN_ROUTINES.has('make_picture')).toBe(true);
 });
 
-describe('content rule: only what Google Play requires (no sexual images)', () => {
-  test.each(['a nude woman on a beach', 'sexy schoolgirl', 'NSFW art', 'a naked man'])(
-    'blocks %s',
-    (q) => expect(pictureBlocked(q)).toBe('sexual'),
-  );
+describe('content rule: the model judges what Google Play requires (no word lists)', () => {
+  test('only a clear no allows the picture; yes or an unreadable reply refuses', () => {
+    expect(pictureCheckAllows('no')).toBe(true);
+    expect(pictureCheckAllows(' No.')).toBe(true);
+    expect(pictureCheckAllows('yes')).toBe(false);
+    expect(pictureCheckAllows('Yes, it would')).toBe(false);
+    expect(pictureCheckAllows('')).toBe(false);
+    expect(pictureCheckAllows('maybe')).toBe(false);
+    expect(pictureCheckAllows('nothing sexual')).toBe(false);
+  });
+  test('the check sees the request and the description', () => {
+    const p = pictureCheckPrompt('draw her', 'a woman on a beach');
+    expect(p).toContain('"draw her"');
+    expect(p).toContain('"a woman on a beach"');
+    expect(p).toMatch(/under 18/);
+  });
+});
+
+const mockAsk = jest.fn();
+jest.mock('../modules/sidekick-native', () => ({ __esModule: true, default: {} }));
+jest.mock('@/engine/llm', () => ({
+  askLlm: (...a: unknown[]) => mockAsk(...a),
+  unloadLlm: jest.fn(),
+}));
+
+describe('pictureAllowed asks the model (mocked)', () => {
   test.each([
-    'a knight fighting a dragon',
-    'a child flying a kite',
-    'chicken breast with rice',
-    'a portrait of an old man',
-  ])('allows %s', (q) => expect(pictureBlocked(q)).toBeNull());
-  test('checks the model description as well as the request', () => {
-    expect(pictureBlocked('draw her', 'a naked woman')).toBe('sexual');
+    ['no', true],
+    ['yes', false],
+    ['', false],
+  ])('reply %j → allowed %s', async (reply, want) => {
+    mockAsk.mockResolvedValueOnce({ text: reply });
+    expect(await pictureAllowed('draw a sexy sports car', 'a red sports car')).toBe(want);
+    const [prompt, , , opts] = mockAsk.mock.calls.at(-1)!;
+    expect(prompt).toContain('a red sports car');
+    expect(opts).toMatchObject({ scratch: true });
+  });
+  test('a failed model call refuses', async () => {
+    mockAsk.mockRejectedValueOnce(new Error('busy'));
+    expect(await pictureAllowed('draw a fox', 'a fox')).toBe(false);
   });
 });
 
