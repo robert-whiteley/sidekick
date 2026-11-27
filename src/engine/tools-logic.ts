@@ -191,7 +191,10 @@ export const TOOLS: ToolSpec[] = [
   },
   {
     name: 'call',
-    desc: 'phone someone',
+    // "Phone someone" alone made the sorter pick this for "I need to talk to a shop assistant who
+    // speaks Japanese", which then asked for contacts access (Gemma 4 E2B, 27 Nov). Saying it is a
+    // phone call fixed that (docs/BENCH.md).
+    desc: 'ring someone on the phone (a phone call)',
     kind: 'action',
     args: { to: req('person or number') },
   },

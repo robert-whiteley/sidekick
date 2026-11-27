@@ -73,6 +73,14 @@ describe('the sorter prompt', () => {
   });
 });
 
+describe('the call line', () => {
+  it('says it is a phone call, so talking to someone face to face is not sent to it', () => {
+    // "Phone someone" made the sorter pick call for a shop assistant who speaks Japanese, and the
+    // call tool then asked for contacts access.
+    expect(catalogSystem()).toMatch(/^call: .*phone call/m);
+  });
+});
+
 describe('with the phone locked', () => {
   it('runs only what says nothing personal', () => {
     for (const t of ['timer', 'alarm', 'calculate', 'speech_speed', 'camera', 'find_phone'])

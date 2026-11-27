@@ -637,6 +637,15 @@ fun fact", "at 5pm give me a summary", "every Monday at 8 tell me the weather") 
 off the camera" to phone settings, "tell me when you see a bus" to routine, talk about the alarm
 or the weather on Mars as a tool, and "turn the volume down" fills `{"volume": "down"}`.
 
+**The call line (laptop, 27 Nov, same Gemma file, 211 cases: the 198 above plus 13 on talking to
+someone in another language and on phoning):** "I need to talk to a shop assistant who speaks
+Japanese" went to **call** ("phone someone"), and the call tool then asked Android for contacts
+access. Now "ring someone on the phone (a phone call)": all 13 extra cases right (the shop
+assistant now goes to translate), 188/211 overall against 189 before (the other misses moved
+between alarm, reminder and event). Also tried: saying in the call line that another language is
+translate (13/13 extras, but more misses elsewhere), and a longer translate line (188/211).
+Not yet checked on the phone.
+
 ### Thinking
 
 Gemma 4's thinking mode (`thinkingBudget` per turn: off, a token budget, or -1 for no limit) is
