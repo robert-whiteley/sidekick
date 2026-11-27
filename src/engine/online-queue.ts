@@ -117,7 +117,12 @@ function defaultDeps(): Deps {
         return r.text;
       }
       const { answer } = require('./assistant');
-      const r = await answer(q, null, () => {}, { routine: true, forceLookup: true });
+      // Saved once, by the run (drainOnlineQueue), like every other kind.
+      const r = await answer(q, null, () => {}, {
+        routine: true,
+        forceLookup: true,
+        callerSaves: true,
+      });
       // Android says online but nothing gets through yet: keep the question for the next wake-up.
       if (r.waitingOnline) throw new Error('still offline');
       return r.text as string;

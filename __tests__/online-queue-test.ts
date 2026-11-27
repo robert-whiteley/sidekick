@@ -205,3 +205,31 @@ it('shows the cards of what still waits after a restart', () => {
   restoreOnlineCards(T + 1000);
   expect(card(job.id)?.text).toBe('Waiting for the internet: who won?');
 });
+
+jest.mock('@/engine/assistant', () => ({
+  answer: jest.fn(async (q: string) => ({ text: `looked up ${q}` })),
+}));
+jest.mock('@/memory/store', () => ({ rememberExchange: jest.fn(async () => {}) }));
+
+it('saves a question answered after reconnecting once, from the queue', async () => {
+  const { answer } = jest.requireMock('@/engine/assistant');
+  const { rememberExchange } = jest.requireMock('@/memory/store');
+  let jobs: OnlineJob[] = [];
+  // The real answer and save: only storage and the network are stand-ins.
+  setOnlineQueueDeps({
+    load: () => jobs,
+    save: (j) => (jobs = j),
+    online: async () => true,
+    notify: async () => {},
+    active: () => true,
+  });
+  queueOnline('lookup', 'who won the cup?', T);
+  await drainOnlineQueue(T + 60_000);
+  expect(answer).toHaveBeenCalledWith('who won the cup?', null, expect.any(Function), {
+    routine: true,
+    forceLookup: true,
+    callerSaves: true,
+  });
+  expect(rememberExchange).toHaveBeenCalledTimes(1);
+  expect(rememberExchange).toHaveBeenCalledWith('who won the cup?', 'looked up who won the cup?');
+});
