@@ -249,6 +249,11 @@ export async function answer(
     routed?: boolean;
     /** A question kept until back online (online-queue.ts): look it up whatever the rules say. */
     forceLookup?: boolean;
+    /**
+     * The caller saves the exchange in memory itself (the online queue, which saves every answer
+     * it gets the same way): not saved here, so it isn't kept twice.
+     */
+    callerSaves?: boolean;
     /** Dev answers bench: a routed action is reported, never done (no draft, timer or reminder). */
     dryActions?: boolean;
     /** The answer will be read out: plain sentences, no lists or tables. */
@@ -264,6 +269,7 @@ export async function answer(
   if (!opts?.routed) forgetRanges();
   const offRecord = opts?.offTheRecord ?? getSettings().offTheRecord ?? false;
   if (!offRecord) offRecordStarted = false;
+  const saveHere = !offRecord && !opts?.callerSaves;
   // Time words a fixed reader can't parse ("over Christmas"): the model gives the span once, and
   // search, recall, recaps and location all use it (tools.ts).
   if (!photoNow && !opts?.routed) await resolveTimeWithModel([question]).catch(() => null);
@@ -345,8 +351,13 @@ export async function answer(
       case 'research': {
         // Several searches, pages read on the phone, one report with numbered sources.
         const r = await research(o.topic, onText, status, undefined, !!o.news);
+        // No internet: the research waits and runs once back online (online-queue.ts).
+        if (r.offline && !offRecord && !opts?.routine) {
+          const text = queueOnline('research', o.topic, Date.now(), undefined, { news: o.news });
+          return { ...done(text), waitingOnline: true };
+        }
         // Stopped part-way: shown, but not kept as if it were the report.
-        if (!offRecord && !r.local && !answerStopped())
+        if (saveHere && !r.local && !answerStopped())
           await rememberExchange(question, r.text).catch(() => {});
         return {
           text: r.text,
@@ -449,7 +460,7 @@ export async function answer(
   const pageUrl = photoNow ? null : firstUrl(question);
   if (pageUrl) {
     const r = await answerAboutPage(pageUrl, question, onText, status, offRecord);
-    if (!offRecord && !r.waitingOnline && !answerStopped())
+    if (saveHere && !r.waitingOnline && !answerStopped())
       await rememberExchange(question, r.text).catch(() => {});
     return {
       text: r.text,
@@ -665,12 +676,13 @@ export async function answer(
     const reason = idleBefore ? 'idle' : conv.compactReason(Date.now(), question);
     if (reason) compactChat(reason);
     scheduleIdleCompaction();
-    momentId =
-      (await (
-        photoNow
-          ? rememberPhotoQuestion(photoNow, question, text)
-          : rememberExchange(question, text)
-      ).catch(() => undefined)) ?? undefined;
+    if (saveHere)
+      momentId =
+        (await (
+          photoNow
+            ? rememberPhotoQuestion(photoNow, question, text)
+            : rememberExchange(question, text)
+        ).catch(() => undefined)) ?? undefined;
   }
 
   return {

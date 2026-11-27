@@ -8,6 +8,7 @@ import { Linking } from 'react-native';
 import { moveEventTo, planIntent, planTelephony, scheduleDraft } from './actions';
 import { feedbackIntent, supportEmail } from './feedback';
 import { openInterpreter } from './interpreter';
+import { navigateOffline } from './online-queue';
 import { askLlm } from './llm';
 import {
   parseRangeReply,
@@ -27,7 +28,7 @@ import { runExtra } from '@/integrations/extras';
 import type { Extra, RideApp, SearchApp } from '@/integrations/extras-logic';
 import { runControl } from '@/integrations/phone-controls';
 import type { Control, PanelKind } from '@/integrations/phone-controls-logic';
-import type { MediaCommand } from '@/integrations/native';
+import { integrationsNative, type MediaCommand } from '@/integrations/native';
 import type { Intent } from '@/integrations/parse';
 import { isOn } from '@/integrations/prefs';
 import { spanLabel, type RecapRequest } from '@/memory/recap-logic';
@@ -227,12 +228,17 @@ export async function runTool(
         seconds: Math.round((a.minutes as number) * 60),
         label: str(a.label),
       });
-    case 'navigate':
-      return intent({
-        type: 'navigate',
-        destination: str(a.destination),
-        mode: (str(a.mode) || 'driving') as 'driving',
-      });
+    case 'navigate': {
+      const destination = str(a.destination);
+      const mode = (str(a.mode) || 'driving') as 'driving';
+      // Offline: a place known on the phone starts Maps now; anything else waits for the
+      // internet (online-queue.ts), with Open Maps now on its card.
+      if (!ctx.routine && !ctx.offRecord && integrationsNative() && isOn('maps', 'navigate')) {
+        const offline = await navigateOffline(destination, mode, now.getTime());
+        if (offline) return { kind: 'reply', text: offline };
+      }
+      return intent({ type: 'navigate', destination, mode });
+    }
     case 'media':
       return intent(
         a.command === 'what'

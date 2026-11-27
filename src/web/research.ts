@@ -189,6 +189,8 @@ export type ResearchResult = {
   pagesRead: number;
   /** Answered without the model (offline, nothing found). */
   local?: boolean;
+  /** Online lookup is on but there was no internet (the topic can wait: online-queue.ts). */
+  offline?: boolean;
 };
 
 /** Runs [fns] at most [n] at a time, keeping order. */
@@ -221,7 +223,7 @@ export async function research(
     return { text, web: [], queries: [], ms: Date.now() - t0, timings, pagesRead: 0, local: true };
   };
   if (!deps.enabled()) return say(RESEARCH_OFFLINE);
-  if (!(await deps.online())) return say(RESEARCH_NO_INTERNET);
+  if (!(await deps.online())) return { ...say(RESEARCH_NO_INTERNET), offline: true };
   const names = await deps.knownNames().catch(() => [] as string[]);
   const now = deps.now();
 
