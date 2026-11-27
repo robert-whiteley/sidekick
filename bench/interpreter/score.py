@@ -1,6 +1,6 @@
 """Scores interpreter bench outputs: chrF (sacrebleu) against the reference per language and
-direction, mean time per turn, and for control cases (is the owner talking to Sidekick?) the
-END / LANGUAGE / OTHER decisions.
+direction, mean time per turn, for control cases (is the owner talking to Sidekick?) the
+END / LANGUAGE / NO decisions with the second look on END, and routing.ts outputs.
 
     python score.py out_gemma.jsonl [out_other.jsonl ...]
 
@@ -43,15 +43,60 @@ def kind(reply: str) -> str:
         lang = re.sub(r'[."<>]+', '', m.group(1)).strip().lower()
         if not lang or lang == 'language':
             return 'say'
-        return 'switch:' + {'français': 'fr', 'francés': 'fr', 'italiano': 'it'}.get(lang, lang[:2])
+        return 'switch:' + LANG.get(lang, '?' + lang)
     return 'say'
+
+
+# Names languageFromName knows (English and own names) for the languages the bench switches to.
+LANG = {'french': 'fr', 'français': 'fr', 'italian': 'it', 'italiano': 'it', 'portuguese': 'pt',
+        'português': 'pt', 'korean': 'ko', '한국어': 'ko'}
+
+
+def confirmed(reply: str) -> bool:
+    """Mirror of endConfirmed: the second look says END."""
+    return bool(re.match(r'^\W*(END|STOP)\b', reply.strip(), re.I))
+
+
+def decide(r, checks) -> str:
+    """What the app does with an owner turn: the turn reply, and a second look on END."""
+    k = kind(r['reply'])
+    if k == 'stop':
+        c = checks.get((r['lang'], r['src']))
+        if c is not None and not confirmed(c['reply']):
+            return 'say'
+    return k
+
+
+def routing(path, rows):
+    """routing.ts output: the sorter's word, then whether the translate call sets talk."""
+    sort = {r['src']: r['reply'] for r in rows if r['i'].startswith('sort')}
+    ok = defaultdict(lambda: [0, 0])
+    for r in rows:
+        if not r['i'].startswith('fill'):
+            continue
+        w = (re.findall(r'[a-z_]+', sort[r['src']].lower()) or [''])[0]
+        talk = re.search(r'"talk"\s*:\s*(true|"true")', r['reply'])
+        got = 'answer' if w != 'translate' else ('talk' if talk else 'text')
+        ok[r['route']][0] += got == r['route']
+        ok[r['route']][1] += 1
+        if got != r['route']:
+            print(f'  miss {r["src"]!r}: {got}')
+    print(f'## {path}')
+    for k, (a, n) in sorted(ok.items()):
+        print(f'{k:7} right {a}/{n}')
 
 
 for path in sys.argv[1:]:
     rows = [json.loads(l) for l in open(path)]
+    if rows and rows[0].get('lang') == 'route':
+        routing(path, rows)
+        continue
     groups = defaultdict(list)
     ctl = []
+    checks = {(r['lang'], r['src']): r for r in rows if r.get('check')}
     for r in rows:
+        if r.get('check'):
+            continue
         if r.get('control'):
             ctl.append(r)
         else:
@@ -73,8 +118,8 @@ for path in sys.argv[1:]:
         print(f'mean {d:7} {sum(v) / len(v):6.1f}')
     if groups:
         print(f'left untranslated (echoed): {echoes}')
-        owner = [r for r in rows if not r.get('control') and r['from'] == 'en']
-        wrong = [r for r in owner if kind(r['reply']) != 'say']
+        owner = [r for r in rows if 'from' in r and r['from'] == 'en']
+        wrong = [r for r in owner if decide(r, checks) != 'say']
         print(f'owner turns taken as said to Sidekick: {len(wrong)} of {len(owner)}')
         for r in wrong:
             print(f'  [{r["lang"]}] {r["src"]!r}: {r["reply"]!r}')
@@ -83,7 +128,7 @@ for path in sys.argv[1:]:
         ms = []
         for r in ctl:
             exp = r['control']
-            k = kind(r['reply'])
+            k = decide(r, checks)
             ms.append(r['ms'])
             right[exp][0] += k == exp
             right[exp][1] += 1
@@ -93,3 +138,7 @@ for path in sys.argv[1:]:
             print(f'{exp:10} right {ok}/{n}')
         if ms:
             print(f'control lines: {len(ms)}, {sum(ms) / len(ms):.0f} ms each (whole turn)')
+        looked = [r for r in ctl if kind(r['reply']) == 'stop' and (r['lang'], r['src']) in checks]
+        if looked:
+            cms = [checks[(r['lang'], r['src'])]['ms'] for r in looked]
+            print(f'second look on END: {len(looked)} lines, {sum(cms) / len(cms):.0f} ms each')

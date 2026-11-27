@@ -31,7 +31,11 @@ async function mtCases(dir: string, log: Log) {
   if (!f.exists) return log('[interp-mt] no cases.jsonl');
   const lines = (await f.text()).split('\n').filter(Boolean);
   for (const line of lines) {
-    const c = JSON.parse(line) as Record<string, unknown> & { system: string; prompt: string };
+    const c = JSON.parse(line) as Record<string, unknown> & {
+      system: string;
+      prompt: string;
+      maxTokens?: number;
+    };
     const t0 = Date.now();
     let first = 0;
     const r = await askLlm(
@@ -43,10 +47,10 @@ async function mtCases(dir: string, log: Log) {
       {
         system: c.system,
         scratch: true,
-        maxTokens: TURN_MAX_TOKENS,
+        maxTokens: c.maxTokens ?? TURN_MAX_TOKENS,
       },
     );
-    const { system: _s, prompt: _p, ...rest } = c;
+    const { system: _s, prompt: _p, maxTokens: _m, ...rest } = c;
     log(
       `[interp-mt] ${JSON.stringify({ ...rest, reply: r.text, ms: Date.now() - t0, firstMs: first })}`,
     );

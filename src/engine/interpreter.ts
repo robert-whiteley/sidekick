@@ -10,6 +10,9 @@ import {
   interpretLanguage,
   interpretSystem,
   languageFromName,
+  END_CHECK_MAX_TOKENS,
+  endCheckPrompt,
+  endConfirmed,
   parseControlReply,
   type InterpretSide,
   type InterpretTurn,
@@ -314,7 +317,17 @@ async function translateTurn(turn: InterpretTurn, recent: InterpretTurn[], hearM
     ).text;
     if (!state.active) return;
     // The owner may have been talking to Sidekick ("that's enough, thanks"): the same reply says.
-    const c = turn.side === 'me' ? parseControlReply(reply) : null;
+    let c = turn.side === 'me' ? parseControlReply(reply) : null;
+    // Ending is asked once more on its own, so a goodbye to the other person is still translated.
+    if (c?.kind === 'stop') {
+      const check = await askLlm(endCheckPrompt(theirs, turn.heard), null, () => {}, {
+        system,
+        maxTokens: END_CHECK_MAX_TOKENS,
+        scratch: true,
+      });
+      if (!state.active) return;
+      if (!endConfirmed(check.text)) c = null;
+    }
     if (c) {
       const others = state.turns.filter((t) => t !== turn);
       if (c.kind === 'stop') {

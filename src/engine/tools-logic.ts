@@ -463,7 +463,7 @@ export const TOOLS: ToolSpec[] = [
       // requests when interpreting was a tool of its own (bench/interpreter/routing.ts).
       talk: {
         type: 'boolean',
-        desc: 'true if I want to talk with someone in that language: live interpreting both ways',
+        desc: 'true if I want help talking with a person in that language (interpreting between us, both ways, out loud); false for a text to translate',
       },
     },
   },

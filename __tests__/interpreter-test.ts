@@ -1,5 +1,7 @@
 /** The interpreter's pure logic: languages, prompts, reading the model's replies, routing. */
 import {
+  endCheckPrompt,
+  endConfirmed,
   androidSpeech,
   INTERPRET_LANGUAGES,
   interpretLanguage,
@@ -114,6 +116,16 @@ describe('is the owner talking to Sidekick?', () => {
   it("doesn't show a translation of a line meant for Sidekick while it streams", () => {
     expect(partialTranslation('SIDEKICK: END\nSAY: Ya pue')).toBeNull();
     expect(partialTranslation('SIDEKICK: NO\nSAY: Pare aq')).toBe('Pare aq');
+  });
+  it('an END is looked at once more; only END there ends the session', () => {
+    const p = endCheckPrompt(es, "Thanks, that's all for today.");
+    expect(p).toContain('"Thanks, that\'s all for today."');
+    expect(p).toContain('speaks Spanish');
+    expect(endConfirmed('END')).toBe(true);
+    expect(endConfirmed('**END**')).toBe(true);
+    expect(endConfirmed('OTHER')).toBe(false);
+    expect(endConfirmed('LANGUAGE: French')).toBe(false);
+    expect(endConfirmed('')).toBe(false);
   });
 });
 
