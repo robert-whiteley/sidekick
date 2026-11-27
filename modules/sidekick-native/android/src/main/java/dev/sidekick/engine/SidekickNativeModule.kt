@@ -425,6 +425,14 @@ class SidekickNativeModule : Module() {
     // --- PDFs in picked folders (one page per call, so JS can pace them) ---
     Function("pdfCanReadText") { Pdf.canReadText }
 
+    // Phone search: a small upright copy of an allowed photo with its EXIF date and place.
+    AsyncFunction("galleryPrepare") { ref: String, maxEdge: Int, outPath: String ->
+      Gallery.prepare(context, ref, maxEdge, outPath)
+    }
+
+    // Opens a found photo or file in the phone's own viewer.
+    Function("openDocument") { ref: String, mime: String? -> Gallery.open(context, ref, mime) }
+
     // Page count and one page's embedded text (null when this Android can't read PDF text).
     AsyncFunction("pdfPageText") { uri: String, index: Int ->
       val (pages, text) = Pdf.pageText(context, uri, index)

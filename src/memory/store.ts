@@ -1237,6 +1237,9 @@ export async function deleteEverything() {
   await db.execute('DELETE FROM facts');
   await db.execute('DELETE FROM followups');
   await db.execute('DELETE FROM contacts');
+  // Phone search's photo index (the photos themselves are not touched).
+  await db.execute('DELETE FROM gallery_vec');
+  await db.execute('DELETE FROM gallery');
   liveTranscript.clear();
   await reclaimSpace({ force: true });
 }

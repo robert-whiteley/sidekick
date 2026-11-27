@@ -190,6 +190,13 @@ public class SidekickNativeModule: Module {
       }
     }
 
+    // Phone search: a small copy of an allowed photo with its date and place (Gallery.swift).
+    AsyncFunction("galleryPrepare") { (ref: String, maxEdge: Int, outPath: String, promise: Promise) in
+      Task {
+        promise.resolve(await Gallery.prepare(ref, maxEdge: maxEdge, outPath: outPath))
+      }
+    }
+
     AsyncFunction("embedUnload") { (promise: Promise) in
       Task {
         await Embedder.shared.unload()

@@ -125,6 +125,17 @@ describe('running a tool', () => {
       recording: true,
     });
   });
+  it('sends a phone search to its handler with what, type, newest and time', async () => {
+    const args = { what: 'invoice from Acme', type: 'file', newest: true, from: 1, to: 2 };
+    expect(await runTool('find_on_phone', args, 'my latest Acme invoice', quiet, NOW)).toEqual({
+      kind: 'find',
+      req: { what: 'invoice from Acme', type: 'file', newest: true, from: 1, to: 2 },
+    });
+    expect(await runTool('find_on_phone', { what: 'x', type: 'video' }, 'q', quiet, NOW)).toEqual({
+      kind: 'find',
+      req: { what: 'x', type: 'any', newest: false },
+    });
+  });
   it('sends an info tool to its own handler as canonical words', async () => {
     const out = await runTool('weather', { place: 'Leeds' }, 'umbrella needed in Leeds?', quiet);
     expect(out).toEqual({ kind: 'rules', text: "what's the weather in Leeds" });
