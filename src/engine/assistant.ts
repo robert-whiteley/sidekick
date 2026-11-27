@@ -345,6 +345,11 @@ export async function answer(
       case 'research': {
         // Several searches, pages read on the phone, one report with numbered sources.
         const r = await research(o.topic, onText, status, undefined, !!o.news);
+        // No internet: the research waits and runs once back online (online-queue.ts).
+        if (r.offline && !offRecord && !opts?.routine) {
+          const text = queueOnline('research', o.topic, Date.now(), undefined, { news: o.news });
+          return { ...done(text), waitingOnline: true };
+        }
         // Stopped part-way: shown, but not kept as if it were the report.
         if (!offRecord && !r.local && !answerStopped())
           await rememberExchange(question, r.text).catch(() => {});

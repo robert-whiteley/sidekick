@@ -316,6 +316,17 @@ const hm = (t: number) => {
   return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
 };
 
+/**
+ * Where [name] is without the internet (a named place, home, or a town), for directions that
+ * start offline (online-queue.ts), or null.
+ */
+export async function offlinePlace(
+  name: string,
+): Promise<{ name: string; lat: number; lon: number } | null> {
+  const p = await placeTarget(name).catch(() => null);
+  return p ? { name: p.name, lat: p.lat, lon: p.lon } : null;
+}
+
 /** A named place, "home" guessed from nights, or a town from the built-in list (10 km circle). */
 async function placeTarget(name: string): Promise<NamedPlace | null> {
   const all = await allPlaces();

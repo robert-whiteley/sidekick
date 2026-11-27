@@ -1,6 +1,6 @@
 # Sidekick privacy policy
 
-Last updated: 26 November 2026
+Last updated: 27 November 2026
 
 Sidekick is an AI assistant that runs entirely on your phone. This policy explains what it does with your information. In short: **we don't collect anything.** There are no accounts, no analytics, no ads and no tracking, and we have no servers that receive your data.
 
@@ -26,7 +26,7 @@ You can see and delete any of it in the app (Memory, Storage and Privacy setting
 Sidekick works offline. It connects to the internet only in these cases:
 
 1. **Downloading its AI models.** On first run, and later when a better model for your phone is available (by default only on Wi-Fi while charging; you can switch this off), Sidekick downloads model files from Hugging Face (huggingface.co) and GitHub (github.com, raw.githubusercontent.com). These are plain file downloads: nothing about you is sent. Like any website, those services can see your phone's IP address.
-2. **Online lookup — off unless you turn it on.** When it is on and a general question needs the web, a few search words for it (written on the phone, with the names of people you know taken out) are sent to Wikipedia and DuckDuckGo, and to a SearXNG server if you set one up. For news questions they also go to GDELT (api.gdeltproject.org), and Sidekick downloads Wikipedia's current-events pages and any news feeds you added (these downloads send no question words). Nothing else is sent: no memory, photos, voice, location (except for weather, below), contacts or identifiers. Those services see your IP address and the search words, under their own privacy policies.
+2. **Online lookup — off unless you turn it on.** When it is on and a general question needs the web, a few search words for it (written on the phone, with the names of people you know taken out) are sent to Wikipedia and DuckDuckGo, and to a SearXNG server if you set one up. For news questions they also go to GDELT (api.gdeltproject.org), and Sidekick downloads Wikipedia's current-events pages and any news feeds you added (these downloads send no question words). Nothing else is sent: no memory, photos, voice, location (except for weather, below), contacts or identifiers. Those services see your IP address and the search words, under their own privacy policies. If there's no internet, a question or research you asked for waits on the phone (a few days at most) and is looked up once you're back online; its card in the chat has Cancel.
 3. **Google features — off unless you turn them on.** If you sign in with Google for a feature, your phone talks directly to Google; nothing goes through us:
    - **Email:** sends an email you have approved, using Gmail (permission to send only; Sidekick cannot read your mail).
    - **Google Tasks:** keeps your Sidekick to-dos and Google Tasks in step.
@@ -35,7 +35,7 @@ Sidekick works offline. It connects to the internet only in these cases:
    Google's privacy policy applies to that data. You can turn each feature off in Settings, and remove Sidekick's access at myaccount.google.com/permissions. Sidekick's use of information received from Google APIs follows the [Google API Services User Data Policy](https://developers.google.com/terms/api-services-user-data-policy), including the Limited Use requirements.
 
 4. **Weather — only with online lookup on, when you ask about the weather.** Your location, rounded to about 1 km, is sent to the Norwegian Meteorological Institute (api.met.no) to get the forecast. Nothing else is sent. Also with online lookup on, when you ask where you are, your position is sent to Google's address lookup built into Android to get the street name.
-5. **Links and apps you open.** When you tap a link, or send a message through another app (such as Messages or WhatsApp), that app or website handles it under its own policy. **Report** under a picture Sidekick drew opens your email app with a draft to us (the reason and what was asked for, no picture); nothing is sent unless you send it.
+5. **Links and apps you open.** When you tap a link, or send a message through another app (such as Messages or WhatsApp), that app or website handles it under its own policy. Directions you ask for while offline wait on the phone (3 hours at most) and are handed to your maps app once you're back online, when you tap them or right away if you asked a few minutes before. **Report** under a picture Sidekick drew opens your email app with a draft to us (the reason and what was asked for, no picture); nothing is sent unless you send it.
 
 6. **Quick fixes — on unless you turn them off** (Settings → Advanced → Get quick fixes). On Wi-Fi, at most every few hours, Sidekick asks Expo (expo.dev, the service that delivers small app fixes) whether a fix is available. The request contains only the app's version information (runtime version, platform, update channel and the current update's id); like any internet request, Expo sees your phone's IP address. No personal information, memories or usage data are sent. Turned off, Sidekick never contacts Expo and fixes arrive with Google Play updates.
 
