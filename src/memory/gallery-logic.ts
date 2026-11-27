@@ -126,7 +126,7 @@ export function photoIndexText(name: string, read: string | null): string {
 export const PHOTO_BUDGET = {
   /** Share of time on a full battery (2% ≈ 0.05 W at 2.5 W while working: ~0.3% battery/h). */
   maxDuty: 0.02,
-  /** No slow work on battery below this level. */
+  /** No slow work on battery below this level (the default; Settings → Phone search). */
   floor: 0.3,
   /** Saved-up time cap on battery, so a long idle spell doesn't become a long burst. */
   capMs: 20_000,
@@ -149,11 +149,16 @@ export function photoDuty(s: {
   /** Android PowerManager.THERMAL_STATUS_* (1 = light, 2 = moderate). */
   thermalStatus: number;
   drainingOnCharger?: boolean;
+  /** Settings → Phone search: read on battery at all, and the lowest level (0-1). */
+  onBattery?: boolean;
+  floor?: number;
 }): number {
   if (s.thermalStatus >= 2) return 0;
   if (s.charging) return s.drainingOnCharger ? 0 : 1;
-  if (s.lowPowerMode || s.thermalStatus >= 1 || s.batteryLevel < PHOTO_BUDGET.floor) return 0;
-  const f = (Math.min(1, s.batteryLevel) - PHOTO_BUDGET.floor) / (1 - PHOTO_BUDGET.floor);
+  const floor = Math.min(1, Math.max(0, s.floor ?? PHOTO_BUDGET.floor));
+  if (s.onBattery === false || s.lowPowerMode || s.thermalStatus >= 1) return 0;
+  if (s.batteryLevel < floor || floor >= 1) return 0;
+  const f = (Math.min(1, s.batteryLevel) - floor) / (1 - floor);
   return PHOTO_BUDGET.maxDuty * f;
 }
 

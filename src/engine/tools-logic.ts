@@ -11,6 +11,8 @@
  * read-back, and the same prompt works on every backend and on the iPhone.
  */
 
+import { SETTING_IDS, SETTING_OPS } from './settings-registry';
+
 export type ArgType = 'string' | 'number' | 'boolean' | 'datetime';
 
 export type ArgSpec = {
@@ -439,6 +441,24 @@ export const TOOLS: ToolSpec[] = [
     },
   },
   {
+    name: 'app_setting',
+    desc:
+      "say or change one of Sidekick's own settings (privacy, listening, online lookup, " +
+      'consent, app lock, keep periods, voices, connections, models, routines, your data), or ' +
+      'list a part of Settings. Not the phone’s own settings',
+    kind: 'action',
+    args: {
+      do: oneOf([...SETTING_OPS]),
+      setting: {
+        type: 'string',
+        values: [...SETTING_IDS, 'all'],
+        required: true,
+        desc: 'the setting meant; for list, any setting of that part',
+      },
+      value: s('the new value or the item, as said (e.g. on, 30 days, front, a name)'),
+    },
+  },
+  {
     name: 'missed',
     desc: 'short summary of my unread notifications (what I missed), by person and app',
     kind: 'info',
@@ -569,6 +589,7 @@ export const NOT_IN_ROUTINES = new Set([
   'listening',
   'camera',
   'camera_setting',
+  'app_setting',
   // A routine's text can carry outside words: never send, reply, call back, move or read copied text.
   'draft',
   'reply_message',

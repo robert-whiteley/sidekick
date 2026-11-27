@@ -22,6 +22,9 @@ jest.mock('@/engine/actions', () => ({
 }));
 jest.mock('@/memory/sources', () => ({ contactDetails: jest.fn() }));
 jest.mock('@/engine/quick-commands', () => ({ runParsedCommand: jest.fn() }));
+jest.mock('@/engine/app-settings', () => ({
+  appSettingTool: jest.fn(async () => 'Tap Approve to turn on online lookup.'),
+}));
 jest.mock('@/integrations/extras', () => ({ runExtra: jest.fn() }));
 jest.mock('@/integrations/phone-controls', () => ({ runControl: jest.fn() }));
 jest.mock('@/integrations/prefs', () => ({ isOn: jest.fn(() => true) }));
@@ -99,6 +102,30 @@ describe('running a tool', () => {
       q,
       null,
     );
+  });
+  it('fills and runs app_setting: the model names the setting by id, any wording', async () => {
+    const ask = replies('{"do":"on","setting":"online_lookup"}');
+    const pick = await fillTool('let it look things up on the internet', 'app_setting', {
+      ask,
+      now: NOW,
+    });
+    expect(pick).toMatchObject({
+      tool: 'app_setting',
+      args: { do: 'on', setting: 'online_lookup' },
+    });
+    const out = await runTool('app_setting', pick!.args, 'q', quiet, NOW);
+    expect(out).toEqual({ kind: 'reply', text: 'Tap Approve to turn on online lookup.' });
+    const { appSettingTool } = jest.requireMock('@/engine/app-settings') as {
+      appSettingTool: jest.Mock;
+    };
+    expect(appSettingTool).toHaveBeenCalledWith({ do: 'on', setting: 'online_lookup' });
+  });
+  it('asks app_setting again when the model names a setting that does not exist', async () => {
+    const ask = replies('{"setting":"internet search"}', '{"do":"get","setting":"online_lookup"}');
+    const pick = await fillTool('is internet search on?', 'app_setting', { ask, now: NOW });
+    expect(ask).toHaveBeenCalledTimes(2);
+    expect(ask.mock.calls[1][0]).toMatch(/was refused: setting not one of/);
+    expect(pick?.args).toEqual({ do: 'get', setting: 'online_lookup' });
   });
   it('runs an action through the normal draft path', async () => {
     const plan = { kind: 'reply', text: 'Timer set for 5 minutes.' };

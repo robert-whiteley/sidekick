@@ -67,6 +67,10 @@ export type Settings = {
   photoFolderUris: string[];
   /** Phone search: stop reading photos and files for now (what's indexed stays searchable). */
   searchPaused: boolean;
+  /** Phone search: read photos slowly on battery too (else only while charging). */
+  indexOnBattery: boolean;
+  /** Phone search: no reading on battery below this level (percent). */
+  indexMinBattery: number;
   sourceContacts: boolean;
   sourceCalendar: boolean;
   /** Android only: keep the text of notifications from other apps. */
@@ -183,6 +187,8 @@ export const DEFAULTS: Settings = {
   sourceGallery: false,
   photoFolderUris: [],
   searchPaused: false,
+  indexOnBattery: true,
+  indexMinBattery: 30,
   sourceContacts: false,
   sourceCalendar: false,
   sourceNotifications: false,

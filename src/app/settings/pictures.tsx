@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { PICTURE_TERMS_MD } from '@/content/legal';
 import { MarkdownView } from '@/features/about/MarkdownView';
 import { Page } from '@/features/settings/Page';
+import { askToDelete } from '@/engine/delete-plans';
 import { PICTURE_FILES } from '@/engine/models';
 import {
   deletePictureModel,
@@ -13,7 +14,7 @@ import {
   pictureFilesReady,
   type PictureDownload,
 } from '@/engine/picture';
-import { AppText, Button, ProgressBar, Section, showDialog } from '@/ui';
+import { AppText, Button, ProgressBar, Section } from '@/ui';
 
 const SIZE_GB = ((PICTURE_FILES.model.bytes + PICTURE_FILES.decoder.bytes) / 1e9).toFixed(1);
 
@@ -51,18 +52,8 @@ export default function PicturesScreen() {
             variant="outlined"
             danger
             onPress={() =>
-              showDialog(
-                'Delete the picture model?',
-                `Frees ${SIZE_GB} GB. Pictures already made stay.`,
-                [
-                  {
-                    text: 'Delete',
-                    style: 'destructive',
-                    onPress: () =>
-                      void deletePictureModel().then(() => setReady(pictureFilesReady())),
-                  },
-                  { text: 'Cancel', style: 'cancel' },
-                ],
+              void askToDelete({ kind: 'pictureModel' }, () =>
+                deletePictureModel().then(() => setReady(pictureFilesReady())),
               )
             }
           />

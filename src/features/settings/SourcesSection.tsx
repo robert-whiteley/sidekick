@@ -2,6 +2,7 @@ import { useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import { AppState, Platform, View } from 'react-native';
 
+import { askToDelete } from '@/engine/delete-plans';
 import { getSettings, onSettingsChange, type Settings, updateSettings } from '@/engine/settings';
 import {
   addNote,
@@ -15,7 +16,7 @@ import {
   setNotificationCapture,
   syncNow,
 } from '@/memory/sources';
-import { Button, confirm, NavRow, Row, Section, styles } from './ui';
+import { Button, NavRow, Row, Section, styles } from './ui';
 import { AppText, TextButton, TextField } from '@/ui';
 
 const isAndroid = Platform.OS === 'android';
@@ -208,14 +209,10 @@ export function DeleteBySource({ onChanged }: { onChanged: () => void }) {
           danger
           title={`Delete ${x.label}`}
           onPress={() =>
-            confirm(
-              `Delete ${x.label}?`,
-              'Everything Sidekick kept from this source is deleted and the source is turned off. The originals on your phone are not touched.',
-              async () => {
-                await deleteSource(x.id);
-                onChanged();
-              },
-            )
+            void askToDelete({ kind: 'source', source: x.id }, async () => {
+              await deleteSource(x.id);
+              onChanged();
+            })
           }
         />
       ))}
