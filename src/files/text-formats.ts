@@ -55,26 +55,62 @@ const HTML_NAMED: Record<string, string> = {
 const BLOCK =
   /^(p|div|br|li|ul|ol|h[1-6]|tr|table|section|article|header|footer|blockquote|pre|hr|dt|dd|dl|figure|figcaption|main|nav|aside|title)$/i;
 
-/** A page's (or chapter's) title and text. */
+/** Elements whose content isn't the page's text (skipped to their closing tag). */
+const SKIP = new Set(['script', 'style', 'noscript', 'template', 'svg']);
+
+/**
+ * A page's (or chapter's) title and text, in one pass over the markup (no regex stripping): tags
+ * become line breaks, list dashes or table bars; comments and scripts are skipped.
+ */
 export function htmlToText(html: string): { title: string; text: string } {
-  const title = decodeXmlEntities(
-    (/<title[^>]*>([\s\S]*?)<\/title>/i.exec(html)?.[1] ?? '').replace(/<[^>]+>/g, ''),
-    HTML_NAMED,
-  )
-    .replace(/\s+/g, ' ')
-    .trim();
-  const body = html
-    .replace(/<!--[\s\S]*?-->/g, '')
-    .replace(/<(script|style|noscript|template|svg|head)\b[\s\S]*?<\/\1\s*>/gi, ' ');
-  const text = body
-    .replace(/<\/?([a-z][a-z0-9]*)\b[^>]*>/gi, (m, tag: string) => {
-      const t = tag.toLowerCase();
-      if (t === 'li' && m[1] !== '/') return '\n- ';
-      if (t === 'td' || t === 'th') return m[1] === '/' ? ' | ' : '';
-      return BLOCK.test(t) ? '\n' : '';
-    })
-    .replace(/<[^>]*>/g, '');
-  return { title, text: tidy(decodeXmlEntities(text, HTML_NAMED)).replace(/\n{2,}/g, '\n') };
+  const out: string[] = [];
+  let title = '';
+  let inTitle = false;
+  let i = 0;
+  let lower: string | undefined;
+  const n = html.length;
+  while (i < n) {
+    const lt = html.indexOf('<', i);
+    const end = lt < 0 ? n : lt;
+    if (end > i) {
+      const t = html.slice(i, end);
+      if (inTitle) title += t;
+      else out.push(t);
+    }
+    if (lt < 0) break;
+    if (html.startsWith('<!--', lt)) {
+      const c = html.indexOf('-->', lt + 4);
+      i = c < 0 ? n : c + 3;
+      continue;
+    }
+    const gt = html.indexOf('>', lt + 1);
+    if (gt < 0) break;
+    const m = /^<(\/?)([a-zA-Z][a-zA-Z0-9]*)/.exec(html.slice(lt, Math.min(gt + 1, lt + 40)));
+    i = gt + 1;
+    if (!m) continue; // <!DOCTYPE>, <?xml?>, a stray "<"
+    const closing = m[1] === '/';
+    const tag = m[2].toLowerCase();
+    if (!closing && SKIP.has(tag) && html[gt - 1] !== '/') {
+      // Skip to the matching close tag (case-insensitive), or the end.
+      lower ??= html.toLowerCase();
+      const close = lower.indexOf(`</${tag}`, i);
+      if (close < 0) break;
+      const cgt = html.indexOf('>', close);
+      i = cgt < 0 ? n : cgt + 1;
+      continue;
+    }
+    if (tag === 'title') {
+      inTitle = !closing;
+      continue;
+    }
+    if (tag === 'li' && !closing) out.push('\n- ');
+    else if (tag === 'td' || tag === 'th') out.push(closing ? ' | ' : '');
+    else if (BLOCK.test(tag)) out.push('\n');
+  }
+  return {
+    title: decodeXmlEntities(title, HTML_NAMED).replace(/\s+/g, ' ').trim(),
+    text: tidy(decodeXmlEntities(out.join(''), HTML_NAMED)).replace(/\n{2,}/g, '\n'),
+  };
 }
 
 /** Spaces and blank lines tidied; " | " left at the end of table rows removed. */
