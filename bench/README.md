@@ -78,6 +78,36 @@ bash bench/limits/mode-power.sh listen 25
 The models the pipeline runs (Silero VAD, Parakeet TDT, CAM++, sherpa-onnx 2.0.2) are the app's
 own, listed in `THIRD_PARTY_NOTICES.md`.
 
+## Chat models (`models/`)
+
+Runs any `.litertlm` chat model through LiteRT-LM's Android library on a phone, from adb, the way
+`LlmEngine.kt` does (no app install), on 22 made-up prompts in the app's own formats: memory
+recall, tool routing, plain questions and photos. Logs first-word time, total time, token speeds,
+peak memory and the answer per prompt. Used for ADR 9.
+
+| File                     | What it does                                                                        |
+| ------------------------ | ----------------------------------------------------------------------------------- |
+| `Main.java`              | The harness (`app_process`): one engine, a fresh conversation per prompt, streamed  |
+| `build.sh`               | Fetches the library for a given version and builds `dex.zip` (JDK 21+, Android SDK) |
+| `run.sh`                 | Runs on the phone                                                                   |
+| `prompts.jsonl`          | The prompts, with the expected answer for scoring                                   |
+| `desk.jpg`, `list.jpg`   | Made-up photos (drawn by script); `sign.jpg` is `assets/bench/test.jpg`             |
+| `summary.py`             | Medians per kind, speeds and peak memory                                            |
+| `blind.py`, `unblind.py` | Shuffled, unlabelled answers for a blind scorer, then totals per model              |
+
+```bash
+scripts/phone-lock.sh take my-name
+bash bench/models/build.sh 0.20.0 $W                # 0.19.1 is what the app ships
+cp assets/bench/test.jpg $W/lib/sign.jpg && cp bench/models/*.jpg $W/lib/
+adb push $W/lib/. /data/local/tmp/mc/ && adb push $W/model.litertlm /data/local/tmp/mc/
+adb shell sh /data/local/tmp/mc/run.sh model.litertlm cpu out.jsonl   # MC_NOVISION=1 for text-only
+adb pull /data/local/tmp/mc/out.jsonl $W/ && python3 bench/models/summary.py $W/out.jsonl
+adb shell rm -r /data/local/tmp/mc                  # model, cache and results
+```
+
+Models come from `litert-community` or Google on Hugging Face. The weights cache it builds can be
+larger than the model (2.8 GB for Qwen3.5-2B vision).
+
 ## Answers and routing (`bench/answers/cases.ts`)
 
 143 fixed prompts with the expected route (tool or rule, and key arguments) and, where checkable,

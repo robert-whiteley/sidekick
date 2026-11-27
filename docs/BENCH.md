@@ -534,3 +534,23 @@ Not yet measured: the phone was locked (keyguard) whenever this work had it, and
 owner's. Until there is data the app keeps the default (thinking off) everywhere. iPhone: the
 bundled Swift LiteRT-LM API has `ThinkingConfig` (enable + token budget), but `Llm.swift` does not
 pass `thinkingBudget` yet.
+
+## Chat models compared (27 Nov 2026)
+
+Is there a better small model than Gemma 4 E2B? Decision and survey in
+[ADR 9](decisions/0009-chat-model-compare.md); harness in `bench/models/`. Pixel 5, CPU, 22
+made-up prompts in the app's own prompt formats, answers scored blind (0–2 each).
+
+| Run                         | First word, median (memory / tool / plain / photo) | Write speed           | Peak memory (text / photo) | Blind score |
+| --------------------------- | -------------------------------------------------- | --------------------- | -------------------------- | ----------- |
+| **Gemma E2B, 0.19.1** (now) | 4.9 / 4.5 / 3.1 / 19.3 s                           | 6.7 tok/s, 4.2 word/s | 2.27 / 3.14 GB             | **41/44**   |
+| Gemma E2B, LiteRT-LM 0.20.0 | 4.7 / 4.8 / 3.6 / 22.1 s                           | 8.3 tok/s, 5.1 word/s | 3.11 / 3.87 GB             | 41/44       |
+| Qwen3.5-2B vision, 0.20.0   | 7.8 / 6.8 / 5.5 / 34.8 s                           | 4.8 tok/s, 3.0 word/s | 4.24 / 4.58 GB             | 38/44       |
+| Qwen3.5-4B int4, 0.20.0     | 27 / 24 / 17 s (text only)                         | 2.7 tok/s, 1.7 word/s | 4.5 GB                     | 33/38       |
+| Qwen3.5-2B vision, 0.19.1   | –                                                  | 4.8 tok/s             | 4.3–4.7 GB                 | 21/44       |
+
+- Keep Gemma: Qwen 2B is slower, larger and slightly worse; Qwen 4B is too slow on this phone.
+- Qwen3.5 on LiteRT-LM 0.19.1 (the app's version) echoes the prompt and writes nonsense; fine on
+  0.20.0.
+- LiteRT-LM 0.20.0 gives Gemma about 24% faster writing, but about 0.8 GB more peak memory here.
+- Load: Gemma 2.9 s (warm cache); Qwen 2B 86 s the first time (builds a 2.8 GB cache), then 14 s.
