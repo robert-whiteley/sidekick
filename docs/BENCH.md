@@ -439,3 +439,21 @@ ADR 0006 "Lite versions of cloud-app features".
 | U²-Netp (chosen)                                               | 4.6 MB | 0.8–1.1 s      | Clean on people, a dog, cups, a bicycle |
 | Silueta                                                        | 44 MB  | 1.3–1.8 s      | About the same                          |
 | ISNet general                                                  | 179 MB | 5–7 s          | Worse with the same preprocessing       |
+
+## Chat features (27 Nov 2026)
+
+Edit / Try again, "How Sidekick answers", formatted answers, private facts kept out (PR #39).
+
+- Laptop: 19 new unit tests (`__tests__/chat-features-test.ts`): which exchange may be redone,
+  taking the last turn back (gone from the chat state, model chat restarts), the answer-style
+  line in the prompt (trimmed, capped at 300), the "(spoken)" mark, the markdown parser (recipe
+  steps and bullets, bold, small tables, half-written marks while streaming), read-aloud cleanup
+  (no bullets, stars or table pipes), the private-topic line in the owner-fact prompt and the
+  parser for the model's person-fact check. Full suite, tsc and eslint pass.
+- Release APK built (`sk-chatfeat1.apk`); the bundle carries the new prompt and settings text.
+- **Phone: not checked yet.** When the phone lock came free (00:57) the Pixel 5 was on its lock
+  screen, so nothing was installed or tapped. Still to do on the phone, made-up content only:
+  screenshots light/dark of a formatted recipe; Edit and Try again replacing the last exchange
+  (and its memory row); the answer-style box obeyed ("call me Captain Nemo, metric units");
+  `sidekick://bench?run=facts` (8 made-up owner lines and 8 person lines, half private) to see
+  that the model leaves private ones out. Read aloud is audible: waits for the owner's OK.
