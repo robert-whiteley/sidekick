@@ -692,7 +692,7 @@ const STATIC: SettingDef[] = [
   s('sourceFolders', {
     id: 'folders_source',
     name: 'Folders',
-    desc: 'read text files and PDFs in folders you pick',
+    desc: 'read documents, spreadsheets and PDFs in folders you pick',
     section: 'connections',
     type: 'boolean',
     risk: 'normal',
