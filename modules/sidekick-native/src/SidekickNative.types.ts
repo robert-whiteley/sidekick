@@ -92,6 +92,8 @@ export type SidekickNativeModuleEvents = {
   onCamera: (event: CameraEvent) => void;
   /** Android said memory is short: big models were freed natively (they reload on demand). */
   onMemoryPressure: (event: { level: 'low' | 'critical'; freed: string[] }) => void;
+  /** A picture being made: stage name from stable-diffusion.cpp, steps done of total. */
+  onPicture: (event: { stage: string; done: number; total: number }) => void;
   onLlmText: (event: { requestId: string; text: string }) => void;
   onWake: (event: Record<string, never>) => void;
   onTranscript: (event: { kind: 'speech' | 'question'; text: string; at: number }) => void;

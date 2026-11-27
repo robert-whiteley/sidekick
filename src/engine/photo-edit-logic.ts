@@ -30,8 +30,32 @@ export function editCall(raw: Record<string, unknown>): EditCall | null {
   return { op, args };
 }
 
+/** The small model an edit needs (each downloaded on first use), or null for plain bitmap work. */
+export function editModel(e: EditCall): 'background' | 'erase' | 'upscale' | null {
+  if (e.op === 'background') return 'background';
+  if (e.op === 'erase' || e.op === 'upscale') return e.op;
+  return null;
+}
+
 /** Needs the background model (downloaded on first use). */
-export const needsSegModel = (e: EditCall) => e.op === 'background';
+export const needsSegModel = (e: EditCall) => editModel(e) === 'background';
+
+/** Upscaling is offered for small pictures only: phone photos are already big and sharp. */
+export const UPSCALE_MAX_EDGE = 1024;
+
+/** PhotoEdit.kt refuses a photo bigger than [UPSCALE_MAX_EDGE] with "too big WxH". */
+export function upscaleRefusal(error: string): string | null {
+  const m = /too big (\d+)x(\d+)/.exec(error);
+  if (!m) return null;
+  return (
+    `This photo is already ${m[1]} × ${m[2]}, so making it bigger wouldn't add detail. ` +
+    `Upscaling is for small pictures (up to ${UPSCALE_MAX_EDGE} px) or crops.`
+  );
+}
+
+/** The chat can't point at the object: the erase screen asks the user to brush over it. */
+export const ERASE_ASK = 'Brush over what you want removed, and I’ll fill it in.';
+export const ERASE_BUTTON = 'Brush over it';
 
 /** What Sidekick says under the edited photo. */
 export function editReply(e: EditCall): string {
@@ -63,6 +87,10 @@ export function editReply(e: EditCall): string {
         default:
           return 'Made the background white.';
       }
+    case 'erase':
+      return 'Removed it and filled in the gap.';
+    case 'upscale':
+      return 'Made it 4 times bigger and sharper.';
   }
 }
 

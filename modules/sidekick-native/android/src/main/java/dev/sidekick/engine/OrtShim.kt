@@ -18,5 +18,8 @@ object OrtShim {
    */
   @JvmStatic external fun run(handle: Long, input: FloatArray, shape: LongArray, outShape: LongArray): FloatArray
 
+  /** Every input and the first output uint8, inputs in the model's order (MI-GAN inpainting). */
+  @JvmStatic external fun runU8(handle: Long, inputs: Array<ByteArray>, shapes: Array<LongArray>, outShape: LongArray): ByteArray
+
   @JvmStatic external fun release(handle: Long)
 }

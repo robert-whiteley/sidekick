@@ -414,7 +414,7 @@ photo (generated, no real person). Image generation: stable-diffusion.cpp (MIT) 
 Android and run over adb from a temporary folder, files deleted after. Licences and decisions:
 ADR 0006 "Lite versions of cloud-app features".
 
-### Image generation (trial, not in the app)
+### Image generation (trial; now built, see ADR 0006)
 
 | 512×512 on the Pixel 5, 6 CPU threads   | Time per image (5 prompts)               | Peak memory | Download |
 | --------------------------------------- | ---------------------------------------- | ----------- | -------- |
@@ -429,8 +429,8 @@ ADR 0006 "Lite versions of cloud-app features".
   picture is gibberish. SD 1.5 + LCM is a little more accurate but 6× slower.
 - Faster phones: CPU-only ≈ 12–15 s with SDXS on a Snapdragon 8 Gen 2 / A15-class phone (2.5–3×
   the Pixel 5 per core, estimated); a few seconds with Core ML or a recent NPU (published).
-- Verdict: usable on phones with ≥ 6 GB RAM as an optional download; not built yet because the
-  licence terms must go into the app's terms (owner decision, ADR 0006).
+- Verdict: usable on phones with ≥ 6 GB RAM as an optional download; built as "Make pictures"
+  with the licence terms in the app (ADR 0006). The in-app build is not yet timed on the phone.
 
 ### Photo edits: background model
 

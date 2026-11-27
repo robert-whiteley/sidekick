@@ -84,6 +84,7 @@ import { stopTranslateHeard, translateHeardIfIdle } from '@/engine/translate-hea
 import { driveBackupIfDue } from '@/engine/drive-backup-schedule';
 import { cancelLlm, ensureLlm, holdBackground, releaseBackground } from '@/engine/llm';
 import { stopResearch } from '@/web/research';
+import { stopPicture } from '@/engine/picture';
 import { readBackDone } from '@/engine/actions';
 import { startFollowupNotifications } from '@/engine/followup-notify';
 import { setRoutineUi } from '@/engine/routines';
@@ -895,6 +896,8 @@ export function AskScreen({
           draftId: r.draftId,
           textResult: att?.kind === 'selection' || undefined,
           momentId: r.momentId,
+          picture: r.picture,
+          link: r.link,
         }),
       );
       if (r.momentId != null) setMessages((m) => patchMessage(m, userId, { momentId: r.momentId }));
@@ -1023,6 +1026,7 @@ export function AskScreen({
 
   const stop = () => {
     stopResearch();
+    stopPicture();
     cancelLlm();
     speaker.current?.stop();
     setSpeakingId(null);

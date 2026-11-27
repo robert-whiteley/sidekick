@@ -127,6 +127,13 @@ export default function AssistantSettings() {
           hint={`Recommended for this phone: ${MODEL_TIER_LABEL[rec.modelTier]}`}
           href="/settings/models"
         />
+        <NavRow
+          label="Make pictures"
+          hint={
+            iphone ? 'Not on iPhone yet' : 'Draw pictures on this phone (optional 0.7 GB download)'
+          }
+          href="/settings/pictures"
+        />
         <ChoiceRow<SmartDefault>
           label="Better models"
           hint="Automatic: downloads on Wi-Fi while charging, switches once it works and deletes the old one."

@@ -22,6 +22,10 @@ export const PHOTO_EDIT_CASES: [string, string | null][] = [
   ['make it black and white', 'grayscale'],
   ['can you brighten this up', 'enhance'],
   ['mirror it', 'flip'],
+  ['remove the cup from the photo', 'erase'],
+  ['get rid of the person on the left', 'erase'],
+  ['upscale this', 'upscale'],
+  ['make it bigger and sharper', 'upscale'],
   ['what is in the background?', null],
   ['is this photo blurry?', null],
 ];
@@ -45,7 +49,8 @@ export async function runPhotoEditBench(log: Log, dir: string): Promise<void> {
         : null;
     const edit = fill && !fill.error && fill.tool === 'edit_photo' ? editCall(fill.args) : null;
     const r = edit ? await runPhotoEdit(edit, photo, () => {}).catch(() => null) : null;
-    const ok = want === null ? !r : !!r?.path && r.op === want;
+    // Erase answers with the brush-screen button rather than a file.
+    const ok = want === null ? !r : (!!r?.path || !!r?.link) && r?.op === want;
     if (ok) right++;
     if (r?.path) made.push(r.path);
     log(

@@ -58,6 +58,8 @@ export type RouteOutcome =
   | { kind: 'research'; topic: string; news?: boolean }
   /** An edited copy of the photo sent with the request (photo-edit.ts). */
   | { kind: 'edit_photo'; edit: EditCall }
+  /** A new picture drawn on the phone from [prompt] (picture.ts). */
+  | { kind: 'picture'; prompt: string }
   /** Translate [text] (empty: the text in the photo) into [to]: the assistant runs the model. */
   | { kind: 'translate'; text: string; to: string }
   | { kind: 'recap'; req: RecapRequest };
@@ -135,6 +137,8 @@ export async function runTool(
       const edit = editCall(a);
       return edit ? { kind: 'edit_photo', edit } : null;
     }
+    case 'make_picture':
+      return { kind: 'picture', prompt: str(a.prompt) };
     case 'recap': {
       const from = a.from as number | undefined;
       const to = (a.to as number | undefined) ?? now.getTime();

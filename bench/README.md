@@ -161,9 +161,12 @@ plus filler up to any size, and 50 questions with the expected answer words.
 - Photo edits: push a made-up photo to the app's external files folder as `bench-photo.jpg`, then
   `run=photo-edit` — 10 edit requests and 2 questions; copies of the results are written next to
   it as `bench-edit-N.jpg|png` for a look. Delete all of them afterwards.
-- Image generation trial (not in the app): stable-diffusion.cpp (MIT) built for Android with the
-  NDK, run from `/data/local/tmp` over adb with SDXS-512 and SD 1.5 + LCM-LoRA; files removed
-  after. Results in docs/BENCH.md "Lite features".
+  Erase and upscale are among the edit requests (erase answers with the brush-screen button).
+- Pictures: download the picture model in the app (or push its two files into the app's
+  `files/models` folder), push the made-up `bench-photo.jpg`, then `run=picture` — 8 requests
+  (6 drawing, 2 not): does the router pick `make_picture`, then each picked one is drawn with
+  timings; then a fixed blob in the middle of `bench-photo.jpg` is erased twice. Copies go next to
+  it as `bench-pic-N.png`. Results in docs/BENCH.md "Lite features". Delete them afterwards.
 
 ### adb deep links
 

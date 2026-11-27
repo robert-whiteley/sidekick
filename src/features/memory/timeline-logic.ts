@@ -40,6 +40,7 @@ export function who(m: Moment): string {
   if (m.kind === 'photo') return 'Photo';
   if (m.kind === 'frame') return 'Camera';
   if (m.kind === 'answer') return 'Asked Sidekick';
+  if (m.kind === 'picture') return 'Picture Sidekick drew';
   if (m.kind === 'note') return 'Your note';
   if (m.kind === 'conversation_note') return 'Conversation notes';
   if (m.kind === 'file') return 'File';

@@ -39,6 +39,7 @@ import {
   deleteMoment,
   rememberExchange,
   rememberPhotoQuestion,
+  rememberPicture,
   savedFacts,
   searchMemory,
 } from '@/memory/store';
@@ -64,6 +65,7 @@ import { firstUrl } from './shared-doc-logic';
 import { askWithLookup, type WebSource } from '@/web/lookup';
 import { research } from '@/web/research';
 import { runPhotoEdit } from './photo-edit';
+import { makePicture, pictureFilesReady } from './picture';
 import { answerLocation } from './location';
 import { fillTool, resolveTimeWithModel, runTool, type RouteOutcome } from './tools';
 import { decideRequest } from './decide';
@@ -108,6 +110,10 @@ export type AnswerResult = {
   waitingOnline?: boolean;
   /** The saved exchange (a model answer in the main chat): Edit / Try again can take it back. */
   momentId?: number;
+  /** A picture made on the phone (shown with a Report button; picture.ts). */
+  picture?: { prompt: string };
+  /** A button under the answer that opens a screen in the app (e.g. the erase brush). */
+  link?: { label: string; href: string };
 };
 
 /**
@@ -363,6 +369,30 @@ export async function answer(
           local: true,
           // momentAt 0: a new file, not a stored moment, so no camera frames are shown around it.
           media: edit.path ? [{ momentAt: 0, kind: 'photo', path: edit.path }] : undefined,
+          link: edit.link,
+        };
+      }
+      case 'picture': {
+        // Drawn on the phone (picture.ts); kept in the chat history unless off the record.
+        const r = await makePicture(question, o.prompt, status);
+        onText(r.text);
+        const momentId =
+          r.path && !offRecord
+            ? await rememberPicture(question, r.text, r.path).catch(() => undefined)
+            : undefined;
+        return {
+          text: r.text,
+          usedPhoto: null,
+          sources: [],
+          ms: r.ms,
+          ttftMs: 0,
+          local: true,
+          media: r.path ? [{ momentAt: 0, kind: 'photo', path: r.path }] : undefined,
+          picture: r.path ? { prompt: r.prompt } : undefined,
+          momentId,
+          link: r.needsDownload
+            ? { label: 'Open Make pictures', href: '/settings/pictures' }
+            : undefined,
         };
       }
     }
@@ -440,6 +470,7 @@ export async function answer(
     const { decision, ms, reply } = await decideRequest(question, {
       draftOpen,
       photo: !!photoNow,
+      pictures: pictureFilesReady(),
     }).catch(() => ({ decision: { kind: 'answer' } as Decision, ms: 0, reply: '' }));
     console.log(`[decide] ${decisionLabel(decision)} (${reply}) in ${ms} ms`);
     // Phone locked (screen off, hands-free): nothing personal until it is unlocked. Routine and
@@ -489,7 +520,12 @@ export async function answer(
 
   let image = photoNow;
   if (!image && asksAboutSomethingSeen(question)) {
-    image = sources.map((m) => keptFile(m.photoPath)).find((p) => p !== null) ?? null;
+    // A picture Sidekick drew is never something the user saw.
+    image =
+      sources
+        .filter((m) => m.kind !== 'picture')
+        .map((m) => keptFile(m.photoPath))
+        .find((p) => p !== null) ?? null;
   }
 
   // Only the best few notes reach the model: each prompt token delays the first word.

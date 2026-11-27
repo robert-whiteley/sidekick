@@ -24,6 +24,7 @@ import {
   runRecallSearchOnly,
 } from '@/engine/answers-bench';
 import { runPhotoEditBench } from '@/engine/photo-edit-bench';
+import { runPictureBench } from '@/engine/picture-bench';
 import { runResearchBench } from '@/engine/research-bench';
 import { EMBED_DIMS } from '@/memory/db';
 import { cosine } from '@/memory/voices';
@@ -143,6 +144,8 @@ export default function BenchScreen() {
       else if (what === 'recall-search') await runRecallSearchOnly(quiet);
       else if (what === 'recall-clear') await clearRecallData(quiet);
       else if (what === 'research') await runResearchBench(quiet, only);
+      else if (what === 'picture')
+        await runPictureBench(quiet, device.externalFilesDir ?? device.filesDir);
       else if (what === 'photo-edit')
         await runPhotoEditBench(quiet, device.externalFilesDir ?? device.filesDir);
       else if (what === 'facts') await runFactsBench(quiet);

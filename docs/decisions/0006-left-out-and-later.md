@@ -387,39 +387,78 @@ Left out on iPhone, with why (users see the reason in Phone features, Connection
 
 ## Lite versions of cloud-app features (26 Nov; numbers in docs/BENCH.md "Lite features")
 
-### Image generation: not built yet; SDXS-512 is usable on the Pixel 5, needs the owner's OK on its licence terms
+### Image generation (built, Android; optional download)
 
-Every model small enough for a phone descends from Stable Diffusion 1.5, 2.1 or SDXL, so its
-licence is an OpenRAIL one. Checked on each model card and licence text (Nov 2026):
+**Licence search: is there a model with no use restrictions?** Checked against each model's
+licence file or card on Hugging Face (Nov 2026):
 
-| Model (size on the phone)                              | Licence                                   | Commercial-safe for a free Apache-2.0 app?                                                                                                      |
-| ------------------------------------------------------ | ----------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
-| SDXS-512 (IDKD, distilled SD; 683 MB at 8-bit)         | OpenRAIL++-M                              | Yes, with conditions: the licence's use restrictions (Attachment A) must be passed on in the app's terms and the licence shipped with the model |
-| SD 1.5 / DreamShaper 8 + LCM-LoRA or Hyper-SD (1.9 GB) | CreativeML OpenRAIL-M (+ OpenRAIL++ LoRA) | Same conditions                                                                                                                                 |
-| BK-SDM tiny / small (nota-ai; ~0.65–1 GB)              | CreativeML OpenRAIL-M                     | Same conditions                                                                                                                                 |
-| SD 2.1 base / Apple Core ML SD 2.1 (iPhone)            | OpenRAIL++-M                              | Same conditions                                                                                                                                 |
-| TAESD tiny image decoder (10 MB)                       | MIT                                       | Yes                                                                                                                                             |
-| SD-Turbo, SDXL-Turbo, SD 3 / 3.5 (Medium, Large)       | Stability AI Community Licence            | No: registration, "Powered by Stability AI", $1M revenue cap, revocable                                                                         |
-| Stable Cascade, FLUX.1-dev, Kolors                     | Non-commercial                            | No                                                                                                                                              |
-| FLUX.1-schnell (12B), Sana, Lumina, PixArt-Σ           | Apache-2.0 / Nvidia / open                | Licence fine (except Sana's Nvidia licence), but 2–12 GB: too big for phones                                                                    |
+| Model (size)                                                     | Licence (source)                                                                                                              | Usable here?                                                                                        |
+| ---------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| MiniT2I-B/16 (0.26 B; 280 MB at 8-bit) + flan-t5-large (830 MB)  | MIT (huggingface.co/MiniT2I/MiniT2I) + Apache-2.0 (huggingface.co/google/flan-t5-large)                                       | Licence: yes, no restrictions. Speed: no (measured below)                                           |
+| PRX-512 (Photoroom, 1.3 B)                                       | Apache-2.0, but ships Google's T5-Gemma text encoder under the Gemma Terms (huggingface.co/Photoroom/prx-512-t2i-sft, NOTICE) | Gemma's prohibited-use policy carries over; 1.3 B + 2 B encoder is too big and slow for the Pixel 5 |
+| Sana 600M / Sana-Sprint 0.6B (Nvidia)                            | Apache-2.0 weights, Gemma-2-2B-IT text encoder under the Gemma Terms (model cards)                                            | Same: Gemma terms; 2 B encoder                                                                      |
+| Lumina-Image-2.0                                                 | Apache-2.0 (Gemma-2 text encoder)                                                                                             | Same; 2.6 B + encoder: too big                                                                      |
+| FLUX.2-klein-4B, iris-3b, Z-Image-Turbo (6 B), Qwen-Image (20 B) | Apache-2.0                                                                                                                    | Licence fine; 3–20 B: far too big for a 2020 phone                                                  |
+| SDXS-1B / SDXS (AiArtLab)                                        | "modified-mit": non-commercial without written permission (huggingface.co/AiArtLab/sdxs-1b, LICENSE)                          | No                                                                                                  |
+| Anima, SeFi-Image, flux-3-image-klein                            | Non-commercial / gated community licences                                                                                     | No                                                                                                  |
+| SDXS-512 (IDKiro; 683 MB at 8-bit)                               | CreativeML OpenRAIL++-M (from SD 1.5 / DreamShaper, CreativeML OpenRAIL-M)                                                    | Yes, commercial use allowed; users must be bound by the use restrictions (Attachment A, §5)         |
+| SD 1.5 / BK-SDM / SD 2.1 family                                  | CreativeML OpenRAIL-M / OpenRAIL++-M                                                                                          | Same conditions as SDXS-512; slower (SD 1.5 + LCM: 240 s on the Pixel 5)                            |
+| SD-Turbo, SDXL-Turbo, SD 3 / 3.5                                 | Stability AI Community Licence                                                                                                | No: registration, attribution, revenue cap                                                          |
+| TAESD decoder (10 MB)                                            | MIT (huggingface.co/madebyollin/taesd)                                                                                        | Yes                                                                                                 |
 
-Measured on the Pixel 5 (CPU, 6 threads, stable-diffusion.cpp, MIT, 512×512, made-up prompts):
+The only unrestricted model small enough was MiniT2I. Measured with stable-diffusion.cpp on the
+laptop: 8.7 s per step, and it needs about 20 steps for a clean picture (fewer steps are mush);
+about 3 minutes a picture on the laptop, so roughly 5 minutes or more on the Pixel 5 (estimated; not timed on the phone). Not usable. **Decision: SDXS-512 under OpenRAIL++**, with its
+Attachment A passed on word for word in the picture terms (docs/picture-terms.md, shown in
+Settings → Assistant → Make pictures and agreed to by downloading) and the licences linked in
+THIRD_PARTY_NOTICES.md.
 
-| Setup                                   | Time per image | Peak memory | Download | Quality                                                                       |
-| --------------------------------------- | -------------- | ----------- | -------- | ----------------------------------------------------------------------------- |
-| SDXS-512, 1 step, 8-bit, TAESD          | 37–43 s        | ~1.1 GB     | 693 MB   | Good: photos, landscapes, portraits, illustrations; text in images is garbled |
-| SD 1.5 8-bit + LCM-LoRA, 4 steps, TAESD | 240 s          | 2.0 GB      | 1.9 GB   | Good, a little better than SDXS; far too slow                                 |
+**What was built**
 
-- A faster phone: a Snapdragon 8 Gen 2 / A15-class CPU is about 2.5–3× the Pixel 5 per image
-  (≈ 12–15 s with SDXS); with Apple's Core ML (iPhone 13: SD 2.1 in ~11 s for 20 steps,
-  published) or a recent Snapdragon NPU (Qualcomm AI Hub: ~2 s) it is a few seconds.
-- Plan if the owner agrees: an optional "Make pictures" download (693 MB, Wi-Fi) on phones with
-  ≥ 6 GB RAM, sd.cpp in the native module, Gemma unloaded while it runs, and a "Report this
-  picture" button (Google Play's AI-generated-content policy requires one).
-- Why not built in this round: (1) the OpenRAIL terms must go into the app's terms and every user
-  agrees to them (what users see; the repo's licence check allows only plain open licences);
-  (2) Play's report-content duty; (3) the SD training-data concerns (LAION) are a reputational
-  risk for a privacy-first app. Owner decision needed.
+- stable-diffusion.cpp (MIT) and ggml built from source in the native module's CMake, pinned by
+  commit and SHA-256 (sd.cpp e637c7b, ggml eeda9ec), ARMv8.2 dot-product + fp16 (checked on the
+  CPU before loading; older CPUs are told no). The unused tokenizer vocabularies (Qwen, Mistral,
+  T5, Gemma) are left out: the library is 12.5 MB instead of 41 MB.
+- Optional download (0.7 GB, Wi-Fi unless mobile data is allowed): offered on Android phones
+  with 6 GB+ RAM; 4–6 GB get it with a "slow on this phone" note; under 4 GB, old CPUs and the
+  iPhone ("not yet") don't.
+- The model picks the `make_picture` catalog tool from what was said, in any wording (no word
+  lists). It is offered only once the picture model is downloaded; before that, a drawing request
+  gets a normal answer. Erase and upscale are `edit_photo` operations, offered only with a photo.
+  Progress in the chat, Stop works mid-picture, and the
+  picture is kept in the chat history and the timeline ("Picture Sidekick drew"); off the record
+  it isn't kept. Gemma is unloaded first on phones under 7 GB.
+- Each picture has **Report this picture**: pick a reason in the app, then it opens an email draft
+  to support with the reason and what was asked for (no picture attached, nothing sent without
+  the user).
+
+Speed: 37–43 s a picture on the Pixel 5 with the same model and settings in the earlier trial (docs/BENCH.md "Lite features"); the in-app build is not yet timed on the phone.
+
+**Content filter: only what store policy requires.** Google Play's AI-Generated Content policy
+(support.google.com/googleplay/android-developer/answer/13985936) says apps that generate
+content with AI, including "Image or video generated by AI based on text, image, or voice
+prompts", must comply with its content policies, "prohibiting and preventing the generation of"
+Restricted Content (child exploitation is the example given; the examples page,
+answer/14094294, adds non-consensual sexual deepfakes and sexually gratifying apps), and "must
+contain in-app user reporting or flagging features" so users can report offensive content
+"without needing to exit the app". So Sidekick refuses sexual or nude pictures, and anyone under 18 in a sexual
+or suggestive way, and has the Report button. The model judges this, not a word list: after it
+picks `make_picture`, a short scratch-chat check asks it yes or no about the request and its
+description (picture.ts `pictureAllowed`), so rewordings and other languages are caught and "a
+sexy sports car" is not refused. It fails closed: anything but a clear "no" (an unreadable reply,
+a failed call) refuses. A word list was tried first and dropped (owner rule: no word rules;
+brittle both ways). Nothing
+else is filtered: violence, politics, real people and so on are left to the licence terms and
+reports. Risk noted: the report is picked in the app but sent from the email app; if review
+objects, an in-app send needs a server, which Sidekick doesn't have.
+
+**Left out**
+
+- iPhone: needs a Core ML or Metal build of the same model; the app says "not yet".
+- A filter beyond sexual content, and an image classifier on the output (not required; it would
+  add a model and wrong refusals).
+- Bigger or better models (SD 1.5 + LCM, 4 steps: 240 s; anything 1 B+): too slow on the Pixel 5.
+- CI time: building sd.cpp adds about 7 minutes to a cold Android build (cached after).
 
 ### Light photo edits (built, Android)
 
@@ -427,11 +466,35 @@ Measured on the Pixel 5 (CPU, 6 threads, stable-diffusion.cpp, MIT, 512×512, ma
   colour / blur, picked by the model from what was said. Background cut-out: U²-Netp
   (Apache-2.0, 4.6 MB) chosen over Silueta (44 MB, about the same masks) and ISNet (179 MB,
   ~6× slower on the laptop).
-- Left out: **erase an object** (needs a way to point at the object, i.e. a mask-drawing screen,
-  plus an inpainting model with two inputs: MI-GAN (MIT, 28 MB) or LaMa (Apache-2.0, 200 MB) are
-  the candidates); **upscale** (Real-ESRGAN, BSD-3: a 17M-parameter model run tile by tile, slow on a
-  phone CPU, and phone photos are already 12 MP; not measured). Later, if asked.
+- **Erase an object** (built 26 Nov): asking to remove something from a photo answers with a
+  "Brush over it" button; the brush screen marks the object and MI-GAN (MIT, 28 MB, downloaded
+  the first time) fills it in, with undo and "erase more". Not yet timed on the phone.
+  LaMa (Apache-2.0, 200 MB) was not tried: 7× the download for a phone-sized photo.
+- **Upscale** (built 26 Nov): Real-ESRGAN general x4v3 (BSD-3, 5 MB), 4×, in 128 px tiles. Only
+  offered for photos with a long edge of 1024 px or less (bigger ones get "it's already W × H");
+  phone camera photos are already 12 MP. Not yet timed on the phone.
 - iPhone: not yet (the edits need a Swift port; the app says so and still answers about the photo).
+
+### Chat models: abliterated or user-chosen (notes only)
+
+Owner decisions (26 Nov), verbatim:
+
+- "Uncensored or abliterated models: left out for now because of store rejection risk. Note it
+  only."
+- "'Use your own chat model': rejected. Sidekick should ship the best model for users rather than
+  let them pick one."
+
+What it would take, if this is reopened:
+
+- Format: Sidekick runs Gemma through LiteRT-LM (.litertlm). An abliterated Gemma would have to be
+  converted to .litertlm with Google's converter (possible for Gemma-architecture weights, not
+  tested); anything else needs llama.cpp in the native module, which on the Pixel 5 is slower
+  than LiteRT-LM's GPU path for the same size (several seconds more per answer).
+- Licence: an abliterated Gemma is a Gemma derivative; the Gemma Terms and Prohibited Use Policy
+  carry over to it and must be passed on to users, so it would not be "unrestricted" either.
+- Stores: Google Play's AI-Generated Content policy requires preventing restricted content and
+  in-app reporting; the App Store's guideline 1.2 (user-generated content) and 1.1 (objectionable
+  content) apply too. A model sold as uncensored is a likely rejection.
 
 ### Research (built)
 

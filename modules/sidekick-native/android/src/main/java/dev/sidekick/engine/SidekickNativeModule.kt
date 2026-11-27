@@ -47,7 +47,7 @@ class SidekickNativeModule : Module() {
   override fun definition() = ModuleDefinition {
     Name("SidekickNative")
 
-    Events("onLlmText", "onWake", "onTranscript", "onPartialTranscript", "onQuestion", "onListenError", "onBargeIn", "onVoiceIdle", "onUsbCamera", "onAudioDevices", "onMediaButton", "onCamera", "onMemoryPressure")
+    Events("onLlmText", "onWake", "onTranscript", "onPartialTranscript", "onQuestion", "onListenError", "onBargeIn", "onVoiceIdle", "onUsbCamera", "onAudioDevices", "onMediaButton", "onCamera", "onMemoryPressure", "onPicture")
 
     OnCreate {
       MicLoop.listener = { name, body -> sendEvent(name, body) }
@@ -367,6 +367,23 @@ class SidekickNativeModule : Module() {
     }
 
     AsyncFunction("photoEditUnload") { PhotoEdit.unload() }
+
+    // --- Pictures made on the phone (ImageGen.kt; which picture is decided in JS) ---
+    // True on 64-bit ARM phones with dot product and FP16 (the library is built for those).
+    Function("pictureSupported") { ImageGen.supported }
+
+    // Draws one 512x512 picture; progress arrives as onPicture events. Rejects "cancelled" on Stop.
+    AsyncFunction("pictureMake") { modelPath: String, taesdPath: String?, prompt: String, seed: Double ->
+      val r =
+        ImageGen.generate(context, modelPath, taesdPath, prompt, seed.toLong()) { stage, done, total ->
+          sendEvent("onPicture", mapOf("stage" to stage, "done" to done.toDouble(), "total" to total.toDouble()))
+        }
+      mapOf("path" to r.path, "width" to r.width, "height" to r.height, "ms" to r.ms.toDouble())
+    }
+
+    Function("pictureStop") { ImageGen.cancel() }
+
+    AsyncFunction("pictureUnload") { ImageGen.unloadIfIdle(0) }
 
     // --- PDFs in picked folders (one page per call, so JS can pace them) ---
     Function("pdfCanReadText") { Pdf.canReadText }

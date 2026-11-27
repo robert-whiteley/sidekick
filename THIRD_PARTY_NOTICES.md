@@ -1,23 +1,27 @@
 # Third-party notices
 
-Every model and library shipped with or downloaded by Sidekick, with its licence. All allow commercial use.
+Every model and library shipped with or downloaded by Sidekick, with its licence. All allow commercial use. One optional model, the picture model SDXS-512, also carries use restrictions, which users agree to before downloading it (see docs/picture-terms.md, shown in the app under Settings → Assistant → Make pictures).
 
 ## Models (downloaded at runtime)
 
-| Component                                                                    | Licence                                                 |
-| ---------------------------------------------------------------------------- | ------------------------------------------------------- |
-| Gemma 4 E2B and E4B (`.litertlm`)                                            | Apache-2.0                                              |
-| EmbeddingGemma 2 Text Vision 440M (`.litertlm`)                              | Apache-2.0                                              |
-| Silero VAD v6.2.3                                                            | MIT                                                     |
-| Parakeet TDT 0.6B v2 int8 (sherpa-onnx export)                               | CC BY 4.0                                               |
-| Parakeet TDT 0.6B v3 int8 (sherpa-onnx export; other languages, optional)    | CC BY 4.0                                               |
-| sherpa-onnx KWS zipformer (GigaSpeech)                                       | Apache-2.0                                              |
-| 3D-Speaker CAM++ (VoxCeleb)                                                  | Apache-2.0                                              |
-| PaddleOCR PP-OCRv6 small det + rec (PaddlePaddle ONNX exports)               | Apache-2.0                                              |
-| Kyutai Pocket TTS 100M (sherpa-onnx int8 export)                             | CC BY 4.0 (weights, © Kyutai), Apache-2.0 (ONNX export) |
-| Pocket TTS reference voice `bria.wav` (kyutai-labs/delayed-streams-modeling) | Apache-2.0                                              |
-| Smart Turn v3.2 (pipecat-ai/smart-turn-v3, fp32 ONNX)                        | BSD-2-Clause (© Daily)                                  |
-| U²-Netp (photo backgrounds; ONNX file from the rembg project, which is MIT)  | Apache-2.0 (© Xuebin Qin et al.)                        |
+| Component                                                                    | Licence                                                                                                            |
+| ---------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| Gemma 4 E2B and E4B (`.litertlm`)                                            | Apache-2.0                                                                                                         |
+| EmbeddingGemma 2 Text Vision 440M (`.litertlm`)                              | Apache-2.0                                                                                                         |
+| Silero VAD v6.2.3                                                            | MIT                                                                                                                |
+| Parakeet TDT 0.6B v2 int8 (sherpa-onnx export)                               | CC BY 4.0                                                                                                          |
+| Parakeet TDT 0.6B v3 int8 (sherpa-onnx export; other languages, optional)    | CC BY 4.0                                                                                                          |
+| sherpa-onnx KWS zipformer (GigaSpeech)                                       | Apache-2.0                                                                                                         |
+| 3D-Speaker CAM++ (VoxCeleb)                                                  | Apache-2.0                                                                                                         |
+| PaddleOCR PP-OCRv6 small det + rec (PaddlePaddle ONNX exports)               | Apache-2.0                                                                                                         |
+| Kyutai Pocket TTS 100M (sherpa-onnx int8 export)                             | CC BY 4.0 (weights, © Kyutai), Apache-2.0 (ONNX export)                                                            |
+| Pocket TTS reference voice `bria.wav` (kyutai-labs/delayed-streams-modeling) | Apache-2.0                                                                                                         |
+| Smart Turn v3.2 (pipecat-ai/smart-turn-v3, fp32 ONNX)                        | BSD-2-Clause (© Daily)                                                                                             |
+| U²-Netp (photo backgrounds; ONNX file from the rembg project, which is MIT)  | Apache-2.0 (© Xuebin Qin et al.)                                                                                   |
+| MI-GAN (erase an object; the authors' ONNX pipeline, Picsart AI Research)    | MIT                                                                                                                |
+| Real-ESRGAN general x4v3 (upscale; ONNX export of the official weights)      | BSD-3-Clause (© Xintao Wang)                                                                                       |
+| SDXS-512 (make pictures, optional; 8-bit GGUF by concedo)                    | CreativeML Open RAIL++-M, with use restrictions; from DreamShaper and Stable Diffusion 1.5 (CreativeML OpenRAIL-M) |
+| TAESD (picture decoder, madebyollin)                                         | MIT                                                                                                                |
 
 ## Data
 
@@ -46,6 +50,9 @@ Every model and library shipped with or downloaded by Sidekick, with its licence
 | LiteRT-LM (Google AI Edge; on iPhone its Swift API and the prebuilt CLiteRTLM xcframework v0.19.1)                                                                                                                 | Apache-2.0                                                              |
 | sherpa-onnx                                                                                                                                                                                                        | Apache-2.0                                                              |
 | ONNX Runtime C API headers (vendored in the native module, for photo OCR)                                                                                                                                          | MIT                                                                     |
+| stable-diffusion.cpp and ggml (built from source at a pinned commit, for pictures; Android)                                                                                                                        | MIT                                                                     |
+| Oniguruma, darts-clone (inside stable-diffusion.cpp)                                                                                                                                                               | BSD-2-Clause                                                            |
+| utf8proc, nlohmann/json, stb_image, kuba--/zip and miniz (inside stable-diffusion.cpp)                                                                                                                             | MIT / Unlicense (public domain)                                         |
 | @op-engineering/op-sqlite                                                                                                                                                                                          | MIT                                                                     |
 | SQLCipher (community edition)                                                                                                                                                                                      | BSD-3-Clause                                                            |
 | sqlite-vec                                                                                                                                                                                                         | MIT / Apache-2.0                                                        |

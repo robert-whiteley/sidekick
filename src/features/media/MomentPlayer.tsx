@@ -444,7 +444,7 @@ function ZoomImage({ path, full, onTap }: { path: string; full: boolean; onTap: 
  * Share, and Save to a suggested folder (one tap), or another folder the user types. iPhone:
  * "Save to Photos" (the photo library has no folders; Share → Save to Files covers Files).
  */
-function SaveShare({
+export function SaveShare({
   file,
   kind,
   topic,
