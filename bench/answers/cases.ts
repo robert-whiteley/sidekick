@@ -710,6 +710,15 @@ export const CASES: BenchCase[] = [
   { id: 't-help', cat: 'tool', q: 'What can you do?', route: 'help' },
   { id: 't-repeat', cat: 'tool', q: 'Say that again', route: 'repeat' },
   {
+    id: 't-hear-again',
+    cat: 'tool',
+    q: 'Let me hear what Priya said about the boiler again',
+    route: 'play_recording',
+  },
+  // "Tell me" / "what did … say" are questions, not a request to hear a recording.
+  { id: 't-tell-joke', cat: 'tool', q: 'Tell me a joke about penguins', route: 'none' },
+  { id: 't-what-said', cat: 'tool', q: 'What did Tom say about the bins?', route: 'none' },
+  {
     id: 't-play',
     cat: 'tool',
     q: 'Play some jazz on Spotify',

@@ -53,8 +53,11 @@ export type RouteOutcome =
   /** Run this canonical request through the rules (reminders, routines, location, weather). */
   | { kind: 'rules'; text: string }
   /** The normal answer path (memory search, recaps), with any time span already remembered. */
-  /** Answer normally; clipboard: with the copied text added (extras.ts). */
-  | { kind: 'answer'; clipboard?: boolean }
+  /**
+   * Answer normally; clipboard: with the copied text added (extras.ts); recording: the saved
+   * recording of the heard line it finds is shown with the answer, to play.
+   */
+  | { kind: 'answer'; clipboard?: boolean; recording?: boolean }
   /** Several web searches and a short report with sources (src/web/research.ts). */
   | { kind: 'research'; topic: string; news?: boolean }
   /** An edited copy of the photo sent with the request (photo-edit.ts). */
@@ -172,6 +175,8 @@ export async function runTool(
     }
     case 'clipboard':
       return { kind: 'answer', clipboard: true };
+    case 'play_recording':
+      return { kind: 'answer', recording: true };
     case 'move_event': {
       const p = await moveEventTo(str(a.event), str(a.to), now);
       return p ? { kind: 'plan', plan: p } : null;

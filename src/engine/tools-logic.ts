@@ -474,6 +474,12 @@ export const TOOLS: ToolSpec[] = [
     args: {},
   },
   {
+    name: 'play_recording',
+    desc: 'play back the saved recording of something said near me (to hear it again)',
+    kind: 'info',
+    args: {},
+  },
+  {
     name: 'help',
     desc: 'say what Sidekick can do',
     kind: 'action',
