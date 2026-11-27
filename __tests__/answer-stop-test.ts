@@ -39,3 +39,25 @@ test('after Stop, the answer’s later model steps get nothing and no action can
   await llm.askLlm('next question', null, () => {});
   expect(mockNative.llmGenerate).toHaveBeenCalledTimes(2);
 });
+
+test('Stop while it writes keeps what was written, though the model ends with an error', async () => {
+  await llm.ensureLlm();
+  let send: (e: { requestId: string; text: string }) => void = () => {};
+  mockNative.addListener.mockImplementationOnce(((_: string, f: typeof send) => {
+    send = f;
+    return { remove: () => {} };
+  }) as never);
+  mockNative.llmGenerate.mockImplementationOnce((async (id: string) => {
+    send({ requestId: id, text: 'Water thoroughly when' });
+    llm.stopAnswer();
+    throw new Error('Task cancelled');
+  }) as never);
+  const r = await llm.askLlm('five tips', null, () => {});
+  expect(r.text).toBe('Water thoroughly when');
+  llm.answerOver();
+  // Not stopped: a failure is still a failure.
+  mockNative.llmGenerate.mockImplementationOnce((async () => {
+    throw new Error('Task cancelled');
+  }) as never);
+  await expect(llm.askLlm('next', null, () => {})).rejects.toThrow('Task cancelled');
+});
