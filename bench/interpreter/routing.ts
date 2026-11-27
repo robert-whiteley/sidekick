@@ -2,7 +2,7 @@
  * Does a conversation request start the interpreter, and a text to translate not? Two steps, as
  * in the app: the sorter (decide-logic.ts catalogSystem, one word) and then the translate
  * tool's arguments (tools-logic.ts fillPrompt; `talk: true` opens the interpreter). Writes cases
- * in mt_gemma.py's format; the reply's first word / the JSON is the decision.
+ * in mt_gemma.py's format; score.py scores them.
  *
  *   node --import ./bench/interpreter/ts-resolve.mjs bench/interpreter/routing.ts > routing.jsonl
  */
@@ -17,7 +17,12 @@ const cases: [string, string][] = [
   ['translate for me and the driver, he speaks German', 'talk'],
   ['I need to talk to the pharmacist, she only speaks Italian', 'talk'],
   ['can you interpret between me and this lady in Arabic', 'talk'],
+  ['can you translate between me and the waiter? he speaks French', 'talk'],
+  ["help me speak with the receptionist, she's Korean", 'talk'],
+  ['the shop owner only speaks Portuguese, can you help us understand each other', 'talk'],
   ["translate 'where is the station' into Spanish", 'text'],
+  ["translate 'I am allergic to nuts' into German", 'text'],
+  ['translate this message into Italian: see you at eight', 'text'],
   ['how do you say thank you in Japanese', 'answer'],
   ['what language do they speak in Brazil', 'answer'],
   ['is French hard to learn', 'answer'],

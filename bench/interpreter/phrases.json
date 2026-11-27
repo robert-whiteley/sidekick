@@ -283,6 +283,38 @@
     {
       "en": "Can you switch on the air conditioning?",
       "expect": "say"
+    },
+    {
+      "en": "Sidekick, we're finished, you can turn the interpreter off.",
+      "expect": "stop"
+    },
+    {
+      "en": "OK, that's enough translating for now, thanks.",
+      "expect": "stop"
+    },
+    {
+      "en": "Please talk to him in Portuguese instead, Sidekick.",
+      "expect": "switch:pt"
+    },
+    {
+      "en": "She'd rather speak Korean, can you change to that?",
+      "expect": "switch:ko"
+    },
+    {
+      "en": "Great, that's everything, goodbye and thanks!",
+      "expect": "say"
+    },
+    {
+      "en": "We're finished here, thank you so much for your help.",
+      "expect": "say"
+    },
+    {
+      "en": "OK, that's it for now, see you tomorrow at nine.",
+      "expect": "say"
+    },
+    {
+      "en": "Do you have the menu in English?",
+      "expect": "say"
     }
   ]
 }

@@ -11,6 +11,8 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import {
+  END_CHECK_MAX_TOKENS,
+  endCheckPrompt,
   interpretLanguage,
   interpretSystem,
   type InterpretTurn,
@@ -73,6 +75,19 @@ for (const code of langs) {
         src: c.en,
         system: interpretSystem(mine, theirs),
         prompt: turnPrompt(mine, theirs, 'me', c.en, []),
+      }),
+    );
+    // The second look the app takes when the turn reply says END (score.py uses it only then).
+    console.log(
+      JSON.stringify({
+        lang: code,
+        i,
+        who: 'me',
+        check: true,
+        src: c.en,
+        system: interpretSystem(mine, theirs),
+        prompt: endCheckPrompt(theirs, c.en),
+        maxTokens: END_CHECK_MAX_TOKENS,
       }),
     );
   });

@@ -696,6 +696,51 @@ Starting the interpreter (`routing.ts`, the app's sorter and then the tool's arg
 
 The miss: "translate for me and the driver, he speaks German" translated the sentence.
 
+### The two misses fixed (laptop, 27 Nov)
+
+Held-out lines added to the bench so the fix isn't fitted to the two misses: 4 more said to
+Sidekick ("Sidekick, we're finished, you can turn the interpreter off", "Please talk to him in
+Portuguese instead, Sidekick", "She'd rather speak Korean, can you change to that?", …) and 4
+more endings and questions said to the other person ("We're finished here, thank you so much for
+your help", "OK, that's it for now, see you tomorrow at nine", …). 84 owner lines per run.
+
+**Goodbyes ending the session.** The turn reply alone read wrap-ups to the other person as END
+under every wording tried (6 of 57 ordinary lines; asking it to treat goodbyes as NO cost 10 of
+15 stops; a few examples in the prompt made switches 1 of 12). So an END now gets a second look:
+the old "who is this said to? OTHER / END / LANGUAGE" question on its own, which keeps goodbyes
+as OTHER. Only END there ends the session; anything else translates the line (the turn reply
+already has the translation). The END line in the turn prompt also says that ending the talk
+with the other person is NO, and languages are asked for in English (the app reads English and
+own names, not "coreano").
+
+| 84 owner lines, Spanish / German / Japanese          | Ordinary (57) | Stop (15) | Switch (12) |
+| ---------------------------------------------------- | ------------- | --------- | ----------- |
+| Before (merged PR 45)                                | 51            | 15        | 8           |
+| Turn reply only, new wording                         | 51            | 15        | 9           |
+| **Turn reply + second look on END (app)**            | **57**        | **15**    | **9**       |
+| Second look asked "said to the other person or you?" | 53            | 15        | 9           |
+
+The second look ran on 21 of the 84 lines (the ones whose turn reply said END), 1.4 s each on
+the laptop; inside the 30 conversation turns it never ran (0 of 30 said END). On the Pixel 5 it
+would be about 3.3 s (the separate call measured before), only on those lines. Switch misses
+left: "Please talk to him in Portuguese instead, Sidekick" (German, Japanese) and "Sidekick,
+switch to French please" (Japanese) were translated. Translation quality unchanged or better
+(chrF en→xx 69.1, xx→en 71.8, no line left untranslated).
+
+**"Translate for me and the driver" translated the sentence.** The `talk` argument now reads "true
+if I want help talking with a person in that language (interpreting between us, both ways, out
+loud); false for a text to translate". With 3 held-out conversation requests and 2 more plain
+texts (`routing.ts`):
+
+| Request                                                                   | Before         | Now                                    |
+| ------------------------------------------------------------------------- | -------------- | -------------------------------------- |
+| 8 conversation requests                                                   | 6 of 8         | **8 of 8** open the interpreter        |
+| 3 texts to translate ("translate 'I am allergic to nuts' into German", …) | 2 + 1 answered | 2 translate + 1 answered, none open it |
+| 3 questions about a language                                              | answer         | answer                                 |
+
+("Translate this message into Italian: see you at eight" is answered by the chat directly, as
+before; nothing opens the interpreter.)
+
 ### Still weak / not measured
 
 - Parakeet v3 and Whisper small on the phone (speed and memory while hearing a language).
@@ -704,4 +749,5 @@ The miss: "translate for me and the driver, he speaks German" translated the sen
 - The interpreter screen on a phone, and everything on iPhone (Apple speech, voices; the iOS
   code was not compiled here).
 - A turn of ~5 s is usable but slow; Bergamot is the faster fallback if it feels too slow.
-- The one-call stop / switch and the translate + `talk` start are measured on the laptop only.
+- The stop / switch decisions, the second look on END and the translate + `talk` start are
+  measured on the laptop only.

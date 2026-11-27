@@ -138,10 +138,11 @@ export const CONTEXT_TURNS = 2;
 /**
  * One turn, translated. The answer comes as "SAY: …" so a stray note or echo is easy to drop.
  * The owner's turns also start with "SIDEKICK:": the same call says whether the line was an
- * instruction to Sidekick (stop / use another language) rather than said to the other person, so
- * there is no second call and no word list. Wording chosen on the bench (bench/interpreter,
- * docs/BENCH.md "Interpreter"): framed as "who is it said to", Gemma 4 E2B almost never left
- * translating; without "requests to them" it also stopped on "please stop there".
+ * instruction to Sidekick (stop / use another language) rather than said to the other person;
+ * no word list. An END gets a second look (endCheckPrompt). Wording chosen on the bench
+ * (bench/interpreter, docs/BENCH.md "Interpreter"): framed as "who is it said to", Gemma 4 E2B
+ * almost never left translating; without "requests to them" it also stopped on "please stop
+ * there".
  */
 export function turnPrompt(
   mine: InterpretLanguage,
@@ -171,8 +172,10 @@ export function turnPrompt(
     'interpreting itself?\n' +
     'NO = it is for the other person (also requests to them like "stop at the corner", ' +
     'goodbyes, or "is English OK?").\n' +
-    'END = they ask you, the interpreter, to stop interpreting.\n' +
-    'LANGUAGE: <language> = they ask you to use another language with the other person.\n\n' +
+    'END = they ask you, the interpreter, to stop interpreting. Ending their talk with the ' +
+    'other person ("bye, that was all") is NO: you translate it.\n' +
+    'LANGUAGE: <language in English> = they ask you to use another language with the other ' +
+    'person.\n\n' +
     `Reply\nSIDEKICK: <NO, END or LANGUAGE: <language>>\nSAY: <what they said, in ${to.name}>`
   );
 }
@@ -194,6 +197,32 @@ export function parseControlReply(reply: string): ControlReply {
     return language && !/^language$/i.test(language) ? { kind: 'switch', language } : null;
   }
   return null;
+}
+
+/**
+ * A second look, only when the turn reply said END: is the line really said to Sidekick? Asked
+ * on its own and framed as "who is this said to" with OTHER first, Gemma 4 E2B keeps a goodbye
+ * to the other person ("thank you, that's all for today") as OTHER, which the turn reply alone
+ * read as END in 6 of 6 cases (bench/interpreter, docs/BENCH.md "Interpreter").
+ */
+export function endCheckPrompt(theirs: InterpretLanguage, heard: string): string {
+  return (
+    `You are Sidekick, a live interpreter between the phone's owner (English) and someone who ` +
+    `speaks ${theirs.name}. The owner just said:\n"${heard.slice(0, 400)}"\n\n` +
+    'Who is this said to?\n' +
+    'OTHER = to the other person; it will be translated. This is almost always the case, also ' +
+    'when it asks them to stop something or mentions a language.\n' +
+    'END = to you: stop interpreting, the conversation is over.\n' +
+    'LANGUAGE: <language> = to you: switch to or use another language with the other person.\n' +
+    'Reply with one of: OTHER, END, LANGUAGE: <language>.'
+  );
+}
+
+export const END_CHECK_MAX_TOKENS = 12;
+
+/** The reply to endCheckPrompt → true only for END; anything else (or unreadable) translates. */
+export function endConfirmed(reply: string): boolean {
+  return /^\W*(END|STOP)\b/i.test(reply.trim());
 }
 
 /** Tokens for one reply: a long sentence in a wordy language, plus the "SIDEKICK:" and "SAY:" lines. */

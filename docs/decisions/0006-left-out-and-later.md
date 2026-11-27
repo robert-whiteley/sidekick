@@ -226,8 +226,8 @@ Read this before proposing any of these again. Each line says why.
   points at the made-up audio (Kokoro's Japanese voice) rather than the models; needs a real
   speaker. Arabic and the other non-European languages: translation measured, hearing not.
 - The owner talking to Sidekick mid-conversation: decided by the model in the same reply as the
-  translation (`SIDEKICK: NO / END / LANGUAGE: <language>` before `SAY:`), with no word list and
-  no second call. Asked as "is the owner giving you, the interpreter, an instruction about the
+  translation (`SIDEKICK: NO / END / LANGUAGE: <language>` before `SAY:`), with no word list.
+  Asked as "is the owner giving you, the interpreter, an instruction about the
   interpreting itself?", right on 57 of 60 lines (laptop): all 9 stops and all 6 language
   changes, none of the ordinary lines such as "please stop the car here"; the 3 misses were
   "Thank you very much, that's all for today", which ended the session. Asked as "who is this
@@ -235,10 +235,16 @@ Read this before proposing any of these again. Each line says why.
   and stopped on 0–9 of 9 depending on the wording.
   The earlier design (a second call, only for lines with a word like "stop") was a word list
   and missed "Can you use Italian with her instead?". The Done button always works.
+- Goodbyes (27 Nov): the turn reply read wrap-ups to the other person ("we're finished here,
+  thank you so much") as END under every wording tried, so an END gets a second look on its
+  own ("who is this said to? OTHER / END / LANGUAGE"), which keeps goodbyes as OTHER. On 84
+  lines incl. held-out ones: 57 of 57 ordinary lines translated, 15 of 15 stops, 9 of 12
+  switches; the extra call only runs when the turn reply said END.
 - Starting it: the translate tool with `talk: true`, not a tool of its own. As its own tool
   the sorter picked plain translate for 3 of 5 conversation requests under every wording tried;
-  now 5 of 5 reach translate and 4 of 5 set `talk` ("translate for me and the driver" translated
-  the sentence).
+  with `talk` worded as "help talking with a person in that language (interpreting between us,
+  both ways, out loud); false for a text to translate", 8 of 8 conversation requests open the
+  interpreter and no plain text does (27 Nov; was 4 of 5).
 - Voices: the phone's own offline TTS (Android TextToSpeech / iOS AVSpeechSynthesizer), so no
   download from Sidekick. Missing voices are shown with a button to the phone's voice downloads
   (Android) or the Settings path (iPhone; apps can't install voices there).
