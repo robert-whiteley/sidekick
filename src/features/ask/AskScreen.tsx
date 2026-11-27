@@ -82,7 +82,14 @@ import { inferNamesIfIdle, stopNameInference } from '@/engine/name-inference';
 import { stopConversationNotes, updateConversationNotes } from '@/engine/conversation-notes';
 import { stopTranslateHeard, translateHeardIfIdle } from '@/engine/translate-heard';
 import { driveBackupIfDue } from '@/engine/drive-backup-schedule';
-import { cancelLlm, ensureLlm, holdBackground, releaseBackground } from '@/engine/llm';
+import {
+  answerOver,
+  cancelLlm,
+  ensureLlm,
+  holdBackground,
+  releaseBackground,
+  stopAnswer,
+} from '@/engine/llm';
 import { stopResearch } from '@/web/research';
 import { stopPicture } from '@/engine/picture';
 import { readBackDone } from '@/engine/actions';
@@ -126,6 +133,17 @@ import {
   withoutExchange,
   withoutOffRecord,
 } from './chat-logic';
+import {
+  editQueued,
+  enqueue,
+  type QueuedMessage,
+  type StopReason,
+  takeNext,
+  toFront,
+  unansweredAfter,
+  withoutQueued,
+  withOwed,
+} from './send-queue';
 import { ChatHeader } from './ChatHeader';
 import { LiveFrame } from './LiveFrame';
 import { Composer } from './Composer';
@@ -134,6 +152,7 @@ import { LiveConversation } from './LiveConversation';
 import { DraftCard } from './DraftCard';
 import { type MessageAction, MessageBubble } from './MessageBubble';
 import { NoticeItem, useNotices } from './NoticeLines';
+import { QueuedMessages } from './QueuedMessages';
 import { ScreenGrabBar } from './ScreenGrabBar';
 import { DARK, LIGHT } from './theme';
 import { useEntry } from './useEntry';
@@ -224,7 +243,28 @@ export function AskScreen({
   const routineAskRef = useRef<(q: string) => Promise<void>>(async () => {});
   // Spoken back-and-forth: follow-ups keep the chat; one heard mid-answer waits for it to stop.
   const conversation = useRef(new Conversation());
-  const queuedRef = useRef<{ q: string; followUp: boolean } | null>(null);
+  // Sent while answering (typed, said or from the wake word): waits its turn (send-queue.ts).
+  const [queue, setQueueState] = useState<QueuedMessage[]>([]);
+  const queueRef = useRef<QueuedMessage[]>([]);
+  const setQueue = (f: (q: QueuedMessage[]) => QueuedMessage[]) => {
+    queueRef.current = f(queueRef.current);
+    setQueueState(queueRef.current);
+  };
+  /** The queued message whose text is in the box: it doesn't start until the edit ends. */
+  const [editingQueued, setEditingQueuedState] = useState<string | null>(null);
+  const editingQueuedRef = useRef<string | null>(null);
+  const setEditingQueued = (id: string | null) => {
+    editingQueuedRef.current = id;
+    setEditingQueuedState(id);
+  };
+  /** How the answer being written was stopped (Stop, or Send now on a queued message). */
+  const stopReasonRef = useRef<StopReason>(null);
+  /** Questions stopped by Send now before a word of their answer: asked with the next one. */
+  const owedRef = useRef<string[]>([]);
+  /** The owner talked over the answer: what they say goes first. */
+  const bargedRef = useRef(false);
+  const pumpRef = useRef<() => void>(() => {});
+  const stopRef = useRef<(why: 'stop' | 'now') => void>(() => {});
   const [screen, setScreen] = useState<ScreenGrab | null>(null);
   // A shared file, recording, web page or selected text the next questions are about.
   const [attachment, setAttachment] = useState<Attachment | null>(null);
@@ -259,6 +299,7 @@ export function AskScreen({
     // What was said Off the record disappears with it.
     if (!on) {
       setMessages(withoutOffRecord);
+      setQueue(withoutOffRecord);
       leaveOffTheRecord();
     }
   };
@@ -271,6 +312,8 @@ export function AskScreen({
       .finally(() => {
         busyRef.current = false;
         setPhase('idle');
+        // Sent while the model was loading.
+        pumpRef.current();
       });
   }, []);
 
@@ -409,7 +452,14 @@ export function AskScreen({
         if (!busyRef.current || e.source === 'question') setStatus(partialStatus(e.text));
       }),
       SidekickNative.addListener('onQuestion', (e) => askRef.current(e.text, e.followUp)),
-      SidekickNative.addListener('onBargeIn', () => setStatus('Listening…')),
+      // Talking over the answer stops it (natively): what is said next is asked first.
+      SidekickNative.addListener('onBargeIn', () => {
+        setStatus('Listening…');
+        if (busyRef.current) {
+          bargedRef.current = true;
+          stopRef.current('now');
+        }
+      }),
       SidekickNative.addListener('onVoiceIdle', () => {
         conversation.current.answered(Date.now());
         setSpeakingId(null);
@@ -515,8 +565,9 @@ export function AskScreen({
     }
   };
 
+  // Also while answering: what is said then waits its turn like a typed message.
   const holdStart = async (free = false, maxMs = HANDS_FREE_MAX_MS) => {
-    if (busyRef.current || handsFree.current) return;
+    if (handsFree.current) return;
     if (!(await askMicPermission())) {
       setStatus('Microphone permission is needed.');
       return;
@@ -559,7 +610,6 @@ export function AskScreen({
       micPress.current = 'end';
       return;
     }
-    if (busyRef.current) return;
     micPress.current = { start: Date.now() };
     void holdStart();
   };
@@ -706,19 +756,73 @@ export function AskScreen({
     if (ok) setAttachment(null);
   };
 
+  // Stop, or Send now ('now'): the answer ends cleanly with what it wrote (marked stopped); its
+  // remaining steps (routing, tools, the lookup's second pass) get nothing (llm.ts stopAnswer).
+  const stop = (why: 'stop' | 'now' = 'stop') => {
+    if (busyRef.current) {
+      stopReasonRef.current = why;
+      stopAnswer();
+    } else cancelLlm();
+    stopResearch();
+    stopPicture();
+    speaker.current?.stop();
+    setSpeakingId(null);
+    awaitingVoiceRef.current = false;
+    releaseBackground();
+  };
+
+  /** Queues a message sent while answering; `first` (Send now) stops the answer for it. */
+  const queueMessage = (m: QueuedMessage, first: boolean) => {
+    setQueue((qq) => (first ? toFront(enqueue(qq, m), m.id) : enqueue(qq, m)));
+    if (first) stop('now');
+  };
+
   const ask = async (
     spoken?: string,
     followUp = false,
     offRecordNow = offRecordRef.current,
     /** Try again: this text, replacing the last exchange (the composer is left as it is). */
     again?: { text: string; replace: Exchange },
+    /** A message sent while busy, now answered in turn. */
+    from?: QueuedMessage,
   ) => {
+    const typed = spoken === undefined && !again && !from;
+    const voiced = from ? from.spoken : spoken !== undefined;
+    if (from) [followUp, offRecordNow] = [from.followUp, from.offRecord];
+    // Editing a queued message: the new text takes its place in the queue.
+    const eq = editingQueuedRef.current;
+    if (typed && eq) {
+      setEditingQueued(null);
+      if (queueRef.current.some((m) => m.id === eq)) {
+        setQueue((qq) => editQueued(qq, eq, question));
+        setQuestion('');
+        pumpRef.current();
+        return;
+      }
+    }
+    // Sent while answering: queued, answered in turn.
+    if (busyRef.current) {
+      const text = typed ? question : (spoken ?? '');
+      if (!text.trim() || again || from) return;
+      if (typed) {
+        setQuestion('');
+        if (editingRef.current) setEditing(null);
+      }
+      const barged = !typed && bargedRef.current;
+      bargedRef.current = false;
+      const at = Date.now();
+      queueMessage(
+        { id: `q${at}`, text, at, spoken: !typed, followUp, offRecord: offRecordNow },
+        barged,
+      );
+      return;
+    }
     // A screenshot from the assist key is for questions asked soon after, not ones much later.
     const att = attachmentRef.current;
     const grab = !att && screen && Date.now() - screen.at < SCREEN_TTL_MS ? screen : null;
     if (screen && !grab) setScreen(null);
     const q =
-      (again?.text ?? spoken ?? question).trim() ||
+      (from?.text ?? again?.text ?? spoken ?? question).trim() ||
       (att ? 'Summarise this.' : '') ||
       (grab
         ? grab.shared
@@ -727,15 +831,10 @@ export function AskScreen({
         : cameraOn
           ? DEFAULT_PHOTO_QUESTION
           : '');
-    if (spoken && busyRef.current) {
-      // Said over the answer (barge-in): the answer is being cancelled; ask once it has stopped.
-      queuedRef.current = { q: spoken, followUp };
-      return;
-    }
-    if (!q || busyRef.current) return;
+    if (!q) return;
     // Edit (the typed question sent from the box) or Try again: replaces the last exchange, if
     // it still is the last one. Anything else asked meanwhile ends the edit.
-    const target = again?.replace ?? (spoken === undefined ? editingRef.current : null);
+    const target = again?.replace ?? (typed ? editingRef.current : null);
     const replace =
       target && !offRecordNow && lastExchange(messagesRef.current)?.reply.id === target.reply.id
         ? target
@@ -750,7 +849,7 @@ export function AskScreen({
       setQuestion(q === DEFAULT_PHOTO_QUESTION ? '' : q);
       setMessages((m) => [
         ...m,
-        { id: `u${at}`, role: 'user', text: q, at, spoken: spoken !== undefined },
+        { id: `u${at}`, role: 'user', text: q, at, spoken: voiced },
         {
           id: `a${at}`,
           role: 'assistant',
@@ -761,7 +860,16 @@ export function AskScreen({
       if (!allowed) setStatus('Camera permission is needed.');
       return;
     }
+    if (typed) setQuestion('');
     busyRef.current = true;
+    bargedRef.current = false;
+    stopReasonRef.current = null;
+    answerOver();
+    // Questions a Send now stopped before their answer began: answered together with this one.
+    const owed = owedRef.current;
+    owedRef.current = [];
+    const modelQ = withOwed(owed, q);
+    let written = '';
     holdBackground();
     awaitingVoiceRef.current = false;
     const keepHistory = conversation.current.keepHistory(followUp, Date.now());
@@ -769,7 +877,6 @@ export function AskScreen({
     const at = Date.now();
     const userId = `u${at}`;
     const replyId = `a${at}`;
-    if (!again) setQuestion('');
     if (replace) {
       // Out of the model's chat, the saved chat and memory before it is asked again.
       await forgetLastExchange(replace.reply.text, replace.reply.momentId).catch((e) =>
@@ -786,7 +893,7 @@ export function AskScreen({
         role: 'user',
         text: routine?.label ?? q,
         at,
-        spoken: spoken !== undefined,
+        spoken: voiced,
         offRecord: offRecordNow,
       },
       { id: replyId, role: 'assistant', text: '', at, pending: true, offRecord: offRecordNow },
@@ -796,7 +903,7 @@ export function AskScreen({
     const hf = handsFreeOn();
     const speak =
       shouldSpeak({
-        spoken: spoken !== undefined || hf,
+        spoken: voiced || hf,
         headphones: headphonesOn(),
         enabled: getSettings().speakAnswers || hf,
       }) && canSpeakNow();
@@ -833,7 +940,7 @@ export function AskScreen({
       const opts = {
         keepHistory,
         offTheRecord: offRecordNow,
-        spoken: spoken !== undefined,
+        spoken: voiced,
         // Progress as it happens, until the first words of the answer replace it.
         onStatus: (line: string) => {
           if (!answered) setStatus(line);
@@ -846,6 +953,7 @@ export function AskScreen({
       const onAnswerText = (full: string) => {
         if (!answered) setStatus('');
         answered = true;
+        written = full;
         setPhase('answering');
         setMessages((m) => patchMessage(m, replyId, { text: full }));
         sp.update(full);
@@ -853,7 +961,7 @@ export function AskScreen({
       const r: Awaited<ReturnType<typeof answerQuestion>> = att
         ? await answerShared(
             att,
-            q,
+            modelQ,
             onAnswerText,
             (line) => {
               if (!answered) setStatus(line);
@@ -867,7 +975,14 @@ export function AskScreen({
               );
             return { ...x, usedPhoto: null, sources: [], ttftMs: 0, local: true };
           })
-        : await answerQuestion(grab ? screenQuestion(q, grab) : q, imagePath, onAnswerText, opts);
+        : await answerQuestion(
+            grab ? screenQuestion(modelQ, grab) : modelQ,
+            imagePath,
+            onAnswerText,
+            opts,
+          );
+      written = r.text;
+      const stopped = stopReasonRef.current ? true : undefined;
       // Android's voice says when it has finished (onVoiceIdle); background passes wait for that.
       // A read-back is always said (it asks "Send it?"), even when answers aren't spoken.
       const readBack = !!r.readBackId;
@@ -898,6 +1013,7 @@ export function AskScreen({
           momentId: r.momentId,
           picture: r.picture,
           link: r.link,
+          stopped,
         }),
       );
       if (r.momentId != null) setMessages((m) => patchMessage(m, userId, { momentId: r.momentId }));
@@ -907,19 +1023,81 @@ export function AskScreen({
       console.log(`[ask] ${imagePath ? 'photo' : 'text'} ${r.ms} ms ttft ${r.ttftMs} ms${src}`);
     } catch (e) {
       setSpeakingId(null);
-      setMessages((m) => patchMessage(m, replyId, { pending: false }));
+      const stopped = stopReasonRef.current ? true : undefined;
+      setMessages((m) => patchMessage(m, replyId, { pending: false, stopped }));
       console.log(`[ask] failed: ${String(e)}`);
       setStatus(`Something went wrong: ${e instanceof Error ? e.message : String(e)}`);
     } finally {
       holdLiveCamera(false);
+      owedRef.current = unansweredAfter(owed, {
+        question: q,
+        text: written,
+        stopped: stopReasonRef.current,
+      });
+      stopReasonRef.current = null;
+      answerOver();
       busyRef.current = false;
       // Spoken answers release on onVoiceIdle; nothing spoken (or an error) releases now.
       if (!awaitingVoiceRef.current) releaseBackground();
       setPhase('idle');
-      const next = queuedRef.current;
-      queuedRef.current = null;
-      if (next) setTimeout(() => askRef.current(next.q, next.followUp), 0);
+      setTimeout(() => pumpRef.current(), 0);
     }
+  };
+
+  /** Idle: the next queued message is answered (one being edited waits). */
+  const pump = () => {
+    if (busyRef.current) return;
+    const { next, rest } = takeNext(queueRef.current, editingQueuedRef.current);
+    if (!next) return;
+    setQueue(() => rest);
+    void ask(undefined, next.followUp, next.offRecord, undefined, next);
+  };
+
+  /** Send now on a queued message (with the box's text, if it was being edited). */
+  const sendQueuedNow = (id: string) => {
+    if (editingQueuedRef.current === id) {
+      setQueue((qq) => editQueued(qq, id, question));
+      setQuestion('');
+      setEditingQueued(null);
+    }
+    if (!queueRef.current.some((m) => m.id === id)) return;
+    setQueue((qq) => toFront(qq, id));
+    if (busyRef.current) stop('now');
+    else pump();
+  };
+
+  const editQueuedMessage = (id: string) => {
+    const m = queueRef.current.find((x) => x.id === id);
+    if (!m) return;
+    if (editingRef.current) setEditing(null);
+    setQuestion(m.text);
+    setEditingQueued(id);
+  };
+
+  const removeQueued = (id: string) => {
+    setQueue((qq) => withoutQueued(qq, id));
+    if (editingQueuedRef.current === id) {
+      setEditingQueued(null);
+      setQuestion('');
+    }
+  };
+
+  /** Long-press send: while answering, Send now; otherwise Off the record. */
+  const sendLong = () => {
+    if (!busyRef.current || phase === 'loading') {
+      setOffRecord(true);
+      return void ask(undefined, false, true);
+    }
+    const text = question.trim();
+    if (!text) return;
+    setQuestion('');
+    if (editingRef.current) setEditing(null);
+    setEditingQueued(null);
+    const at = Date.now();
+    queueMessage(
+      { id: `q${at}`, text, at, spoken: false, followUp: false, offRecord: offRecordRef.current },
+      true,
+    );
   };
   // Long-press on a message: Edit, Try again (last exchange only) or Read aloud.
   const onMessageAction = (m: ChatMessage, action: MessageAction) => {
@@ -956,6 +1134,8 @@ export function AskScreen({
     routineAskRef.current = (q: string) => ask(q);
     holdEndRef.current = () => void holdEnd();
     holdStartRef.current = (free, maxMs) => void holdStart(free, maxMs);
+    pumpRef.current = pump;
+    stopRef.current = stop;
   });
 
   // Capture from the widget: one photo, no voice note; the camera closes again after.
@@ -1023,16 +1203,6 @@ export function AskScreen({
     },
     onEntryHandled,
   );
-
-  const stop = () => {
-    stopResearch();
-    stopPicture();
-    cancelLlm();
-    speaker.current?.stop();
-    setSpeakingId(null);
-    awaitingVoiceRef.current = false;
-    releaseBackground();
-  };
 
   const mute = () => {
     speaker.current?.stop();
@@ -1116,6 +1286,14 @@ export function AskScreen({
                 <NoticeItem key={it.key} n={it.n} theme={theme} />
               ) : null,
             )}
+            <QueuedMessages
+              queue={queue}
+              theme={theme}
+              editingId={editingQueued}
+              onSendNow={sendQueuedNow}
+              onEdit={editQueuedMessage}
+              onRemove={removeQueued}
+            />
             {status ? (
               <AppText variant="bodySmall" style={[styles.status, { color: theme.faint }]}>
                 {status}
@@ -1187,7 +1365,21 @@ export function AskScreen({
             </View>
           ) : null}
 
-          {editing ? (
+          {editingQueued ? (
+            <View style={styles.editing}>
+              <AppText variant="bodySmall" style={[styles.flex, { color: theme.faint }]}>
+                Editing a queued message: it waits until you send.
+              </AppText>
+              <TextButton
+                title="Cancel"
+                onPress={() => {
+                  setEditingQueued(null);
+                  setQuestion('');
+                  pump();
+                }}
+              />
+            </View>
+          ) : editing ? (
             <View style={styles.editing}>
               <AppText variant="bodySmall" style={[styles.flex, { color: theme.faint }]}>
                 Editing your last question: sending replaces it and its answer.
@@ -1208,13 +1400,9 @@ export function AskScreen({
             onChange={setQuestion}
             placeholder={placeholder}
             onSend={() => void ask()}
-            onSendLong={() => {
-              setOffRecord(true);
-              void ask(undefined, false, true);
-            }}
-            busy={busy}
+            onSendLong={sendLong}
             answering={phase === 'thinking' || phase === 'answering'}
-            onStop={stop}
+            onStop={() => stop()}
             micOn={holding}
             onMicIn={micIn}
             onMicOut={micOut}

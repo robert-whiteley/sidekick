@@ -5,6 +5,7 @@ import { notices } from '@/engine/notices';
 import { AskScreen } from '@/features/ask/AskScreen';
 
 const mockAnswer = jest.fn();
+const mockStop = jest.fn();
 
 jest.mock('@op-engineering/op-sqlite', () => ({ open: jest.fn() }));
 jest.mock('expo-camera', () => ({
@@ -27,6 +28,8 @@ jest.mock('@/engine/assistant', () => ({
 jest.mock('@/engine/llm', () => ({
   ensureLlm: async () => ({ backend: 'cpu' }),
   cancelLlm: jest.fn(),
+  stopAnswer: () => mockStop(),
+  answerOver: jest.fn(),
   holdBackground: jest.fn(),
   releaseBackground: jest.fn(),
 }));
@@ -188,4 +191,95 @@ test('the iPhone has no background Listen button (hold the mic instead)', async 
   await render(<AskScreen />);
   expect(await screen.findByText('Level 2, by the lift.')).toBeTruthy();
   expect(screen.queryByLabelText('Listen in the background')).toBeNull();
+});
+
+test('typed while answering: queued in order, then each answered in turn', async () => {
+  const finish: (() => void)[] = [];
+  mockAnswer.mockImplementation(
+    (q: string, _p: unknown, onText: (t: string) => void) =>
+      new Promise((resolve) => {
+        onText(`Writing about ${q}`);
+        finish.push(() =>
+          resolve({ text: `About ${q}.`, usedPhoto: null, sources: [], ms: 1, ttftMs: 1 }),
+        );
+      }),
+  );
+  await render(<AskScreen />);
+  await screen.findByText('Level 2, by the lift.');
+  const box = screen.getByPlaceholderText('Ask Sidekick');
+  await fireEvent.changeText(box, 'one');
+  await fireEvent.press(screen.getByLabelText('Send'));
+  expect(await screen.findByText('Writing about one')).toBeTruthy();
+  expect(screen.getByLabelText('Stop')).toBeTruthy();
+  await fireEvent.changeText(box, 'two');
+  await fireEvent.press(screen.getByLabelText('Send'));
+  await fireEvent.changeText(box, 'three');
+  await fireEvent.press(screen.getByLabelText('Send'));
+  expect(screen.getByText('Next')).toBeTruthy();
+  expect(screen.getByText('Queued')).toBeTruthy();
+  // Removed before it starts: never asked.
+  await fireEvent.press(screen.getAllByText('Remove')[1]);
+  expect(screen.queryByText('three')).toBeNull();
+  expect(mockAnswer).toHaveBeenCalledTimes(1);
+  await act(async () => finish.shift()!());
+  expect(await screen.findByText('Writing about two')).toBeTruthy();
+  expect(screen.getByText('About one.')).toBeTruthy();
+  expect(mockAnswer).toHaveBeenCalledTimes(2);
+  await act(async () => finish.shift()!());
+  expect(await screen.findByText('About two.')).toBeTruthy();
+  expect(mockAnswer.mock.calls.map((c) => c[0])).toEqual(['one', 'two']);
+});
+
+test('Send now stops the answer (kept, marked stopped); an unanswered one is asked with it', async () => {
+  mockStop.mockReset();
+  const pending: ((text: string) => void)[] = [];
+  mockAnswer.mockImplementation(
+    (_q: string) =>
+      new Promise((resolve) =>
+        pending.push((text) => resolve({ text, usedPhoto: null, sources: [], ms: 1, ttftMs: 1 })),
+      ),
+  );
+  await render(<AskScreen />);
+  await screen.findByText('Level 2, by the lift.');
+  const box = screen.getByPlaceholderText('Ask Sidekick');
+  await fireEvent.changeText(box, 'weather?');
+  await fireEvent.press(screen.getByLabelText('Send'));
+  await fireEvent.changeText(box, 'and tomorrow?');
+  await fireEvent.press(screen.getByLabelText('Send'));
+  await fireEvent.press(screen.getByText('Send now'));
+  expect(mockStop).toHaveBeenCalledTimes(1);
+  // Stopped before any words: nothing written.
+  await act(async () => pending.shift()!(''));
+  expect(await screen.findByText('Stopped')).toBeTruthy();
+  expect(mockAnswer.mock.calls[1][0]).toBe('weather?\n\nand tomorrow?');
+  await act(async () => pending.shift()!('Sunny today and tomorrow.'));
+  expect(await screen.findByText('Sunny today and tomorrow.')).toBeTruthy();
+  expect(screen.getByText('weather?')).toBeTruthy();
+  expect(screen.getByText('and tomorrow?')).toBeTruthy();
+});
+
+test('long-press send while answering sends now; idle it still goes Off the record', async () => {
+  mockStop.mockReset();
+  const pending: ((text: string) => void)[] = [];
+  mockAnswer.mockImplementation(
+    (_q: string, _p: unknown, onText: (t: string) => void) =>
+      new Promise((resolve) => {
+        onText('Part of it');
+        pending.push((text) => resolve({ text, usedPhoto: null, sources: [], ms: 1, ttftMs: 1 }));
+      }),
+  );
+  await render(<AskScreen />);
+  await screen.findByText('Level 2, by the lift.');
+  const box = screen.getByPlaceholderText('Ask Sidekick');
+  await fireEvent.changeText(box, 'long story?');
+  await fireEvent.press(screen.getByLabelText('Send'));
+  await fireEvent.changeText(box, 'short one');
+  await fireEvent(screen.getByLabelText('Send'), 'longPress');
+  expect(mockStop).toHaveBeenCalledTimes(1);
+  await act(async () => pending.shift()!('Part of it'));
+  expect(await screen.findByText('Stopped')).toBeTruthy();
+  // Something was written: the new message is asked alone (the model has the part-answer).
+  expect(mockAnswer.mock.calls[1][0]).toBe('short one');
+  expect(mockAnswer.mock.calls[1][3]).toMatchObject({ offTheRecord: false });
+  await act(async () => pending.shift()!('Done.'));
 });

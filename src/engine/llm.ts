@@ -161,6 +161,9 @@ export async function askLlm(
   opts?: GenerateOptions,
   background = false,
 ): Promise<{ text: string; stats: LlmStats }> {
+  // The answer was stopped: the steps it would still take (routing, filling a tool, the lookup's
+  // second pass) get nothing, so no action runs and nothing more is written after Stop.
+  if (stopping && !background) return { text: '', stats: NO_STATS };
   await ensureLlm();
   return queue.run(background, async () => {
     try {
@@ -246,3 +249,30 @@ export function undoLastTurn(): boolean {
 export function cancelLlm() {
   SidekickNative.llmCancel();
 }
+
+const NO_STATS: LlmStats = {
+  ttftMs: 0,
+  prefillTokens: 0,
+  prefillTokensPerSec: 0,
+  decodeTokens: 0,
+  decodeTokensPerSec: 0,
+  totalMs: 0,
+};
+let stopping = false;
+
+/**
+ * Stop (or Send now) on the chat's answer: the model pass running now ends with what it wrote,
+ * and every later foreground pass of that answer returns nothing at once, until [answerOver].
+ */
+export function stopAnswer() {
+  stopping = true;
+  SidekickNative.llmCancel();
+}
+
+/** The chat's answer has ended (or a new one starts): the model answers normally again. */
+export function answerOver() {
+  stopping = false;
+}
+
+/** Stop was pressed on the answer being written. */
+export const answerStopped = () => stopping;

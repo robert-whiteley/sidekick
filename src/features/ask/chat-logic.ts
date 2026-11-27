@@ -24,6 +24,8 @@ export type ChatMessage = {
   offRecord?: boolean;
   /** The answer is still being written. */
   pending?: boolean;
+  /** Stop (or Send now) ended the answer: what was written is kept, marked as stopped. */
+  stopped?: boolean;
   /** An answer about text selected in another app: Replace in the app / Copy / Share under it. */
   textResult?: boolean;
   /** The saved exchange this message belongs to (a model answer): Edit / Try again take it back. */
@@ -130,7 +132,8 @@ export function mediaForAnswer(r: {
 }
 
 /** Leaving Off the record: what was said in it disappears. */
-export const withoutOffRecord = (msgs: ChatMessage[]) => msgs.filter((m) => !m.offRecord);
+export const withoutOffRecord = <T extends { offRecord?: boolean }>(msgs: T[]) =>
+  msgs.filter((m) => !m.offRecord);
 
 /** Replaces the message with `id` (no-op when it is gone). */
 export const patchMessage = (msgs: ChatMessage[], id: string, patch: Partial<ChatMessage>) =>
