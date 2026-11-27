@@ -237,9 +237,19 @@ owner's counts of memories, facts and voices were the same before, during and af
 
 ### Still weak / not measured
 
-- **Search time at 1,000 and 5,000 memories and storage used: not measured.** The phone was on
-  its PIN lock screen when the second session started. The bench can do it
-  (`run=recall-load&size=5000`, then `run=recall-search`); the storage query is fixed (it read 0).
+- **Search time at 1,000 and 5,000 extra memories** (measured 26 Nov evening, Pixel 5, on top of
+  the owner's 1,228):
+
+  | Test memories | Load (with vectors)                | Search median / p90 / max | Right memory in top 4 |
+  | ------------- | ---------------------------------- | ------------------------- | --------------------- |
+  | 1,000         | 277 s, +1.4 MB                     | 0.30 / 0.34 / 0.56 s      | 50/50                 |
+  | 5,000         | 310 s (1,037 new vectors), +5.5 MB | 0.35 / 0.40 / 0.70 s      | 50/50                 |
+
+  Search hardly slows down from 2,200 to 6,200 memories. The owner's counts (1,228 memories,
+  8 facts, 23 voices) were the same before, during and after; test rows 0 afterwards; the deep-link
+  flag file was deleted. **Storage is not given back:** after the 5,000 were removed the database
+  still used 8.6 MB against 3.1 MB before (being looked into).
+
 - Units: the model writes numbers in words ("four and four-tenths pounds"); fine to hear, but not
   checkable by rule.
 - 4 requests still go to the model router on purpose (an unusual phrasing like "give me a shout
@@ -308,6 +318,21 @@ Everything that can open another app or the web:
 | QR/barcode "Open" button                        | Browser / dialer / mail     | Only on the user's tap                     |
 | "Search the web in your browser", source links  | Browser                     | Only on the user's tap                     |
 
+### Checked on the phone (test build of this branch, 26 Nov evening)
+
+| Test                                                | Result                                                  |
+| --------------------------------------------------- | ------------------------------------------------------- |
+| "Give me a quick recipe for pancakes" (Offline)     | Answered in Sidekick, 9.6 s; nothing else opened        |
+| "Search the web for pancake recipes" (Offline)      | The offline reply and the browser link; nothing opened  |
+| Typed question of 4,000 characters                  | Answered, 15 s                                          |
+| Typed question of 12,000 characters                 | Answered, 21 s (cut to 9,000 for the model)             |
+| App killed mid-answer, then opened again            | Back in 7 s; next answer fine; that question is lost    |
+| App killed while the model loads, then opened again | Opens normally; next answer fine                        |
+| Home pressed mid-answer, back after 20 s            | The answer had finished and was shown                   |
+| Café dialogue played aloud with Listen on (main)    | Labelled "Customer" and "Waiter"; Live notes named both |
+
+App memory after these: 3.1 GB PSS (native heap 1.5 GB, model files mapped 1.5 GB).
+
 ### Heard lines could be lost (fixed)
 
 The background service writes heard lines to a journal file that the app moves into the
@@ -324,8 +349,7 @@ an answer is written.
 
 - Battery drain per hour per mode, thermal over 30+ min of Live camera, and captions holding back
   on a charger that can't keep up: need the phone (a 2 h unplugged run is planned).
-- Not yet run on the phone: very long single inputs, killing the app mid-answer or mid-model-load,
-  switching apps mid-answer, low memory with Live + Listen + questions, rotation with the camera on.
+- Not yet run on the phone: low memory with Live + Listen + questions, rotation with the camera on.
 - ~~When space is short only video stops~~, ~~no reaction to Android's low-memory signal~~ and
   ~~a voiceprint stored for voices that haven't consented~~: fixed, see "Robustness fixes" below.
 

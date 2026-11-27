@@ -44,7 +44,7 @@ if m: n=list(map(int,m[-1])); print((n[0]+n[2])//2,(n[1]+n[3])//2)"
 # Sidekick is the app in front (never type or tap into another app: owner's privacy rule).
 front() { a shell dumpsys window | grep "mCurrentFocus" | grep -q "$PKG/"; }
 # A brief focus loss (a system popup) is waited out for a few seconds; nothing is sent meanwhile.
-guard() { local i; for i in 1 2 3 4; do front && return 0; sleep 2; done; a shell dumpsys window | grep mCurrentFocus >&2; echo "STOP: Sidekick is not in front" >&2; exit 3; }
+guard() { local i; for i in 1 2 3 4; do ensure; front && return 0; sleep 2; done; a shell dumpsys window | grep mCurrentFocus >&2; echo "STOP: Sidekick is not in front" >&2; exit 3; }
 # Input goes through scripts/phone-input.sh (foreground, status bar and battery checks).
 INPUT="$(dirname "${BASH_SOURCE[0]}")/../../scripts/phone-input.sh"
 tap() { guard; "$INPUT" tap "$1" "$2" || exit 3; }

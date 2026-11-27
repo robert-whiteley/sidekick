@@ -22,9 +22,10 @@ while IFS= read -r q <&3; do
   field=$(center "Ask Sidekick")
   [ -z "$field" ] && { echo "composer not found" >&2; exit 1; }
   tap $field
-  sleep 0.5
+  # The keyboard moves the Send button: wait for it to settle (right after a launch it is slow).
+  sleep 1.5
   typetext "$q"
-  sleep 0.5
+  sleep 1.5
   send=$(center "| Send |")
   [ -z "$send" ] && { echo "send not found" >&2; exit 1; }
   t0=$(date +%s)
