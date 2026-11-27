@@ -425,7 +425,8 @@ Left out on iPhone, with why (users see the reason in Phone features, Connection
   Sidekick" action on selected text need native extension targets (Share / Action extension), an
   App Group to hand files to the app, and extra EAS provisioning profiles; none can be tested here
   without an iPhone. Cheapest first step when there is one: `CFBundleDocumentTypes` (Open in
-  Sidekick) for PDFs and audio, then a share extension. The iPhone app still reads links pasted
+  Sidekick) for any file, then a share extension. Until then the chat's paperclip attaches files
+  on the iPhone. The iPhone app still reads links pasted
   into the chat, and pictures from the screenshot share.
 - **Later: "What did I miss?" on iPhone.** iOS gives apps no access to other apps' notifications.
 - **Rejected: a readability library** (Mozilla Readability, `@mozilla/readability`, Apache-2.0) for
@@ -437,8 +438,41 @@ Left out on iPhone, with why (users see the reason in Phone features, Connection
   the proofread or rewrite is shown, copied or sent back, never kept in memory.
 - **Kept to one pass: shared documents over ~190,000 characters** (24 parts). The rest is left out
   and the answer says so; reading more parts would take minutes on the Pixel 5 per question.
-- **Left out: video files** in share-in (only audio, PDF and text). Recordings from video apps can
-  be shared as audio by most recorders; video files are large to copy in.
+- ~~Left out: video files~~ — built 27 Nov (see "Any file" below).
+
+## Any file: attach, share in, folders (27 Nov)
+
+One set of readers (`src/files/`, pure TypeScript plus fflate for unzipping) reads every file that
+comes in: the paperclip in the chat (system file picker, both phones), Share to Sidekick (Android)
+and folder sources. PDFs, Word/PowerPoint/OpenDocument, Excel (.xlsx, old .xls), .ods, CSV/TSV,
+EPUB, RTF, HTML, JSON/XML/logs and text; zips list their files and read the readable ones inside;
+pictures go to the shared-picture path (sight + text in it); recordings and videos to the
+recording reader; anything else gets a plain line saying what it is and how big.
+
+- **Spreadsheets are worked out in code.** The model writes one Excel formula (tool `query_sheet`,
+  offered only while a sheet is attached, with its columns in the description), and
+  `src/files/formula.ts` works it out exactly: a sandboxed evaluator (no `eval`, no file or network
+  access, step, time, size and depth limits) with ~140 Excel functions including SUMIFS, XLOOKUP,
+  FILTER, GROUPBY, PIVOTBY, LET and LAMBDA. A formula that fails is asked for once more with the
+  reason; the answer shows the formula used. "Add a column" changes the attached sheet, which can
+  be saved as CSV (share sheet). Rejected: existing formula engines — HyperFormula is GPL-3.0 or
+  paid; formula.js and fast-formula-parser bring lookup/array gaps and no sandbox limits.
+- **Video:** four still pictures (Android `MediaMetadataRetriever`, iPhone `AVAssetImageGenerator`)
+  described by the chat model on the first question (~25 s each on the Pixel 5 CPU), and the
+  speech read like a recording (Android). **iPhone: no speech from videos or recordings** (the
+  recording reader is Android only); the pictures still work, and the answer says the speech
+  can't be read there.
+- **Limits (Pixel 5, 6 GB):** files read in pieces through a file handle, never whole except old
+  .xls (≤ 40 MB) and CSV (≤ 60 MB); one XML part ≤ 40 MB unpacked; 400,000 characters kept;
+  sheets ≤ 1,000,000 cells / 200,000 rows / 500 columns; zips read ≤ 30 files of ≤ 20 MB each
+  (zip bombs stop at the cap); attachments ≤ 400 MB; folder documents ≤ 30 MB.
+- **Not read:** old Word (.doc) and PowerPoint (.ppt) binary files, Excel 95 and older, and
+  password-protected files: each says so plainly ("save it as .docx"). Folder sources don't read
+  pictures, recordings, videos or zips (too slow for a background scan).
+- **Rejected: 3D model previews** (.glb, .obj, .stl) — a gimmick for an assistant; the file is named
+  as a 3D model with its size.
+- **iPhone:** the paperclip reads every type above; sharing into the app still needs the share
+  extension (Later, above).
 
 ## Lite versions of cloud-app features (26 Nov; numbers in docs/BENCH.md "Lite features")
 

@@ -3,6 +3,8 @@
  * don't touch the phone. Pure functions; tested.
  */
 
+import { type FileType, fileType } from '@/files/kinds';
+
 /** Moment kinds made by data sources; "delete by source" deletes one kind. */
 export const SOURCE_KINDS = ['note', 'file', 'event', 'notification'] as const;
 export type SourceKind = (typeof SOURCE_KINDS)[number];
@@ -69,27 +71,52 @@ export const FILE_LIMITS = {
   maxFiles: 2000,
   maxDepth: 4,
   maxBytes: 1_000_000,
+  /** Documents (Word, sheets, e-books…) are packed, so their files may be bigger. */
+  maxDocBytes: 30_000_000,
   chunkChars: 1200,
   maxChunks: 50,
 };
 
-/** Plain-text files, and PDFs where the phone can read them ([pdf]: Android only). */
+/** Readable files, and PDFs where the phone can read them ([pdf]: Android only). */
 export function isIndexableFile(name: string, size: number | null, pdf = false): boolean {
   return indexableKind(name, size, pdf) != null;
 }
 
-/** "text" / "pdf" for files a folder source reads, null for everything else. */
+/** Files read through the file readers (src/files): office files, sheets, e-books, web pages… */
+const DOC_TYPES = new Set<FileType>([
+  'docx',
+  'pptx',
+  'odt',
+  'odp',
+  'xlsx',
+  'xls',
+  'ods',
+  'csv',
+  'tsv',
+  'epub',
+  'rtf',
+  'html',
+  'text',
+]);
+
+const PLAIN = /\.(txt|md|markdown|text)$/i;
+
+/**
+ * How a folder source reads a file: plain text, a PDF, or a document through the file readers;
+ * null for the rest (pictures, recordings, videos and zips aren't read from folders).
+ */
 export function indexableKind(
   name: string,
   size: number | null,
   pdf = false,
-): 'text' | 'pdf' | null {
+): 'text' | 'pdf' | 'doc' | null {
   if (name.startsWith('.')) return null;
   if (pdf && /\.pdf$/i.test(name)) {
     return size != null && size > PDF_LIMITS.maxBytes ? null : 'pdf';
   }
-  if (size != null && size > FILE_LIMITS.maxBytes) return null;
-  return /\.(txt|md|markdown|text)$/i.test(name) ? 'text' : null;
+  if (PLAIN.test(name)) return size != null && size > FILE_LIMITS.maxBytes ? null : 'text';
+  if (!DOC_TYPES.has(fileType(name, undefined))) return null;
+  return size != null && size > FILE_LIMITS.maxDocBytes ? null : 'doc';
 }
 
 // --- PDFs ---

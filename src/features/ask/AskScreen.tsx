@@ -156,14 +156,16 @@ import { QueuedMessages } from './QueuedMessages';
 import { ScreenGrabBar } from './ScreenGrabBar';
 import { DARK, LIGHT } from './theme';
 import { useEntry } from './useEntry';
-import { sharedComposerText, sharedKind, watchShares } from '@/engine/share-in';
+import { type SharedItem, sharedComposerText, sharedKind, watchShares } from '@/engine/share-in';
 import {
   answerShared,
   attachmentFor,
   cancelRecording,
   finishRecording,
+  pickAttachment,
   recordingStatus,
   resumeRecordings,
+  shareSheetCsv,
   watchRecordings,
 } from '@/engine/shared-doc';
 import type { Attachment } from '@/engine/shared-doc-logic';
@@ -671,38 +673,56 @@ export function AskScreen({
     }
   };
 
-  // Shared into Sidekick from another app: a picture to ask about, text in the composer, or a
-  // file, recording, link or selected text as the chat's attachment (shared-doc.ts).
-  useEffect(
-    () =>
-      watchShares((item) => {
-        const kind = sharedKind(item);
-        if (kind === 'image' || kind === 'text') {
-          if (item.imagePath)
-            setScreen({ shot: item.imagePath, text: '', at: Date.now(), shared: true });
-          const text = sharedComposerText(item);
-          if (text) setQuestion((cur) => (cur.trim() ? `${cur.trim()}\n${text}` : text));
+  // Shared into Sidekick from another app, or attached with the paperclip: a picture to ask
+  // about, text in the composer, or a file, recording, video, link or selected text as the
+  // chat's attachment (shared-doc.ts).
+  const openShared = useCallback((item: SharedItem) => {
+    const kind = sharedKind(item);
+    if (kind === 'image' || kind === 'text') {
+      if (item.imagePath)
+        setScreen({ shot: item.imagePath, text: '', at: Date.now(), shared: true });
+      const text = sharedComposerText(item);
+      if (text) setQuestion((cur) => (cur.trim() ? `${cur.trim()}\n${text}` : text));
+      return;
+    }
+    if (!kind) return;
+    setStatus('Opening the file…');
+    void attachmentFor(item)
+      .then((a) => {
+        if (!a) return;
+        if (a.kind === 'image' && a.path) {
+          // A picture sent as a file: asked about like a shared picture (sight + text in it).
+          setAttachment(null);
+          setScreen({ shot: a.path, text: '', at: Date.now(), shared: true });
           return;
         }
-        if (!kind) return;
-        setStatus('Opening what you shared…');
-        void attachmentFor(item)
-          .then((a) => {
-            if (!a) return;
-            setScreen(null);
-            setAttachment(a);
-          })
-          .catch((e) => console.log(`[share] ${String(e)}`))
-          .finally(() => setStatus(''));
-      }),
-    [],
-  );
+        setScreen(null);
+        setAttachment(a);
+      })
+      .catch((e) => console.log(`[share] ${String(e)}`))
+      .finally(() => setStatus(''));
+  }, []);
+  useEffect(() => watchShares(openShared), [openShared]);
+  const attachFile = () => {
+    void pickAttachment()
+      .then((item) => item && openShared(item))
+      .catch((e) => {
+        console.log(`[attach] ${String(e)}`);
+        setStatus("Couldn't open the file picker.");
+      });
+  };
 
   // A recording being read: progress, then who said what (saved to memory) and a line in the chat.
   const recordingDone = useCallback((line: string, at = Date.now()) => {
     setMessages((m) => [...m, { id: `r${at}`, role: 'assistant', text: line, at }]);
   }, []);
-  const recordingId = attachment?.recordingId && !attachment.text ? attachment.recordingId : null;
+  const recordingId =
+    attachment?.recordingId &&
+    !attachment.text &&
+    !attachment.error &&
+    (attachment.progress ?? 0) < 1
+      ? attachment.recordingId
+      : null;
   useEffect(() => {
     if (!recordingId) return;
     let finishing = false;
@@ -717,7 +737,10 @@ export function AskScreen({
             a?.recordingId === recordingId
               ? r.text
                 ? { ...a, text: r.text, progress: 1 }
-                : { ...a, error: r.line }
+                : // A video with no speech still has its pictures.
+                  a.kind === 'video' && a.frames?.length
+                  ? { ...a, progress: 1 }
+                  : { ...a, error: r.line }
               : a,
           );
           recordingDone(r.line);
@@ -744,7 +767,9 @@ export function AskScreen({
 
   const closeAttachment = () => {
     const a = attachmentRef.current;
-    if (a?.recordingId && !a.text && !a.error) cancelRecording(a.recordingId);
+    if (a?.recordingId && !a.text && !a.error && (a.progress ?? 0) < 1)
+      cancelRecording(a.recordingId);
+    a?.frames?.forEach((f) => SidekickNative.deleteFile(f.path));
     // Selected text: the other app gets nothing back, and its waiting step closes.
     if (a?.kind === 'selection' && a.replaceable) integrationsNative()?.finishProcessText?.(null);
     setAttachment(null);
@@ -968,11 +993,12 @@ export function AskScreen({
             },
             offRecordNow,
           ).then((x) => {
-            // A web page read once is kept for the next question about it.
-            if (x.page && att.kind === 'page')
-              setAttachment((a) =>
-                a === att ? { ...att, text: x.page!.text, name: x.page!.title } : a,
-              );
+            // A web page read once is kept for the next question about it; so are a video's
+            // pictures once looked at, and a column added to a sheet.
+            const page =
+              x.page && att.kind === 'page' ? { text: x.page.text, name: x.page.title } : {};
+            if (x.page || x.update)
+              setAttachment((a) => (a?.at === att.at ? { ...a, ...page, ...x.update } : a));
             return { ...x, usedPhoto: null, sources: [], ttftMs: 0, local: true };
           })
         : await answerQuestion(
@@ -1307,6 +1333,12 @@ export function AskScreen({
               busy={phase !== 'idle'}
               onAsk={(q) => void ask(q)}
               onClose={closeAttachment}
+              onSave={() =>
+                void shareSheetCsv(attachment).catch((e) => {
+                  console.log(`[sheet] save failed: ${String(e)}`);
+                  setStatus("Couldn't save the sheet.");
+                })
+              }
             />
           ) : screen ? (
             <ScreenGrabBar grab={screen} onSave={saveScreen} onClose={() => setScreen(null)} />
@@ -1408,6 +1440,7 @@ export function AskScreen({
             onMicOut={micOut}
             cameraOn={cameraOn}
             onCamera={() => void toggleCamera()}
+            onAttach={attachFile}
             large={handsFreeMode}
           />
         </KeyboardAvoidingView>

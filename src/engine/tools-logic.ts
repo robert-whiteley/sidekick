@@ -98,6 +98,29 @@ export const PICTURE_TOOL: ToolSpec = {
   },
 };
 
+/**
+ * Questions about an attached spreadsheet, worked out exactly in code (src/files/formula.ts).
+ * Offered only while a spreadsheet is attached (sheet-query.ts adds that sheet's columns to the
+ * description), so it isn't in the router's list.
+ */
+export const SHEET_TOOL: ToolSpec = {
+  name: 'query_sheet',
+  desc:
+    'work out the answer from the attached spreadsheet with one Excel formula: totals, ' +
+    'averages, counts, with conditions, per group, percentages, date differences, lookups, ' +
+    'ranking, running totals, lists of matching rows; or a new column. Not for reading or ' +
+    'summarising its text',
+  kind: 'info',
+  args: {
+    formula: req(
+      'one Excel formula; columns by header in brackets like [Amount], or letters like C:C; ' +
+        "other sheets 'Name'!A:C",
+    ),
+    label: s('what the result is, a few words'),
+    new_column: s('name of a new column the formula fills, one value per row, if asked to add one'),
+  },
+};
+
 export const TOOLS: ToolSpec[] = [
   EDIT_TOOL,
   PICTURE_TOOL,

@@ -298,6 +298,11 @@ class SidekickNativeModule : Module() {
     // QR codes and barcodes in a picture (ZXing, on the phone); JSON list of {format, text}.
     AsyncFunction("scanCodes") { path: String -> Codes.scan(path) }
 
+    // A few still pictures from a video, evenly spread, for the chat model to describe.
+    AsyncFunction("videoFrames") { path: String, count: Int, outDir: String, maxEdge: Int ->
+      VideoFrames.extract(context, path, count, outDir, maxEdge)
+    }
+
     // Wi-Fi from a QR code: the system "Save this network?" sheet (Android 11+); false if not shown.
     Function("wifiAddNetwork") { ssid: String, password: String?, security: String -> Codes.addWifi(context, ssid, password, security) }
 

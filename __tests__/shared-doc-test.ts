@@ -6,7 +6,6 @@ import {
   DOC_LIMITS,
   docParts,
   docPrompt,
-  fileKind,
   firstUrl,
   isJustLink,
   labelSpeakers,
@@ -16,6 +15,7 @@ import {
   transcriptText,
   type RecordingLine,
 } from '@/engine/shared-doc-logic';
+import { fileType } from '@/files/kinds';
 
 jest.mock('react-native', () => ({ AppState: { addEventListener: () => ({ remove() {} }) } }));
 jest.mock('@/integrations/native', () => ({ integrationsNative: () => null }));
@@ -45,11 +45,12 @@ describe('what a share is', () => {
     expect(parseShared('nope')).toBeNull();
   });
   it('knows file kinds by type or name', () => {
-    expect(fileKind('application/pdf', 'x')).toBe('pdf');
-    expect(fileKind('', 'Meeting.M4A')).toBe('audio');
-    expect(fileKind('audio/ogg', '')).toBe('audio');
-    expect(fileKind('text/plain', 'n')).toBe('text');
-    expect(fileKind('application/zip', 'a.zip')).toBeNull();
+    expect(fileType('x', 'application/pdf')).toBe('pdf');
+    expect(fileType('Meeting.M4A', '')).toBe('audio');
+    expect(fileType('', 'audio/ogg')).toBe('audio');
+    expect(fileType('clip.mp4', 'application/octet-stream')).toBe('video');
+    expect(fileType('n', 'text/plain')).toBe('text');
+    expect(fileType('a.zip', 'application/zip')).toBe('zip');
   });
   it('finds the link without trailing punctuation', () => {
     expect(firstUrl('see (https://a.org/x).')).toBe('https://a.org/x');

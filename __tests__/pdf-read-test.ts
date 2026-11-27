@@ -1,6 +1,7 @@
 import { readPdfPages, type PdfPages } from '../src/memory/pdf-read';
 import {
   cleanPageText,
+  FILE_LIMITS,
   fileItems,
   indexableKind,
   isIndexableFile,
@@ -40,6 +41,20 @@ describe('PDF files', () => {
     expect(indexableKind('huge.pdf', PDF_LIMITS.maxBytes + 1, true)).toBeNull();
     expect(indexableKind('.hidden.pdf', 100, true)).toBeNull();
     expect(indexableKind('photo.jpg', 100, true)).toBeNull();
+  });
+
+  it('reads documents through the file readers, but not media or zips', () => {
+    expect(indexableKind('Plan.docx', 5_000_000)).toBe('doc');
+    expect(indexableKind('budget.xlsx', 100)).toBe('doc');
+    expect(indexableKind('old.xls', 100)).toBe('doc');
+    expect(indexableKind('data.csv', 100)).toBe('doc');
+    expect(indexableKind('book.epub', 100)).toBe('doc');
+    expect(indexableKind('page.html', 100)).toBe('doc');
+    expect(indexableKind('config.json', 100)).toBe('doc');
+    expect(indexableKind('huge.xlsx', FILE_LIMITS.maxDocBytes + 1)).toBeNull();
+    expect(indexableKind('clip.mp4', 100)).toBeNull();
+    expect(indexableKind('photos.zip', 100)).toBeNull();
+    expect(indexableKind('song.mp3', 100)).toBeNull();
   });
 
   it('caps pages at 30', () => {

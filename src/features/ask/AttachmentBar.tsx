@@ -24,24 +24,28 @@ function title(a: Attachment): string {
       return `Web page · ${a.name}`;
     case 'selection':
       return `Selected text · ${(a.text ?? '').replace(/\s+/g, ' ').trim()}`;
+    case 'video':
+      return `Video · ${a.name}`;
     default:
-      return `Document · ${a.name}`;
+      return `${a.typeLabel ?? 'Document'} · ${a.name}`;
   }
 }
 
 /**
- * What the next questions are about (a shared file, recording, web page or selected text), with
- * suggested questions to tap; typing anything else works too. Closing it goes back to the chat.
+ * What the next questions are about (a shared or attached file, recording, video, web page or
+ * selected text), with suggested questions to tap; typing anything else works too. A spreadsheet
+ * with a new column can be saved. Closing it goes back to the chat.
  */
 export function AttachmentBar(props: {
   attachment: Attachment;
   busy: boolean;
   onAsk: (question: string) => void;
   onClose: () => void;
+  onSave: () => void;
 }) {
   const s = useStyles();
   const a = props.attachment;
-  const reading = a.kind === 'audio' && !a.text && !a.error;
+  const reading = !!a.recordingId && !a.text && !a.error && (a.progress ?? 0) < 1;
   return (
     <View style={s.bar}>
       <View style={styles.row}>
@@ -62,13 +66,24 @@ export function AttachmentBar(props: {
       ) : reading ? (
         <View style={styles.progress}>
           <AppText variant="bodySmall" tone="muted">
-            {`Turning it into text on this phone… ${Math.round((a.progress ?? 0) * 100)}%. You can leave the app; it carries on.`}
+            {`${a.kind === 'video' ? 'Turning its speech into text' : 'Turning it into text'} on this phone… ${Math.round((a.progress ?? 0) * 100)}%. You can leave the app; it carries on.`}
           </AppText>
-          <ProgressBar fraction={a.progress ?? 0} label="Reading the recording" />
+          <ProgressBar
+            fraction={a.progress ?? 0}
+            label={a.kind === 'video' ? 'Reading the video' : 'Reading the recording'}
+          />
         </View>
       ) : (
         <ScrollView horizontal showsHorizontalScrollIndicator={false}>
           <ButtonRow start>
+            {a.changed ? (
+              <Button
+                title="Save sheet"
+                variant="tonal"
+                disabled={props.busy}
+                onPress={props.onSave}
+              />
+            ) : null}
             {suggestions(a).map((x) => (
               <Button
                 key={x.label}

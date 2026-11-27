@@ -7,6 +7,7 @@ import { OCR_FILES } from '@/engine/models';
 import { ocrReady } from '@/engine/photo-ocr';
 import { getSettings, updateSettings } from '@/engine/settings';
 import { mayGrowMemory } from '@/engine/storage-guard';
+import { readDeviceFile } from '@/files/device';
 import { readPdfPages } from './pdf-read';
 import { getDb } from './db';
 import {
@@ -189,7 +190,7 @@ export function folderLabel(uri: string): string {
   return last ?? uri;
 }
 
-type FoundFile = { file: File; path: string; kind: 'text' | 'pdf' };
+type FoundFile = { file: File; path: string; kind: 'text' | 'pdf' | 'doc' };
 
 function walk(dir: Directory, path: string, depth: number, out: FoundFile[]) {
   if (depth > FILE_LIMITS.maxDepth || out.length >= FILE_LIMITS.maxFiles) return;
@@ -211,6 +212,14 @@ function walk(dir: Directory, path: string, depth: number, out: FoundFile[]) {
     const kind = indexableKind(item.name, item.size, isAndroid);
     if (kind) out.push({ file: item, path: p, kind });
   }
+}
+
+/** A document's words through the file readers (src/files); a spreadsheet's summary first. */
+async function documentText(file: File): Promise<string> {
+  const r = await readDeviceFile(file.uri, file.name, file.type || undefined);
+  if (r.kind === 'text') return r.text;
+  if (r.kind === 'sheet') return `${r.summary}\n\n${r.text}`;
+  return '';
 }
 
 /** A PDF's text, page by page, on the native side (Android): embedded text, else OCR. */
@@ -274,7 +283,7 @@ async function syncFolder(folderUri: string): Promise<number> {
     const old = existing.filter((e) => e.key.startsWith(prefix));
     const keepOld = () =>
       old.forEach((e) => incoming.push({ key: e.key, ver: e.ver!, at: modified, text: '' }));
-    if (kind === 'text' && old.length && old.every((e) => e.ver === String(modified))) {
+    if (kind !== 'pdf' && old.length && old.every((e) => e.ver === String(modified))) {
       // Unchanged since the last scan: keep as is without reading it.
       keepOld();
       continue;
@@ -318,7 +327,8 @@ async function syncFolder(folderUri: string): Promise<number> {
       continue;
     }
     try {
-      incoming.push(...fileItems(folderUri, file.uri, path, modified, await file.text()));
+      const text = kind === 'doc' ? await documentText(file) : await file.text();
+      if (text) incoming.push(...fileItems(folderUri, file.uri, path, modified, text));
     } catch (e) {
       console.log(`[sources] can't read ${path}: ${String(e)}`);
     }

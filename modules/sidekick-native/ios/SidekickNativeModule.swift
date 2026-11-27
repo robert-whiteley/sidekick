@@ -213,6 +213,18 @@ public class SidekickNativeModule: Module {
 
     AsyncFunction("scanCodes") { (path: String) throws -> String in try VisionText.scanCodes(path) }
 
+    // A few still pictures from a video, evenly spread, for the chat model to describe.
+    AsyncFunction("videoFrames") {
+      (path: String, count: Int, outDir: String, maxEdge: Int, promise: Promise) in
+      Task {
+        do {
+          promise.resolve(try await VideoFrames.extract(path, count, outDir, maxEdge))
+        } catch {
+          promise.reject("ERR_VIDEO", error.localizedDescription)
+        }
+      }
+    }
+
     Function("pdfCanReadText") { () -> Bool in true }
 
     AsyncFunction("pdfPageText") { (uri: String, index: Int) -> [String: Any] in
