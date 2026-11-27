@@ -47,10 +47,3 @@ test('camera moments are labelled Camera, not a speaker', () => {
   const { who } = require('@/features/memory/timeline-logic');
   expect(who({ kind: 'frame', speakerName: null, speakerId: null })).toBe('Camera');
 });
-
-test('a tap meant for Stop just as the answer ends does not start the mic', () => {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const { micGuard } = require('@/features/ask/Composer');
-  expect(micGuard(1000, 1300)).toBe(true);
-  expect(micGuard(1000, 2500)).toBe(false);
-});

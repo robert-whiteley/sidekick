@@ -1,4 +1,3 @@
-import { useEffect, useRef } from 'react';
 // ui-exception: the chat composer is a one-off rounded message field with inline buttons, not a form field
 import { StyleSheet, TextInput, View } from 'react-native';
 
@@ -9,8 +8,9 @@ import type { ChatTheme } from './theme';
 
 /**
  * "Ask Sidekick": the camera button on the left; a mic when the field is empty (hold to talk, or
- * tap to talk until tapped again), a send arrow when there is text, Stop while answering.
- * Long-press send to ask Off the record. `large`: hands-free (driving / walking) sizes.
+ * tap to talk until tapped again), a send arrow when there is text. While answering, Stop sits
+ * beside them: what is sent meanwhile waits its turn (send-queue.ts). Long-press send: Off the
+ * record, or while answering, Send now. `large`: hands-free (driving / walking) sizes.
  */
 export function Composer({
   theme,
@@ -19,7 +19,6 @@ export function Composer({
   placeholder,
   onSend,
   onSendLong,
-  busy,
   answering,
   onStop,
   micOn,
@@ -35,7 +34,6 @@ export function Composer({
   placeholder: string;
   onSend: () => void;
   onSendLong: () => void;
-  busy: boolean;
   answering: boolean;
   onStop: () => void;
   micOn: boolean;
@@ -46,21 +44,6 @@ export function Composer({
   large?: boolean;
 }) {
   const hasText = value.trim().length > 0;
-  // Stop turns back into the mic where the finger is: a tap meant for Stop just as the answer
-  // ends must not start listening.
-  const stoppedAt = useRef(0);
-  const ignored = useRef(false);
-  useEffect(() => {
-    if (!answering) stoppedAt.current = Date.now();
-  }, [answering]);
-  const micIn = () => {
-    ignored.current = micGuard(stoppedAt.current, Date.now());
-    if (!ignored.current) onMicIn();
-  };
-  const micOut = () => {
-    if (!ignored.current) onMicOut();
-    ignored.current = false;
-  };
   const round = [styles.round, large && styles.roundLarge];
   const action = [styles.action, large && styles.actionLarge];
   const icon = large ? 32 : 22;
@@ -96,30 +79,34 @@ export function Composer({
           <Tappable
             feedback="dim"
             onPress={onStop}
-            style={[action, { backgroundColor: theme.accent }]}
+            style={[action, { borderColor: theme.accent }, styles.stop]}
             accessibilityRole="button"
             accessibilityLabel="Stop"
           >
-            <Icon name="stop" size={icon - 2} color={theme.bg} />
+            <Icon name="stop" size={icon - 4} color={theme.accent} />
           </Tappable>
-        ) : hasText ? (
+        ) : null}
+        {hasText ? (
           <Tappable
             feedback="dim"
             onPress={onSend}
             onLongPress={onSendLong}
-            disabled={busy}
-            style={[action, { backgroundColor: theme.accent }, busy && styles.disabled]}
+            style={[action, { backgroundColor: theme.accent }]}
             accessibilityRole="button"
             accessibilityLabel="Send"
-            accessibilityHint="Long-press to send Off the record"
+            accessibilityHint={
+              answering
+                ? 'Long-press to send now, stopping the answer'
+                : 'Long-press to send Off the record'
+            }
           >
             <Icon name="send" size={icon - 2} color={theme.bg} />
           </Tappable>
         ) : (
           <Tappable
             feedback="dim"
-            onPressIn={micIn}
-            onPressOut={micOut}
+            onPressIn={onMicIn}
+            onPressOut={onMicOut}
             style={[action, { backgroundColor: micOn ? theme.danger : 'transparent' }]}
             accessibilityRole="button"
             accessibilityLabel={micOn ? 'Listening, tap when done' : 'Talk'}
@@ -132,9 +119,6 @@ export function Composer({
     </View>
   );
 }
-
-/** True when a mic press comes so soon after Stop disappeared that it was meant for Stop. */
-export const micGuard = (stoppedAt: number, now: number) => now - stoppedAt < 800;
 
 const styles = StyleSheet.create({
   row: {
@@ -172,5 +156,5 @@ const styles = StyleSheet.create({
   roundLarge: { width: 64, height: 64, borderRadius: 32 },
   fieldLarge: { minHeight: 64, borderRadius: 32 },
   actionLarge: { width: 56, height: 56, borderRadius: 28 },
-  disabled: { opacity: 0.5 },
+  stop: { borderWidth: 2 },
 });

@@ -90,6 +90,11 @@ export const MessageBubble = memo(function MessageBubble({
           )}
         </Tappable>
       ) : null}
+      {!user && m.stopped && !m.pending ? (
+        <AppText variant="bodySmall" style={{ color: theme.faint }}>
+          Stopped
+        </AppText>
+      ) : null}
       {!user && m.picture ? (
         <Tappable
           feedback="dim"

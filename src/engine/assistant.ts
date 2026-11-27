@@ -8,6 +8,7 @@ import { recallContext } from '@/memory/recall';
 import { postRoutineCard, routineRequest } from './routines-store';
 import SidekickNative from '../../modules/sidekick-native';
 import {
+  answerStopped,
   askLlm,
   askLlmInBackground,
   backgroundPreemptions,
@@ -344,7 +345,9 @@ export async function answer(
       case 'research': {
         // Several searches, pages read on the phone, one report with numbered sources.
         const r = await research(o.topic, onText, status, undefined, !!o.news);
-        if (!offRecord && !r.local) await rememberExchange(question, r.text).catch(() => {});
+        // Stopped part-way: shown, but not kept as if it were the report.
+        if (!offRecord && !r.local && !answerStopped())
+          await rememberExchange(question, r.text).catch(() => {});
         return {
           text: r.text,
           usedPhoto: null,
@@ -446,7 +449,8 @@ export async function answer(
   const pageUrl = photoNow ? null : firstUrl(question);
   if (pageUrl) {
     const r = await answerAboutPage(pageUrl, question, onText, status, offRecord);
-    if (!offRecord && !r.waitingOnline) await rememberExchange(question, r.text).catch(() => {});
+    if (!offRecord && !r.waitingOnline && !answerStopped())
+      await rememberExchange(question, r.text).catch(() => {});
     return {
       text: r.text,
       usedPhoto: null,
@@ -576,6 +580,8 @@ export async function answer(
   const system = chatSystem(answerSystem(), conv.state);
   let keep = offRecord ? offRecordStarted : conv.keepHistory();
   let promptChars = 0;
+  /** The question reached the model's chat (Stop before that leaves the chat untouched). */
+  let reachedModel = false;
   const recent = conv.idleFor(Date.now()) < IDLE_COMPACT_MS;
   // Online lookup (when on) sends only the question text; the prompt itself stays on the phone.
   const looked = await askWithLookup(
@@ -590,6 +596,7 @@ export async function answer(
         console.log(`[chat] the model's chat is full: starting a fresh one`);
         keep = false;
       }
+      if (!answerStopped()) reachedModel = true;
       const ask = () =>
         askLlm(prompt, image, t, { system, keepHistory: keep, undoable: o?.undoable, offRecord });
       let r: Awaited<ReturnType<typeof ask>>;
@@ -623,6 +630,16 @@ export async function answer(
   );
   const { stats, web, webQuery } = looked;
   let { text } = looked;
+  // Stopped before a word of the answer: nothing is kept, so the question can be asked again
+  // (Send now asks it together with the new message). The model's chat may hold the question
+  // with no answer: the next question starts a fresh chat from the summary and the kept turns.
+  if (answerStopped() && !text.trim()) {
+    if (reachedModel) {
+      if (offRecord) offRecordStarted = false;
+      else conv.restart();
+    }
+    return { text: '', usedPhoto: image, sources, ms: stats.totalMs, ttftMs: stats.ttftMs };
+  }
   // A back-online run that still can't reach the internet: nothing to keep, it waits again.
   if (looked.offline && opts?.forceLookup)
     return {
@@ -634,7 +651,7 @@ export async function answer(
       waitingOnline: true,
     };
   // Needed the internet but there was none: kept and answered once back online.
-  if (looked.offline && !opts?.forceLookup && !offRecord) {
+  if (looked.offline && !opts?.forceLookup && !offRecord && !answerStopped()) {
     text = `${text}\n\n${queueOnline('lookup', question)}`;
     onText(text);
   }
