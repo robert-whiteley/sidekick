@@ -450,9 +450,18 @@ export const TOOLS: ToolSpec[] = [
   },
   {
     name: 'translate',
-    desc: 'translate text into another language',
+    desc: 'translate text into another language, or interpret a spoken conversation with someone who speaks it',
     kind: 'action',
-    args: { text: s('the text, or empty for the text in the photo'), to: req('language') },
+    args: {
+      text: s('the text, or empty for the text in the photo'),
+      to: req('language'),
+      // One tool for both: Gemma 4 E2B's sorter picked "translate" for 3 of 5 conversation
+      // requests when interpreting was a tool of its own (bench/interpreter/routing.ts).
+      talk: {
+        type: 'boolean',
+        desc: 'true if I want to talk with someone in that language: live interpreting both ways',
+      },
+    },
   },
   {
     name: 'repeat',

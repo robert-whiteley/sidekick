@@ -11,6 +11,7 @@ ASK ANYTHING
 • Ask by voice, with a wake word, or by typing. Answers are spoken and shown in the chat.
 • "What am I looking at?" — point the camera and ask.
 • Hands-free when you're walking or driving: answers read aloud, and the headset button starts a question.
+• Interpreter for travel, offline: "help me talk to this taxi driver in Spanish". You each speak your own language; Sidekick shows and says the translation, turn by turn.
 
 REMEMBERS FOR YOU
 • Remembers what you've seen and heard, so you can ask later: "What did that sign say this morning?"

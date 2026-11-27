@@ -178,3 +178,54 @@ create. Delete it afterwards.
 
 None beyond the app, jest and adb, except Pillow (HPND licence) for the background bench's
 made-up photos.
+
+## Interpreter (`interpreter/`)
+
+Translation quality and speed for the two-way interpreter, the "is the owner talking to Sidekick?"
+check, and speech-to-text per language. 20 made-up travel turns (taxi, restaurant, pharmacy,
+hotel) in English, Spanish, French, German, Italian, Portuguese, Japanese and Arabic, plus 10
+owner lines that are (or only look like) instructions to Sidekick.
+
+| File                      | What it does                                                                                   |
+| ------------------------- | ---------------------------------------------------------------------------------------------- |
+| `phrases.json`            | The turns with reference translations, and the control lines with the expected decision.       |
+| `prompts.ts`              | Writes the cases with the app's own prompts (`src/engine/interpreter-logic.ts`) as JSON lines. |
+| `mt_gemma.py`             | Runs cases through Gemma 4 E2B (the app's `.litertlm`) on the laptop CPU.                      |
+| `mt_bergamot.py`          | The same through Firefox Translations (Bergamot) models, for comparison.                       |
+| `roundtrip.ts`            | Turns an output's English→X translations into X→English cases (round trip).                    |
+| `score.py`                | chrF per language and direction, ms per turn, untranslated echoes, control decisions.          |
+| `routing.ts`              | Sorter and translate-tool cases: does a conversation request start the interpreter?            |
+| `ts-resolve.mjs`          | Lets plain Node run the app's `.ts` files (imports without extensions), for `routing.ts`.      |
+| `gen_audio.py`            | Speaks the lines with offline TTS (16 kHz WAV) for the speech-to-text bench.                   |
+| `stt.py`                  | Words wrong (characters for Japanese) and time per line for Parakeet v3, Whisper, SenseVoice.  |
+| `fetch.sh`, `fetch_mt.py` | Download the models (about 4.5 GB).                                                            |
+
+```bash
+bash bench/interpreter/fetch.sh $D                         # models into $D, Firefox models into $D/mt
+node bench/interpreter/prompts.ts > cases.jsonl            # all languages; or: prompts.ts es,de,ja
+python bench/interpreter/mt_gemma.py $D/gemma-4-E2B-it.litertlm cases.jsonl out.jsonl 6
+python bench/interpreter/mt_bergamot.py $D/mt cases.jsonl out_bergamot.jsonl
+python bench/interpreter/score.py out.jsonl out_bergamot.jsonl
+python bench/interpreter/gen_audio.py audio $D             # ~11 MB of WAVs, never committed
+python bench/interpreter/stt.py audio $D parakeet-v3,whisper-small es,fr,de,it,pt,ja 4 > stt.jsonl
+```
+
+On the phone (needs the `bench-links` flag file below): push `cases.jsonl` and `audio/<lang>/` to
+`/sdcard/Android/data/app.ondevice.sidekick/files/bench-interpreter/`, then
+`adb shell am start -a android.intent.action.VIEW -d "sidekick://bench?run=interpreter"`
+(`&only=mt` or `&only=stt`). One `[interp-mt] {json}` / `[interp-stt] {json}` line per case in
+logcat; the `[interp-mt]` lines are the same shape as `mt_gemma.py`'s output, so `score.py` reads
+them. Delete the folder afterwards.
+
+### Bench-only tools (interpreter)
+
+| Tool / data                       | Licence                   | Use                              |
+| --------------------------------- | ------------------------- | -------------------------------- |
+| Kokoro v1.0 multi-lang (TTS)      | Apache-2.0                | Made-up speech (not German)      |
+| Piper de_DE thorsten medium (TTS) | CC0 (voice), MIT (Piper)  | Made-up German speech            |
+| litert-lm 0.20 (Python)           | Apache-2.0                | Runs Gemma on the laptop         |
+| bergamot 0.4.5 (Python)           | MPL-2.0                   | Runs Firefox Translations models |
+| Firefox Translations models       | MPL-2.0                   | Comparison only (not in the app) |
+| SenseVoice small, Whisper base    | FunASR model licence, MIT | Comparison only (not in the app) |
+| sacrebleu                         | Apache-2.0                | chrF                             |
+| jiwer                             | Apache-2.0                | Word / character error rate      |

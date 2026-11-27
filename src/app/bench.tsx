@@ -23,6 +23,7 @@ import {
   runRecallBench,
   runRecallSearchOnly,
 } from '@/engine/answers-bench';
+import { runInterpreterBench } from '@/engine/interpreter-bench';
 import { runPhotoEditBench } from '@/engine/photo-edit-bench';
 import { runPictureBench } from '@/engine/picture-bench';
 import { runResearchBench } from '@/engine/research-bench';
@@ -149,6 +150,7 @@ export default function BenchScreen() {
       else if (what === 'photo-edit')
         await runPhotoEditBench(quiet, device.externalFilesDir ?? device.filesDir);
       else if (what === 'facts') await runFactsBench(quiet);
+      else if (what === 'interpreter') await runInterpreterBench(quiet, only);
       quiet(`[bench] ${what} done`);
     });
   const params = useLocalSearchParams<{

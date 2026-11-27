@@ -1,0 +1,288 @@
+{
+  "about": "Made-up travel conversations for the interpreter bench. 'me' lines are said by the Sidekick user in English; 'them' lines by the other person in their language. Every line has a reference translation in every language (written for this bench). Names and places are invented.",
+  "langs": ["en", "es", "fr", "de", "it", "pt", "ja", "ar"],
+  "turns": [
+    {
+      "who": "me",
+      "scene": "taxi",
+      "en": "Hello, can you take me to the Hotel Miravista, please?",
+      "es": "Hola, ¿puede llevarme al Hotel Miravista, por favor?",
+      "fr": "Bonjour, pouvez-vous m'emmener à l'hôtel Miravista, s'il vous plaît ?",
+      "de": "Hallo, können Sie mich bitte zum Hotel Miravista bringen?",
+      "it": "Salve, può portarmi all'Hotel Miravista, per favore?",
+      "pt": "Olá, pode levar-me ao Hotel Miravista, por favor?",
+      "ja": "こんにちは、ホテル・ミラビスタまでお願いできますか?",
+      "ar": "مرحبا، هل يمكنك أن توصلني إلى فندق ميرافيستا من فضلك؟"
+    },
+    {
+      "who": "them",
+      "scene": "taxi",
+      "en": "Of course. Is it the one near the old harbour?",
+      "es": "Claro. ¿Es el que está cerca del puerto viejo?",
+      "fr": "Bien sûr. C'est celui qui est près du vieux port ?",
+      "de": "Natürlich. Ist das das beim alten Hafen?",
+      "it": "Certo. È quello vicino al porto vecchio?",
+      "pt": "Claro. É aquele perto do porto velho?",
+      "ja": "もちろんです。古い港の近くのホテルですか?",
+      "ar": "بالطبع. هل هو الفندق القريب من الميناء القديم؟"
+    },
+    {
+      "who": "me",
+      "scene": "taxi",
+      "en": "Yes, that's right. How long will it take?",
+      "es": "Sí, eso es. ¿Cuánto tiempo tardará?",
+      "fr": "Oui, c'est ça. Combien de temps cela va-t-il prendre ?",
+      "de": "Ja, genau. Wie lange dauert es?",
+      "it": "Sì, esatto. Quanto tempo ci vorrà?",
+      "pt": "Sim, isso mesmo. Quanto tempo vai demorar?",
+      "ja": "はい、そうです。どのくらいかかりますか?",
+      "ar": "نعم، هذا صحيح. كم من الوقت سيستغرق؟"
+    },
+    {
+      "who": "them",
+      "scene": "taxi",
+      "en": "About twenty minutes, but there is a lot of traffic at this hour.",
+      "es": "Unos veinte minutos, pero a esta hora hay mucho tráfico.",
+      "fr": "Environ vingt minutes, mais il y a beaucoup de circulation à cette heure-ci.",
+      "de": "Ungefähr zwanzig Minuten, aber um diese Uhrzeit ist viel Verkehr.",
+      "it": "Circa venti minuti, ma a quest'ora c'è molto traffico.",
+      "pt": "Cerca de vinte minutos, mas a esta hora há muito trânsito.",
+      "ja": "二十分くらいですが、この時間は道がとても混んでいます。",
+      "ar": "حوالي عشرين دقيقة، لكن هناك زحمة سير كبيرة في هذه الساعة."
+    },
+    {
+      "who": "me",
+      "scene": "taxi",
+      "en": "That's fine. Can I pay by card?",
+      "es": "Está bien. ¿Puedo pagar con tarjeta?",
+      "fr": "D'accord. Est-ce que je peux payer par carte ?",
+      "de": "Das ist in Ordnung. Kann ich mit Karte zahlen?",
+      "it": "Va bene. Posso pagare con la carta?",
+      "pt": "Está bem. Posso pagar com cartão?",
+      "ja": "大丈夫です。カードで払えますか?",
+      "ar": "لا بأس. هل يمكنني الدفع بالبطاقة؟"
+    },
+    {
+      "who": "them",
+      "scene": "taxi",
+      "en": "Only cash, sorry. There is a cash machine at the petrol station on the way.",
+      "es": "Solo efectivo, lo siento. Hay un cajero en la gasolinera de camino.",
+      "fr": "Seulement en espèces, désolé. Il y a un distributeur à la station-service sur la route.",
+      "de": "Nur bar, tut mir leid. An der Tankstelle auf dem Weg gibt es einen Geldautomaten.",
+      "it": "Solo contanti, mi dispiace. C'è un bancomat al distributore di benzina lungo la strada.",
+      "pt": "Só dinheiro, desculpe. Há um multibanco no posto de gasolina pelo caminho.",
+      "ja": "すみません、現金だけです。途中のガソリンスタンドにATMがあります。",
+      "ar": "نقدا فقط، آسف. هناك صراف آلي في محطة الوقود على الطريق."
+    },
+    {
+      "who": "me",
+      "scene": "taxi",
+      "en": "Please stop there for a minute so I can get some money.",
+      "es": "Por favor, pare allí un minuto para que pueda sacar dinero.",
+      "fr": "Arrêtez-vous là une minute, s'il vous plaît, pour que je retire de l'argent.",
+      "de": "Bitte halten Sie dort kurz an, damit ich Geld abheben kann.",
+      "it": "Per favore, si fermi lì un minuto così prendo dei soldi.",
+      "pt": "Por favor, pare ali um minuto para eu levantar dinheiro.",
+      "ja": "お金をおろしたいので、そこで少し止まってください。",
+      "ar": "من فضلك توقف هناك دقيقة لكي أسحب بعض المال."
+    },
+    {
+      "who": "them",
+      "scene": "restaurant",
+      "en": "Good evening. Do you have a reservation?",
+      "es": "Buenas noches. ¿Tienen reserva?",
+      "fr": "Bonsoir. Vous avez une réservation ?",
+      "de": "Guten Abend. Haben Sie reserviert?",
+      "it": "Buonasera. Avete una prenotazione?",
+      "pt": "Boa noite. Têm reserva?",
+      "ja": "こんばんは。ご予約はされていますか?",
+      "ar": "مساء الخير. هل لديكم حجز؟"
+    },
+    {
+      "who": "me",
+      "scene": "restaurant",
+      "en": "No, but we are only two. Is there a table outside?",
+      "es": "No, pero solo somos dos. ¿Hay una mesa fuera?",
+      "fr": "Non, mais nous ne sommes que deux. Il y a une table dehors ?",
+      "de": "Nein, aber wir sind nur zu zweit. Gibt es einen Tisch draußen?",
+      "it": "No, ma siamo solo in due. C'è un tavolo fuori?",
+      "pt": "Não, mas somos só dois. Há uma mesa lá fora?",
+      "ja": "いいえ、でも二人だけです。外の席はありますか?",
+      "ar": "لا، لكننا شخصان فقط. هل توجد طاولة في الخارج؟"
+    },
+    {
+      "who": "them",
+      "scene": "restaurant",
+      "en": "Yes, follow me. Here is the menu; today's special is grilled fish with rice.",
+      "es": "Sí, síganme. Aquí tienen la carta; el plato del día es pescado a la plancha con arroz.",
+      "fr": "Oui, suivez-moi. Voici la carte ; le plat du jour est du poisson grillé avec du riz.",
+      "de": "Ja, folgen Sie mir. Hier ist die Speisekarte; das Tagesgericht ist gegrillter Fisch mit Reis.",
+      "it": "Sì, seguitemi. Ecco il menù; il piatto del giorno è pesce alla griglia con riso.",
+      "pt": "Sim, sigam-me. Aqui está o menu; o prato do dia é peixe grelhado com arroz.",
+      "ja": "はい、こちらへどうぞ。メニューです。本日のおすすめは焼き魚とご飯です。",
+      "ar": "نعم، تفضلوا معي. هذه قائمة الطعام؛ طبق اليوم سمك مشوي مع الأرز."
+    },
+    {
+      "who": "me",
+      "scene": "restaurant",
+      "en": "My friend is allergic to nuts. Does the sauce have nuts in it?",
+      "es": "Mi amigo es alérgico a los frutos secos. ¿La salsa lleva frutos secos?",
+      "fr": "Mon ami est allergique aux noix. Est-ce que la sauce contient des noix ?",
+      "de": "Mein Freund ist allergisch gegen Nüsse. Sind Nüsse in der Soße?",
+      "it": "Il mio amico è allergico alla frutta secca. La salsa contiene frutta secca?",
+      "pt": "O meu amigo é alérgico a frutos secos. O molho tem frutos secos?",
+      "ja": "友達がナッツアレルギーなんです。ソースにナッツは入っていますか?",
+      "ar": "صديقي لديه حساسية من المكسرات. هل في الصلصة مكسرات؟"
+    },
+    {
+      "who": "them",
+      "scene": "restaurant",
+      "en": "I will ask the cook. I think the green sauce has almonds.",
+      "es": "Voy a preguntar al cocinero. Creo que la salsa verde lleva almendras.",
+      "fr": "Je vais demander au cuisinier. Je crois que la sauce verte contient des amandes.",
+      "de": "Ich frage den Koch. Ich glaube, in der grünen Soße sind Mandeln.",
+      "it": "Chiedo al cuoco. Credo che la salsa verde abbia le mandorle.",
+      "pt": "Vou perguntar ao cozinheiro. Acho que o molho verde tem amêndoas.",
+      "ja": "シェフに聞いてきます。緑のソースにはアーモンドが入っていると思います。",
+      "ar": "سأسأل الطباخ. أظن أن الصلصة الخضراء فيها لوز."
+    },
+    {
+      "who": "me",
+      "scene": "restaurant",
+      "en": "Then we'll have two fish without sauce and a bottle of water.",
+      "es": "Entonces tomaremos dos pescados sin salsa y una botella de agua.",
+      "fr": "Alors nous prendrons deux poissons sans sauce et une bouteille d'eau.",
+      "de": "Dann nehmen wir zweimal den Fisch ohne Soße und eine Flasche Wasser.",
+      "it": "Allora prendiamo due pesci senza salsa e una bottiglia d'acqua.",
+      "pt": "Então vamos querer dois peixes sem molho e uma garrafa de água.",
+      "ja": "では、ソースなしの魚を二つと、水を一本お願いします。",
+      "ar": "إذن سنأخذ سمكتين بدون صلصة وزجاجة ماء."
+    },
+    {
+      "who": "them",
+      "scene": "pharmacy",
+      "en": "Hello, how can I help you?",
+      "es": "Hola, ¿en qué puedo ayudarle?",
+      "fr": "Bonjour, je peux vous aider ?",
+      "de": "Hallo, wie kann ich Ihnen helfen?",
+      "it": "Buongiorno, come posso aiutarla?",
+      "pt": "Olá, em que posso ajudar?",
+      "ja": "いらっしゃいませ、どうされましたか?",
+      "ar": "مرحبا، كيف يمكنني مساعدتك؟"
+    },
+    {
+      "who": "me",
+      "scene": "pharmacy",
+      "en": "I have a sore throat and a slight fever since yesterday.",
+      "es": "Tengo dolor de garganta y un poco de fiebre desde ayer.",
+      "fr": "J'ai mal à la gorge et un peu de fièvre depuis hier.",
+      "de": "Ich habe seit gestern Halsschmerzen und leichtes Fieber.",
+      "it": "Ho mal di gola e un po' di febbre da ieri.",
+      "pt": "Tenho dor de garganta e um pouco de febre desde ontem.",
+      "ja": "昨日から喉が痛くて、少し熱があります。",
+      "ar": "عندي التهاب في الحلق وحمى خفيفة منذ أمس."
+    },
+    {
+      "who": "them",
+      "scene": "pharmacy",
+      "en": "Take one of these tablets three times a day after meals.",
+      "es": "Tome una de estas pastillas tres veces al día después de las comidas.",
+      "fr": "Prenez un de ces comprimés trois fois par jour après les repas.",
+      "de": "Nehmen Sie dreimal täglich nach dem Essen eine dieser Tabletten.",
+      "it": "Prenda una di queste compresse tre volte al giorno dopo i pasti.",
+      "pt": "Tome um destes comprimidos três vezes por dia depois das refeições.",
+      "ja": "この錠剤を一日三回、食後に一錠飲んでください。",
+      "ar": "خذ حبة من هذه الحبوب ثلاث مرات في اليوم بعد الأكل."
+    },
+    {
+      "who": "them",
+      "scene": "pharmacy",
+      "en": "If the fever is not gone in three days, you should see a doctor.",
+      "es": "Si la fiebre no se le pasa en tres días, debería ir al médico.",
+      "fr": "Si la fièvre ne passe pas d'ici trois jours, vous devriez voir un médecin.",
+      "de": "Wenn das Fieber in drei Tagen nicht weg ist, sollten Sie zum Arzt gehen.",
+      "it": "Se la febbre non passa entro tre giorni, dovrebbe andare dal medico.",
+      "pt": "Se a febre não passar em três dias, deve ir ao médico.",
+      "ja": "三日たっても熱が下がらなければ、病院に行ってください。",
+      "ar": "إذا لم تذهب الحمى خلال ثلاثة أيام، يجب أن تذهب إلى الطبيب."
+    },
+    {
+      "who": "me",
+      "scene": "hotel",
+      "en": "We booked a double room for three nights under the name Okafor.",
+      "es": "Reservamos una habitación doble para tres noches a nombre de Okafor.",
+      "fr": "Nous avons réservé une chambre double pour trois nuits au nom d'Okafor.",
+      "de": "Wir haben ein Doppelzimmer für drei Nächte auf den Namen Okafor gebucht.",
+      "it": "Abbiamo prenotato una camera doppia per tre notti a nome Okafor.",
+      "pt": "Reservámos um quarto duplo para três noites em nome de Okafor.",
+      "ja": "オカフォーの名前で、ダブルルームを三泊予約しています。",
+      "ar": "حجزنا غرفة مزدوجة لثلاث ليال باسم أوكافور."
+    },
+    {
+      "who": "them",
+      "scene": "hotel",
+      "en": "Your room is on the fourth floor. Breakfast is from seven to ten.",
+      "es": "Su habitación está en la cuarta planta. El desayuno es de siete a diez.",
+      "fr": "Votre chambre est au quatrième étage. Le petit-déjeuner est servi de sept à dix heures.",
+      "de": "Ihr Zimmer ist im vierten Stock. Frühstück gibt es von sieben bis zehn.",
+      "it": "La vostra camera è al quarto piano. La colazione è dalle sette alle dieci.",
+      "pt": "O vosso quarto é no quarto andar. O pequeno-almoço é das sete às dez.",
+      "ja": "お部屋は四階です。朝食は七時から十時までです。",
+      "ar": "غرفتكم في الطابق الرابع. الفطور من السابعة حتى العاشرة."
+    },
+    {
+      "who": "me",
+      "scene": "hotel",
+      "en": "Could we leave our bags here after we check out on Sunday?",
+      "es": "¿Podríamos dejar las maletas aquí después de dejar la habitación el domingo?",
+      "fr": "Pourrions-nous laisser nos bagages ici après avoir libéré la chambre dimanche ?",
+      "de": "Könnten wir unser Gepäck nach dem Auschecken am Sonntag hier lassen?",
+      "it": "Potremmo lasciare qui i bagagli dopo il check-out di domenica?",
+      "pt": "Podemos deixar as malas aqui depois do check-out no domingo?",
+      "ja": "日曜日のチェックアウトの後、荷物を預けてもいいですか?",
+      "ar": "هل يمكننا ترك حقائبنا هنا بعد تسجيل المغادرة يوم الأحد؟"
+    }
+  ],
+  "control": [
+    {
+      "en": "Okay Sidekick, you can stop translating now.",
+      "expect": "stop"
+    },
+    {
+      "en": "Thanks, we're done here, stop interpreting.",
+      "expect": "stop"
+    },
+    {
+      "en": "That's the end of the conversation, thank you Sidekick.",
+      "expect": "stop"
+    },
+    {
+      "en": "Sidekick, switch to French please, he speaks French better.",
+      "expect": "switch:fr"
+    },
+    {
+      "en": "Can you use Italian with her instead?",
+      "expect": "switch:it"
+    },
+    {
+      "en": "Please stop the car here, this is fine.",
+      "expect": "say"
+    },
+    {
+      "en": "Stop! That's my bag, not yours.",
+      "expect": "say"
+    },
+    {
+      "en": "Do you speak French?",
+      "expect": "say"
+    },
+    {
+      "en": "Thank you very much, that's all for today.",
+      "expect": "say"
+    },
+    {
+      "en": "Can you switch on the air conditioning?",
+      "expect": "say"
+    }
+  ]
+}

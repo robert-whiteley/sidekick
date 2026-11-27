@@ -11,6 +11,7 @@ Every model and library shipped with or downloaded by Sidekick, with its licence
 | Silero VAD v6.2.3                                                            | MIT                                                                                                                |
 | Parakeet TDT 0.6B v2 int8 (sherpa-onnx export)                               | CC BY 4.0                                                                                                          |
 | Parakeet TDT 0.6B v3 int8 (sherpa-onnx export; other languages, optional)    | CC BY 4.0                                                                                                          |
+| Whisper small int8 (OpenAI; sherpa-onnx export; interpreter, non-European)   | MIT                                                                                                                |
 | sherpa-onnx KWS zipformer (GigaSpeech)                                       | Apache-2.0                                                                                                         |
 | 3D-Speaker CAM++ (VoxCeleb)                                                  | Apache-2.0                                                                                                         |
 | PaddleOCR PP-OCRv6 small det + rec (PaddlePaddle ONNX exports)               | Apache-2.0                                                                                                         |

@@ -235,6 +235,21 @@ public class SidekickNativeModule: Module {
 
     Function("pttStart") { PushToTalk.shared.start() }
 
+    // Interpreter (src/engine/interpreter.ts): one side's turn in that side's language.
+    Function("interpretListen") { (tag: String) in PushToTalk.shared.start(tag) }
+
+    AsyncFunction("interpretHeard") { (kind: String, dir: String, language: String, promise: Promise) in
+      PushToTalk.shared.stop { result in
+        switch result {
+        case .success(let text): promise.resolve(text)
+        case .failure(let e): promise.reject("ERR_SPEECH", e.localizedDescription)
+        }
+      }
+    }
+
+    // Can this language be heard offline on this iPhone (Apple's on-device speech)?
+    Function("interpretCanHear") { (tag: String) -> Bool in PushToTalk.availableOffline(tag) }
+
     AsyncFunction("pttStop") { (promise: Promise) in
       PushToTalk.shared.stop { result in
         switch result {

@@ -7,6 +7,7 @@
 import { Linking } from 'react-native';
 import { moveEventTo, planIntent, planTelephony, scheduleDraft } from './actions';
 import { feedbackIntent, supportEmail } from './feedback';
+import { openInterpreter } from './interpreter';
 import { askLlm } from './llm';
 import {
   parseRangeReply,
@@ -337,6 +338,8 @@ export async function runTool(
       await saveFact(str(a.fact).replace(/[.!]+$/, ''));
       return { kind: 'reply', text: "Got it, I'll remember that." };
     case 'translate':
+      if (a.talk === true && !ctx.routine)
+        return { kind: 'reply', text: openInterpreter(str(a.to)) };
       return { kind: 'translate', text: str(a.text), to: str(a.to) };
     case 'repeat':
       return command({ type: 'repeat' });
