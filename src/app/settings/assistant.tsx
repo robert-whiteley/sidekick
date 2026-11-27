@@ -1,3 +1,4 @@
+import { AnswerStyleSection } from '@/features/settings/AnswerStyleSection';
 import { EntryPointsSection } from '@/features/settings/EntryPointsSection';
 import { FollowupsSection } from '@/features/settings/FollowupsSection';
 import { NotesRecapSection } from '@/features/settings/NotesRecapSection';
@@ -23,6 +24,7 @@ export default function AssistantSettings() {
   const iphone = onIphone();
   return (
     <Page title="Assistant">
+      <AnswerStyleSection />
       {iphone ? null : (
         <Section title="Languages">
           <Row

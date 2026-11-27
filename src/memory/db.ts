@@ -201,6 +201,12 @@ export const MIGRATIONS: { table: string; column: string; ddl: string; after?: s
   // "Understand other languages": the language a heard line is in once checked ('en' = English or
   // unsure, else the ISO code of a line that now carries its English translation). Null = unchecked.
   { table: 'moments', column: 'lang', ddl: 'ALTER TABLE moments ADD COLUMN lang TEXT' },
+  // A person fact waiting for the model's private-topic check (0) before it is suggested (1).
+  {
+    table: 'facts',
+    column: 'checked',
+    ddl: 'ALTER TABLE facts ADD COLUMN checked INTEGER NOT NULL DEFAULT 1',
+  },
 ];
 
 function migrate(d: DB) {

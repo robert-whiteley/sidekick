@@ -184,6 +184,22 @@ export class Conversation {
     this.lastSpokeAt = now;
   }
 
+  /**
+   * Edit / Try again: the last exchange is taken back. Its turn goes (when it is the one with
+   * this answer) and the model's chat starts fresh from the summary and the turns left, so the
+   * model never sees the old answer again. True if a turn was removed.
+   */
+  dropLast(answer: string): boolean {
+    const last = this.state.turns.at(-1);
+    const match = !!last && last.a.trim() === answer.trim();
+    if (match) {
+      this.state.turns.pop();
+      this.lastAt = this.state.turns.at(-1)?.at ?? -Infinity;
+    }
+    this.restart();
+    return match;
+  }
+
   /** Sidekick finished speaking (Voice idle): the spoken follow-up window starts again. */
   answered(now: number) {
     this.lastSpokeAt = now;

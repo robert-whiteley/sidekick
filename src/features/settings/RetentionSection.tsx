@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { getSettings, updateSettings } from '@/engine/settings';
 import { applyRetention } from '@/memory/store';
 import { PickerRow } from '@/ui';
-import { Section } from './ui';
+import { Row, Section } from './ui';
 
 const OPTIONS = [
   { days: 0, label: 'Forever' },
@@ -14,6 +14,7 @@ const OPTIONS = [
 
 export function RetentionSection({ onChanged }: { onChanged: () => void }) {
   const [days, setDays] = useState(getSettings().retentionDays);
+  const [sensitive, setSensitive] = useState(getSettings().suggestSensitiveFacts);
   const pick = async (d: number) => {
     setDays(d);
     updateSettings({ retentionDays: d });
@@ -28,6 +29,19 @@ export function RetentionSection({ onChanged }: { onChanged: () => void }) {
         options={OPTIONS.map((o) => ({ value: o.days, label: o.label }))}
         value={days}
         onChange={(d) => void pick(d)}
+      />
+      <Row
+        label="Suggest private facts"
+        hint={
+          'Off: Sidekick never suggests saving facts about health, religion or beliefs, ' +
+          "sexuality, politics or money, yours or other people's. What you ask it to remember " +
+          'is always saved.'
+        }
+        value={sensitive}
+        onChange={(v) => {
+          setSensitive(v);
+          updateSettings({ suggestSensitiveFacts: v });
+        }}
       />
     </Section>
   );

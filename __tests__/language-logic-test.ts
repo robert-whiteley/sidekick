@@ -15,7 +15,7 @@ test('English speech model unless other languages are wanted', () => {
 });
 
 test('Sidekick answers in English', () => {
-  expect(SYSTEM_PROMPT).toContain('plain spoken English');
+  expect(SYSTEM_PROMPT).toContain('Answer in English');
 });
 
 test.each([

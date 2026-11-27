@@ -26,7 +26,30 @@ export type ChatMessage = {
   pending?: boolean;
   /** An answer about text selected in another app: Replace in the app / Copy / Share under it. */
   textResult?: boolean;
+  /** The saved exchange this message belongs to (a model answer): Edit / Try again take it back. */
+  momentId?: number;
 };
+
+/** The chat's last question and its answer, when Edit / Try again may replace them. */
+export type Exchange = { question: ChatMessage; reply: ChatMessage };
+
+/**
+ * Edit and Try again work on the last exchange only, so the one continuous chat stays
+ * consistent: a model answer that was saved (not a rule's reply, a draft or Off the record),
+ * finished, to a question without a photo (the photo can't be taken again).
+ */
+export function lastExchange(msgs: ChatMessage[]): Exchange | null {
+  const reply = msgs.at(-1);
+  const question = msgs.at(-2);
+  if (!reply || !question || reply.role !== 'assistant' || question.role !== 'user') return null;
+  if (reply.pending || reply.momentId == null || reply.offRecord || reply.draftId) return null;
+  if (question.media?.length || !question.text.trim()) return null;
+  return { question, reply };
+}
+
+/** Removes an exchange's two bubbles (it is being asked again). */
+export const withoutExchange = (msgs: ChatMessage[], x: Exchange) =>
+  msgs.filter((m) => m.id !== x.question.id && m.id !== x.reply.id);
 
 /** How many past exchanges the chat shows when it opens. */
 export const HISTORY_EXCHANGES = 30;
@@ -52,8 +75,8 @@ export function exchangeToMessages(row: {
     ? [{ momentAt: row.at, kind: 'photo', path: row.photoPath }]
     : undefined;
   return [
-    { id: `h${row.id}q`, role: 'user', text: m[1], at: row.at, media },
-    { id: `h${row.id}a`, role: 'assistant', text: m[2], at: row.at },
+    { id: `h${row.id}q`, role: 'user', text: m[1], at: row.at, media, momentId: row.id },
+    { id: `h${row.id}a`, role: 'assistant', text: m[2], at: row.at, momentId: row.id },
   ];
 }
 

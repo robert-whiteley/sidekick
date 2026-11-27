@@ -1,4 +1,5 @@
 // ui-exception-file: developer speed-test screen (Advanced › Speed test), not part of the product UI
+import { runFactsBench } from '@/engine/facts-bench';
 import { Asset } from 'expo-asset';
 import { useLocalSearchParams } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
@@ -118,7 +119,7 @@ export default function BenchScreen() {
 
   // Answers, routing and recall bench (src/engine/answers-bench.ts): JSON lines on logcat.
   // Started by deep link too: sidekick://bench?run=answers|recall-load|recall|recall-search|
-  // recall-clear [&only=<id prefixes>] [&size=<rows>].
+  // recall-clear|facts [&only=<id prefixes>] [&size=<rows>].
   const quiet = (line: string) => {
     console.log(line);
     setLog((l) => [...l.slice(-40), line.slice(0, 200)]);
@@ -133,6 +134,7 @@ export default function BenchScreen() {
       else if (what === 'research') await runResearchBench(quiet, only);
       else if (what === 'photo-edit')
         await runPhotoEditBench(quiet, device.externalFilesDir ?? device.filesDir);
+      else if (what === 'facts') await runFactsBench(quiet);
       quiet(`[bench] ${what} done`);
     });
   const params = useLocalSearchParams<{ run?: string; only?: string; size?: string; t?: string }>();

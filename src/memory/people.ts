@@ -2,6 +2,7 @@
  * People: automatic labels and names, notes, facts about them, what the owner asked of them, and
  * their recent conversations. Pure parts live in people-logic.ts.
  */
+import { getSettings } from '@/engine/settings';
 import { getDb } from './db';
 import { formatDue, type Followup, newProposals } from './followup-logic';
 import { listFollowups, notifyFollowupsChanged } from './followups';
@@ -169,10 +170,30 @@ async function addPersonFact(speakerId: number, quote: string) {
     [speakerId, quote],
   );
   if (r.rows.length) return;
+  // Private topics stay out unless allowed: the model checks it first (fact-inference.ts).
   await db.execute(
-    "INSERT INTO facts (text, status, at, speaker_id) VALUES (?, 'suggested', ?, ?)",
-    [quote, Date.now(), speakerId],
+    "INSERT INTO facts (text, status, at, speaker_id, checked) VALUES (?, 'suggested', ?, ?, ?)",
+    [quote, Date.now(), speakerId, getSettings().suggestSensitiveFacts ? 1 : 0],
   );
+}
+
+/** Person facts waiting for the private-topic check, oldest first. */
+export async function uncheckedPersonFacts(limit: number): Promise<{ id: number; text: string }[]> {
+  const db = await getDb();
+  const r = await db.execute(
+    'SELECT id, text FROM facts WHERE checked = 0 AND speaker_id IS NOT NULL ORDER BY at LIMIT ?',
+    [limit],
+  );
+  return r.rows.map((x) => ({ id: x.id as number, text: x.text as string }));
+}
+
+/** After the check: private ones are deleted (never suggested), the rest are shown. */
+export async function finishPersonFactCheck(keep: number[], drop: number[]) {
+  const db = await getDb();
+  const list = (ids: number[]) => ids.map(() => '?').join(',');
+  if (drop.length) await db.execute(`DELETE FROM facts WHERE id IN (${list(drop)})`, drop);
+  if (keep.length)
+    await db.execute(`UPDATE facts SET checked = 1 WHERE id IN (${list(keep)})`, keep);
 }
 
 export type PersonFact = { id: number; text: string; status: 'saved' | 'suggested' };
@@ -180,7 +201,7 @@ export type PersonFact = { id: number; text: string; status: 'saved' | 'suggeste
 export async function personFacts(speakerId: number): Promise<PersonFact[]> {
   const db = await getDb();
   const r = await db.execute(
-    'SELECT id, text, status FROM facts WHERE speaker_id = ? ORDER BY at DESC',
+    'SELECT id, text, status FROM facts WHERE speaker_id = ? AND checked = 1 ORDER BY at DESC',
     [speakerId],
   );
   return r.rows.map((x) => ({

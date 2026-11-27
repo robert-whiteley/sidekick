@@ -137,6 +137,14 @@ Owner steps needed later (not blocking the build):
 - [x] Off the record mode (see decisions above). Phone-checked (LIMITS.md).
 - [x] Chat shows images / video clips of what was seen when useful (as in livestream-ai). Built; see Chat media below.
 - [x] Scrollable chat history, copy and share an answer. Long-press copy / share.
+- [x] Long-press: Edit the last question, Try again on the last answer (last exchange only; taken
+      out of the chat, saved chat state and memory first), Read aloud any answer.
+- [x] "How Sidekick answers" box (Settings → Assistant, ≤ 300 characters), added to the chat
+      prompt; on the phone only, in the export, gone with Delete all data.
+- [x] Typed answers may use lists, steps, bold and small tables (own renderer, light/dark);
+      spoken answers stay plain.
+- [x] Private topics (health, beliefs, sexuality, politics, money) never suggested as facts
+      (owner or people) unless "Suggest private facts" is on (off by default); the model decides.
 - [x] Drafts (email, message, event) appear in the chat as cards: Send / Edit / Cancel /
       Open in app. Phone-checked only up to the "Ask me first" card (nothing sent on the owner's phone).
 
