@@ -18,8 +18,26 @@ export type Notice = {
   href?: string;
   actions?: NoticeAction[];
   severity?: number;
+  /**
+   * An approval card (a critical settings change, settings-registry.ts): its buttons work only
+   * from armAt (a short delay, so a tap meant for something else can't approve it) until
+   * expiresAt, when the card goes away by itself.
+   */
+  armAt?: number;
+  expiresAt?: number;
   at: number;
 };
+
+/** How long an approval card waits before its button works, and how long it stays. */
+export const APPROVE_ARM_MS = 1500;
+export const APPROVE_EXPIRES_MS = 2 * 60_000;
+
+/** Whether a tap on a card's button counts now (approval cards: armed and not expired). */
+export function actionable(n: Pick<Notice, 'armAt' | 'expiresAt'>, now: number): boolean {
+  if (n.armAt !== undefined && now < n.armAt) return false;
+  if (n.expiresAt !== undefined && now >= n.expiresAt) return false;
+  return true;
+}
 
 const DECISION_REPEAT_MS = 24 * 60 * 60_000;
 
@@ -48,9 +66,24 @@ export class Notices {
     return true;
   }
 
-  act(key: string, actionId: string) {
+  /** A tap on a card's button; false when the card isn't armed yet (it stays) or has expired. */
+  act(key: string, actionId: string, now = Date.now()): boolean {
+    const n = this.items.find((x) => x.key === key);
+    if (n && !actionable(n, now)) {
+      if (n.expiresAt !== undefined && now >= n.expiresAt) this.dismiss(key);
+      return false;
+    }
     this.handlers.get(key)?.(actionId);
     this.dismiss(key);
+    return true;
+  }
+
+  /** Drops approval cards whose time is up. */
+  expire(now = Date.now()) {
+    const left = this.items.filter((x) => x.expiresAt === undefined || now < x.expiresAt);
+    if (left.length === this.items.length) return;
+    this.items = left;
+    this.emit();
   }
 
   dismiss(key: string) {

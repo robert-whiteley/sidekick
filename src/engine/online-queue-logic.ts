@@ -98,6 +98,7 @@ export const TOOL_NET: Record<string, NetNeed> = {
   listening: 'offline',
   camera: 'offline',
   camera_setting: 'offline',
+  app_setting: 'offline',
   missed: 'offline',
   feedback: 'queue', // an email: the outbox
   calculate: 'offline',

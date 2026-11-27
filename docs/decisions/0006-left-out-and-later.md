@@ -686,3 +686,19 @@ indexed by default; turning it off or removing a folder deletes its index.
   `src/files/`.
 - **Later:** videos (a frame per clip), PDFs on iPhone (PDFKit), "Open" for files on iPhone
   (Quick Look).
+
+## Settings by voice (27 Nov)
+
+- One catalog tool, `app_setting`, for every registry setting; the model picks the setting id from
+  the list (no word lists). `camera_setting` and `speech_speed` are kept as they were (benched).
+- Three risk levels (owner, 27 Nov): normal applies with Undo; critical needs Approve on a card that
+  arms after 1.5 s and expires after 2 minutes; deleting needs DELETE typed on a sheet, never voice
+  alone or a single tap. Rejected: a spoken "yes" for critical changes (anyone nearby, or a misheard
+  word, could say it) and asking before every change (too slow for "make it louder").
+- Turning Contacts off is critical, not a deletion: it removes only Sidekick's copy, which the next
+  sync brings back.
+- **iPhone:** settings the iPhone doesn't have (consent mode, Instructions only, pause places,
+  the Quiet hours switch, camera and device choices, tile, widget, default assistant, exact times,
+  routines, video and
+  audio keep periods, AI chip, Read messages aloud, Understand other languages) answer
+  "X isn't on iPhone." App lock asks Face ID or the passcode first, as on the screen.

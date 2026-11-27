@@ -1,10 +1,11 @@
 import { useState } from 'react';
 
 import { deleteAllData, exportAllData } from '@/engine/data-export';
+import { askToDelete } from '@/engine/delete-plans';
 import { platformText } from '@/engine/platform-text';
 import { deleteRange } from '@/memory/store';
 import { DeleteBySource } from './SourcesSection';
-import { Button, confirm, Section } from './ui';
+import { Button, Section } from './ui';
 import { AppText } from '@/ui';
 
 export function DataSection({ onChanged }: { onChanged: () => void }) {
@@ -35,36 +36,32 @@ export function DataSection({ onChanged }: { onChanged: () => void }) {
       <Button
         danger
         title="Delete the last hour"
-        onPress={() =>
-          confirm(
-            'Delete the last hour?',
-            'Everything from the last hour is deleted.',
-            async () => {
-              await deleteRange(Date.now() - 3600_000, Date.now() + 60_000);
-              onChanged();
-            },
-          )
-        }
+        onPress={() => {
+          const from = Date.now() - 3600_000;
+          const to = Date.now() + 60_000;
+          void askToDelete({ kind: 'range', from, to, label: 'the last hour' }, async () => {
+            await deleteRange(from, to);
+            onChanged();
+          });
+        }}
       />
       <Button
         danger
         title="Delete today"
-        onPress={() =>
-          confirm('Delete today?', 'Everything from today is deleted.', async () => {
-            await deleteRange(startOfToday(), Date.now() + 60_000);
+        onPress={() => {
+          const from = startOfToday();
+          const to = Date.now() + 60_000;
+          void askToDelete({ kind: 'range', from, to, label: 'today' }, async () => {
+            await deleteRange(from, to);
             onChanged();
-          })
-        }
+          });
+        }}
       />
       <DeleteBySource onChanged={onChanged} />
       <Button
         danger
         title="Delete everything"
-        onPress={() =>
-          confirm('Delete everything?', platformText('deleteAllBody'), async () => {
-            await deleteAllData();
-          })
-        }
+        onPress={() => void askToDelete({ kind: 'everything' }, deleteAllData)}
       />
       {msg ? (
         <AppText variant="bodySmall" tone="muted">

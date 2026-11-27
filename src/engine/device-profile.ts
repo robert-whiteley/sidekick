@@ -4,6 +4,13 @@ import { Platform } from 'react-native';
 import SidekickNative from '../../modules/sidekick-native';
 import { getSettings, type ImageDetail, type Settings } from './settings';
 import { platformText } from './platform-text';
+import {
+  AUDIO_KEEP_OPTIONS,
+  FPS_OPTIONS,
+  FRAME_WINDOW_OPTIONS,
+  RESERVE_OPTIONS,
+  VIDEO_KEEP_OPTIONS,
+} from './setting-options';
 
 /** What Sidekick knows about this phone, read instantly (no test needed). */
 export type DeviceProfile = {
@@ -70,11 +77,13 @@ function floorTo(options: number[], v: number): number {
   return best;
 }
 
-export const FPS_OPTIONS = [0.5, 1, 2];
-export const FRAME_WINDOW_OPTIONS = [1, 2, 3];
-export const VIDEO_KEEP_OPTIONS = [2, 6, 12, 24, 48, 72, 168, 720]; // hours: 2 h … 1 month
-export const AUDIO_KEEP_OPTIONS = [7, 30, 90, 365, 0]; // days; 0 = forever
-export const RESERVE_OPTIONS = [1, 2, 4, 8, 16];
+export {
+  AUDIO_KEEP_OPTIONS,
+  FPS_OPTIONS,
+  FRAME_WINDOW_OPTIONS,
+  RESERVE_OPTIONS,
+  VIDEO_KEEP_OPTIONS,
+};
 
 /** Video ≈ 0.5 GB per recorded hour; assume the camera records ~8 h per day. */
 const VIDEO_GB_PER_KEPT_HOUR = (0.5 * 8) / 24;

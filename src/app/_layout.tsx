@@ -2,6 +2,7 @@ import { DarkTheme, DefaultTheme, Stack, ThemeProvider } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 
 import { AppLockGate } from '@/features/lock/AppLockGate';
+import { DeleteConfirmHost } from '@/features/settings/DeleteConfirmHost';
 import { type Colors, DialogHost, useColors, useScheme } from '@/ui';
 
 /** Headers and screen backgrounds from the app tokens, light or dark with the phone. */
@@ -53,6 +54,7 @@ export default function RootLayout() {
           <Stack.Screen name="note/[id]" options={{ title: 'Conversation notes' }} />
         </Stack>
         <DialogHost />
+        <DeleteConfirmHost />
       </AppLockGate>
     </ThemeProvider>
   );

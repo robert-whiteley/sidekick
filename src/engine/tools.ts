@@ -340,6 +340,12 @@ export async function runTool(
       return command({ type: 'camera', on: a.on === true });
     case 'camera_setting':
       return command({ type: 'cameraSetting', change: cameraChangeFor(a, question) });
+    case 'app_setting': {
+      // Loaded on use: it reaches every part of the app the settings touch.
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const { appSettingTool } = require('./app-settings') as typeof import('./app-settings');
+      return { kind: 'reply', text: await appSettingTool(a) };
+    }
     case 'feedback':
       return runFeedback(str(a.text));
     case 'calculate':

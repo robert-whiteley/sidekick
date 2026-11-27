@@ -1211,6 +1211,15 @@ async function deleteMoments(where: string, params: (number | string)[]) {
 export const deleteMoment = (id: number) => deleteMoments('id = ?', [id]);
 export const deleteRange = (from: number, to: number) =>
   deleteMoments('at >= ? AND at < ?', [from, to]);
+/** How many memories are from [from, to) (for the delete confirmation). */
+export async function countMoments(from: number, to: number): Promise<number> {
+  const db = await getDb();
+  const r = await db.execute('SELECT COUNT(*) AS n FROM moments WHERE at >= ? AND at < ?', [
+    from,
+    to,
+  ]);
+  return (r.rows[0]?.n as number | undefined) ?? 0;
+}
 /** Everything one data source added (e.g. kind 'file'). */
 export const deleteKind = (kind: string) => deleteMoments('kind = ?', [kind]);
 
