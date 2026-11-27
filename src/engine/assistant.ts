@@ -12,6 +12,7 @@ import {
   askLlm,
   askLlmInBackground,
   backgroundPreemptions,
+  ensureLlm,
   llmLoadCount,
   prepareChat,
   setChatSystemSource,
@@ -45,6 +46,7 @@ import {
   searchMemory,
 } from '@/memory/store';
 import { asksAboutSomethingSeen } from '@/memory/search-logic';
+import { LOW_RAM_MB } from '@/memory/embed-policy';
 import { ocrPromptLine } from '@/memory/photo-text';
 import { photoTextOrNull } from './photo-ocr';
 import { memoryStatus } from './progress';
@@ -66,7 +68,7 @@ import { firstUrl } from './shared-doc-logic';
 import { askWithLookup, type WebSource } from '@/web/lookup';
 import { research } from '@/web/research';
 import { runPhotoEdit } from './photo-edit';
-import { makePicture, pictureFilesReady } from './picture';
+import { makePicture } from './picture';
 import { answerLocation } from './location';
 import { fillTool, resolveTimeWithModel, runTool, type RouteOutcome } from './tools';
 import { decideRequest } from './decide';
@@ -131,6 +133,20 @@ let chatLoad = -1;
 /** The "Off the record" chat has been started (the model keeps its turns until it is left). */
 let offRecordStarted = false;
 let idleTimer: ReturnType<typeof setTimeout> | null = null;
+
+/**
+ * A phone under 6 GB (iPhone 13 mini: 4 GB) never holds the chat model and the memory-search
+ * model at once: embedding the question unloads the chat model, and the answer then waits for it
+ * to load again (with a photo on the iPhone's CPU, over a minute in all). A photo question is
+ * about the photo, so there its memory search uses exact words only and the chat model stays.
+ */
+function embedderEvictsChat(): boolean {
+  try {
+    return SidekickNative.getDeviceInfo().totalRamMb < LOW_RAM_MB && SidekickNative.llmIsLoaded();
+  } catch {
+    return false;
+  }
+}
 
 function chatBudget(): number {
   const own = (getSettings() as { chatMemoryTokens?: number | null }).chatMemoryTokens;
@@ -488,7 +504,6 @@ export async function answer(
     const { decision, ms, reply } = await decideRequest(question, {
       draftOpen,
       photo: !!photoNow,
-      pictures: pictureFilesReady(),
     }).catch(() => ({ decision: { kind: 'answer' } as Decision, ms: 0, reply: '' }));
     console.log(`[decide] ${decisionLabel(decision)} (${reply}) in ${ms} ms`);
     // Phone locked (screen off, hands-free): nothing personal until it is unlocked. Routine and
@@ -522,7 +537,9 @@ export async function answer(
   try {
     [sources, facts] = await Promise.all([
       // A few extra candidates so a remembered photo can still be found below.
-      searchMemory(question, photoNow ? MEMORY_LIMIT.photo : MEMORY_LIMIT.text + 2),
+      searchMemory(question, photoNow ? MEMORY_LIMIT.photo : MEMORY_LIMIT.text + 2, new Date(), {
+        words: !!photoNow && embedderEvictsChat(),
+      }),
       savedFacts().then((f) =>
         pickFacts(
           f.filter((x) => x.status === 'saved').map((x) => x.text),
@@ -569,11 +586,18 @@ export async function answer(
       `[recall] ${recall.intent}: ${recall.refs.length} matches, ${recall.images.length} images, media ${recall.media?.kind ?? 'none'}`,
     );
   // The photo's exact text (OCR, ~1 s) helps the model read numbers and names right.
-  if (image) status('Reading the picture…');
+  if (image) status('Reading the text in the picture…');
   const [ocrText, codes] = await Promise.all([
     photoTextOrNull(image),
     photoNow ? scanCodes(photoNow) : Promise.resolve([]),
   ]);
+  // The slow steps get their own lines (the chat counts their seconds): loading the model again,
+  // and the model looking at the picture (on the iPhone's CPU, tens of seconds).
+  if (!SidekickNative.llmIsLoaded()) {
+    status('Loading the model…');
+    await ensureLlm().catch(() => {}); // a failure is reported by the question itself
+  }
+  if (image) status('Looking at the picture…');
   // A QR code or barcode in the photo: its content for the model, and a card with its buttons.
   if (codes.length) postCodeCards(codes);
   const seenText = ocrPromptLine(ocrText) + codePromptLine(codes);

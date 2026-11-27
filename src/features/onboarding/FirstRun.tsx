@@ -16,7 +16,8 @@ import { allRequiredFiles } from '@/engine/llm-candidates';
 import { getSettings } from '@/engine/settings';
 import { formatBytes, spaceNeeded } from '@/engine/storage';
 import { diskSpace, reserveBytes } from '@/engine/storage-monitor';
-import { AppText, Button, Card, makeStyles, ProgressBar, space } from '@/ui';
+import { errorDetailsFor } from '@/engine/error-details';
+import { AppText, Button, Card, ErrorDetailsButton, makeStyles, ProgressBar, space } from '@/ui';
 import { markFirstRunDone, runSpeedCheck } from './after-setup';
 import { EXPLAINER, firstRunStep, type FirstRunStep } from './first-run';
 
@@ -39,6 +40,7 @@ export function FirstRun({ onReady }: { onReady: () => void }) {
   const [step, setStep] = useState<FirstRunStep | null>(null);
   const [progress, setProgress] = useState<Progress | null>(null);
   const [error, setError] = useState('');
+  const errorObj = useRef<unknown>(null);
   const mobileAllowed = useRef(false);
   const waitChosen = useRef(false);
   const gotBytes = useRef(0);
@@ -72,6 +74,7 @@ export function FirstRun({ onReady }: { onReady: () => void }) {
         (e) => {
           if (e instanceof DownloadCancelled || run.stop) return;
           running.current = null;
+          errorObj.current = e;
           setError(e instanceof Error ? e.message : String(e));
         },
       );
@@ -182,6 +185,9 @@ export function FirstRun({ onReady }: { onReady: () => void }) {
         <Card tone="danger">
           <AppText tone="danger">{error}</AppText>
           <Button title="Try again" variant="filled" block onPress={() => void decide()} />
+          <ErrorDetailsButton
+            details={() => errorDetailsFor('first-run download', errorObj.current)}
+          />
         </Card>
       ) : null}
 

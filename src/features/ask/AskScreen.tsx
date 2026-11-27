@@ -17,6 +17,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import {
   AppText,
   DARK_COLORS,
+  ErrorDetailsButton,
   ForceScheme,
   IconButton,
   radius,
@@ -49,6 +50,8 @@ import {
   watchLiveCamera,
 } from '@/engine/live-camera';
 import { notices } from '@/engine/notices';
+import { errorDetailsFor } from '@/engine/error-details';
+import { AnswerWatch, STALL_MS, STALLED_PHOTO_TEXT, STALLED_TEXT } from './answer-watch';
 import { takeIntroMessage } from '@/features/onboarding/after-setup';
 import {
   captionOneFrame,
@@ -214,6 +217,8 @@ export function AskScreen({
     setEditingState(x);
   };
   const [status, setStatus] = useState('');
+  /** After a failed or stopped answer: what "Copy error details" copies. */
+  const [errorDetails, setErrorDetails] = useState<(() => string) | null>(null);
   const [phase, setPhase] = useState<Phase>('loading');
   const [listening, setListening] = useState(isListening());
   const [holding, setHoldingState] = useState(false);
@@ -935,6 +940,8 @@ export function AskScreen({
     const sp = new StreamingSpeaker(speak);
     speaker.current = sp;
     setSpeakingId(speak ? replyId : null);
+    setErrorDetails(null);
+    let tick: ReturnType<typeof setInterval> | undefined;
     try {
       await Promise.all([
         stopFactInference(),
@@ -959,23 +966,39 @@ export function AskScreen({
         const shown: ChatMedia[] = [{ momentAt: at, kind: 'photo', path: imagePath }];
         setMessages((m) => patchMessage(m, userId, { media: shown }));
       }
-      setStatus(imagePath ? 'Looking…' : 'Thinking…');
       let answered = false;
+      // A slow step counts its seconds; nothing new for STALL_MS and the chat stops waiting
+      // (answer-watch.ts).
+      const watch = new AnswerWatch(Date.now());
+      let gaveUp = false;
+      const showStep = (line: string) => {
+        if (answered || gaveUp) return;
+        watch.step(line, Date.now());
+        setStatus(line);
+      };
+      showStep(imagePath ? 'Looking…' : 'Thinking…');
+      let giveUp: (r: 'stalled') => void = () => {};
+      const stalled = new Promise<'stalled'>((res) => (giveUp = res));
+      tick = setInterval(() => {
+        const now = Date.now();
+        if (watch.stalled(now)) giveUp('stalled');
+        else if (!answered && !gaveUp) setStatus(watch.line(now));
+      }, 1000);
       // offTheRecord: uses all memories, saves nothing (assistant.ts).
       const opts = {
         keepHistory,
         offTheRecord: offRecordNow,
         spoken: voiced,
         // Progress as it happens, until the first words of the answer replace it.
-        onStatus: (line: string) => {
-          if (!answered) setStatus(line);
-        },
+        onStatus: showStep,
         onFound: (media: ChatMedia[]) => setMessages((m) => patchMessage(m, replyId, { media })),
         routine: !!routine,
         voiceAnswer: speak,
       } as Parameters<typeof answerQuestion>[3];
       holdLiveCamera(true);
       const onAnswerText = (full: string) => {
+        if (gaveUp) return;
+        watch.alive(Date.now());
         if (!answered) setStatus('');
         answered = true;
         written = full;
@@ -983,16 +1006,8 @@ export function AskScreen({
         setMessages((m) => patchMessage(m, replyId, { text: full }));
         sp.update(full);
       };
-      const r: Awaited<ReturnType<typeof answerQuestion>> = att
-        ? await answerShared(
-            att,
-            modelQ,
-            onAnswerText,
-            (line) => {
-              if (!answered) setStatus(line);
-            },
-            offRecordNow,
-          ).then((x) => {
+      const answering: Promise<Awaited<ReturnType<typeof answerQuestion>>> = att
+        ? answerShared(att, modelQ, onAnswerText, showStep, offRecordNow).then((x) => {
             // A web page read once is kept for the next question about it; so are a video's
             // pictures once looked at, and a column added to a sheet.
             const page =
@@ -1001,12 +1016,37 @@ export function AskScreen({
               setAttachment((a) => (a?.at === att.at ? { ...a, ...page, ...x.update } : a));
             return { ...x, usedPhoto: null, sources: [], ttftMs: 0, local: true };
           })
-        : await answerQuestion(
+        : answerQuestion(
             grab ? screenQuestion(modelQ, grab) : modelQ,
             imagePath,
             onAnswerText,
             opts,
           );
+      const first = await Promise.race([answering, stalled]);
+      watch.finish();
+      if (first === 'stalled') {
+        // Nothing happened for minutes: stop it and say so, instead of a line that never ends.
+        gaveUp = true;
+        answering.catch(() => {});
+        stopResearch();
+        stopPicture();
+        cancelLlm();
+        const waitedOn = watch.status;
+        console.log(`[ask] no progress for ${STALL_MS / 1000} s (${waitedOn}); stopped`);
+        setMessages((m) =>
+          patchMessage(m, replyId, {
+            text: imagePath ? STALLED_PHOTO_TEXT : STALLED_TEXT,
+            pending: false,
+          }),
+        );
+        setStatus('');
+        const stall = Object.assign(new Error(`No progress for ${STALL_MS / 1000} s`), {
+          code: 'answer-timeout',
+        });
+        setErrorDetails(() => () => errorDetailsFor(imagePath ? 'photo answer' : 'answer', stall));
+        return;
+      }
+      const r = first;
       written = r.text;
       const stopped = stopReasonRef.current ? true : undefined;
       // Android's voice says when it has finished (onVoiceIdle); background passes wait for that.
@@ -1053,7 +1093,9 @@ export function AskScreen({
       setMessages((m) => patchMessage(m, replyId, { pending: false, stopped }));
       console.log(`[ask] failed: ${String(e)}`);
       setStatus(`Something went wrong: ${e instanceof Error ? e.message : String(e)}`);
+      setErrorDetails(() => () => errorDetailsFor('answer', e));
     } finally {
+      if (tick) clearInterval(tick);
       holdLiveCamera(false);
       owedRef.current = unansweredAfter(owed, {
         question: q,
@@ -1325,6 +1367,11 @@ export function AskScreen({
                 {status}
               </AppText>
             ) : null}
+            {errorDetails && phase === 'idle' ? (
+              <View style={styles.errorDetails}>
+                <ErrorDetailsButton details={errorDetails} />
+              </View>
+            ) : null}
           </ScrollView>
 
           {attachment ? (
@@ -1467,6 +1514,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: space.lg,
   },
   status: { textAlign: 'center' },
+  errorDetails: { alignItems: 'center' },
   // Shrinks (not overflows) when the keyboard takes space, so the composer stays above it.
   cameraBox: {
     height: '34%',

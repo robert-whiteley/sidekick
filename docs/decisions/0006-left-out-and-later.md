@@ -512,8 +512,9 @@ THIRD_PARTY_NOTICES.md.
   with 6 GB+ RAM; 4–6 GB get it with a "slow on this phone" note; under 4 GB, old CPUs and the
   iPhone ("not yet") don't.
 - The model picks the `make_picture` catalog tool from what was said, in any wording (no word
-  lists). It is offered only once the picture model is downloaded; before that, a drawing request
-  gets a normal answer. Erase and upscale are `edit_photo` operations, offered only with a photo.
+  lists). It is always offered: without the picture model the answer offers the download, and on
+  the iPhone (not yet) or a phone that can't draw it says so plainly. (Offered only once
+  downloaded, a drawing request on the iPhone went to a web search instead.) Erase and upscale are `edit_photo` operations, offered only with a photo.
   Progress in the chat, Stop works mid-picture, and the
   picture is kept in the chat history and the timeline ("Picture Sidekick drew"); off the record
   it isn't kept. Gemma is unloaded first on phones under 7 GB.

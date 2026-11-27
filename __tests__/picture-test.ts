@@ -8,6 +8,7 @@ import {
   pictureCheckAllows,
   pictureCheckPrompt,
   pictureOffer,
+  pictureUnavailable,
   picturePrompt,
   pictureStatus,
   reportMailto,
@@ -79,6 +80,14 @@ describe('which phones get it', () => {
     expect(pictureOffer({ platform: 'android', ramMb: 2900, cpuOk: true }).offer).toBe(false);
     expect(pictureOffer({ platform: 'android', ramMb: 8000, cpuOk: false }).offer).toBe(false);
     expect(pictureOffer({ platform: 'ios', ramMb: 8000, cpuOk: true }).note).toMatch(/iPhone/);
+  });
+  test('a phone that can never draw gets a plain answer, not the download offer', () => {
+    const reply = (platform: string, ramMb: number, cpuOk: boolean) =>
+      pictureUnavailable(pictureOffer({ platform, ramMb, cpuOk }));
+    expect(reply('ios', 4096, true)).toMatch(/can't make pictures on iPhone/);
+    expect(reply('android', 2900, true)).toMatch(/4 GB/);
+    expect(reply('android', 8000, false)).toMatch(/processor/);
+    expect(reply('android', 8000, true)).toBeNull();
   });
 });
 

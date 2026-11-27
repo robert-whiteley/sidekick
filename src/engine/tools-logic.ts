@@ -87,7 +87,8 @@ export const EDIT_TOOL: ToolSpec = {
 };
 
 /**
- * Offered only once the picture model is downloaded (decide.ts); drawn on the phone (picture.ts).
+ * Always offered (decide.ts); drawn on the phone (picture.ts), which says so plainly and offers the
+ * download when the picture model is missing or the phone (iPhone) can't make pictures.
  */
 export const PICTURE_TOOL: ToolSpec = {
   name: 'make_picture',

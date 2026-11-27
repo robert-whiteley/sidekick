@@ -1,7 +1,10 @@
 import { type DB, open } from '@op-engineering/op-sqlite';
 import * as Crypto from 'expo-crypto';
+import { File } from 'expo-file-system';
 import * as SecureStore from 'expo-secure-store';
 import { Platform } from 'react-native';
+
+import { notices } from '@/engine/notices';
 
 /**
  * The encrypted memory database (SQLCipher). The key is random, made on first run, and kept in
@@ -17,10 +20,15 @@ export const vecTableSql = (name: string) =>
    )`;
 
 let db: DB | null = null;
+/** The one open in progress: every early caller waits for it (see getDb). */
+let opening: Promise<DB> | null = null;
+/** Set before "Delete all my data" wipes the file: nothing may open (and so re-create) it again. */
+let closedForGood = false;
 
-async function dbKey(): Promise<string> {
-  const existing = await SecureStore.getItemAsync(KEY_NAME);
-  if (existing) return existing;
+/** SQLITE_NOTADB: the file is not readable with this key (it was made with another one). */
+const NOT_A_DB = 26;
+
+async function newKey(): Promise<string> {
   const bytes = Crypto.getRandomBytes(32);
   const key = Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
   await SecureStore.setItemAsync(KEY_NAME, key, {
@@ -219,21 +227,82 @@ function migrate(d: DB) {
   }
 }
 
-export async function getDb(): Promise<DB> {
-  if (db) return db;
+/**
+ * The database, opened once. Many parts of the app ask for it at start-up at the same moment, so
+ * they all share one open: two opens at once used to make two different keys on the very first
+ * run (the file was then unreadable at the next start, "file is not a database") and two
+ * connections that locked each other ("database is locked").
+ */
+export function getDb(): Promise<DB> {
+  if (db) return Promise.resolve(db);
+  if (closedForGood) return Promise.reject(new Error('The memory database is being deleted.'));
+  if (!opening) {
+    opening = openDb().finally(() => {
+      opening = null;
+    });
+  }
+  return opening;
+}
+
+async function openDb(): Promise<DB> {
   const location = iosDbFolder();
-  const d = open({
-    name: 'memory.db',
-    encryptionKey: await dbKey(),
-    ...(location ? { location } : {}),
-  });
+  const where = location ? { location } : {};
+  const key = (await SecureStore.getItemAsync(KEY_NAME)) ?? (await newKey());
+  let d = open({ name: 'memory.db', encryptionKey: key, ...where });
+  if (!readable(d)) {
+    // A file this key can't read is lost for good (its key is gone: a first-run race in an older
+    // build, or a wipe that was interrupted). It is set aside, not deleted, and a fresh memory
+    // starts, instead of every later step failing with a database error.
+    const path = d.getDbPath();
+    try {
+      d.close();
+    } catch {
+      // Not open.
+    }
+    setAside(path);
+    d = open({ name: 'memory.db', encryptionKey: key, ...where });
+    console.log('[db] the old memory file could not be read with its key; started a new one');
+    notices.post({
+      key: 'memory-reset',
+      kind: 'info',
+      text: "Your earlier memories couldn't be opened, so Sidekick started a new memory.",
+    });
+  }
   d.executeSync('PRAGMA foreign_keys = ON');
   // Deleted memories are zeroed in the file, not just unlinked (reclaim.ts).
   d.executeSync('PRAGMA secure_delete = ON');
+  // A second connection (if one is ever opened) waits for a lock instead of failing at once.
+  d.executeSync('PRAGMA busy_timeout = 5000');
   for (const sql of SCHEMA) d.executeSync(sql);
   migrate(d);
   db = d;
   return d;
+}
+
+/** Whether the key opens the file (a new, empty file always opens). */
+function readable(d: DB): boolean {
+  try {
+    d.executeSync('SELECT count(*) FROM sqlite_master');
+    return true;
+  } catch (e) {
+    if ((e as { code?: number }).code === NOT_A_DB || /not a database/i.test(String(e)))
+      return false;
+    throw e;
+  }
+}
+
+function setAside(path: string) {
+  try {
+    const f = new File(`file://${path}`);
+    if (f.exists) f.move(new File(`file://${path}.unreadable-${Date.now()}`));
+  } catch (e) {
+    console.log(`[db] could not set the unreadable file aside: ${String(e)}`);
+    try {
+      new File(`file://${path}`).delete();
+    } catch {
+      // Nothing more to do: the open below reports it.
+    }
+  }
 }
 
 /**
@@ -254,8 +323,13 @@ function iosDbFolder(): string | undefined {
   }
 }
 
-/** Closes the database (before "Delete all my data" removes its file). */
+/**
+ * Closes the database before "Delete all my data" removes its file. Nothing opens it again until
+ * the app restarts: an open racing the wipe re-created the file with the key being deleted, and
+ * the next start could never read it.
+ */
 export function closeDb() {
+  closedForGood = true;
   try {
     db?.close();
   } catch {
