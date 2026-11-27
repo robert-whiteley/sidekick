@@ -5,7 +5,13 @@
  * only its own words and one word of reply (median 1.7 s on the Pixel 5; docs/BENCH.md).
  */
 import { askLlm } from './llm';
-import { catalogSystem, DECIDE_TOOLS, parseClassify, type Decision } from './decide-logic';
+import {
+  catalogSystem,
+  decidePrompt,
+  DECIDE_TOOLS,
+  parseClassify,
+  type Decision,
+} from './decide-logic';
 
 /**
  * The decision for [question]. What is offered follows the app's state, never the words: "draft"
@@ -15,7 +21,13 @@ import { catalogSystem, DECIDE_TOOLS, parseClassify, type Decision } from './dec
  */
 export async function decideRequest(
   question: string,
-  opts: { draftOpen?: boolean; photo?: boolean; pictures?: boolean } = {},
+  opts: {
+    draftOpen?: boolean;
+    photo?: boolean;
+    pictures?: boolean;
+    /** The chat's last exchange, when recent: a short reply ("yes", "and in French?") is read with it. */
+    previous?: { q: string; a: string };
+  } = {},
 ): Promise<{ decision: Decision; ms: number; reply: string }> {
   const t0 = Date.now();
   const tools = DECIDE_TOOLS.filter(
@@ -24,7 +36,7 @@ export async function decideRequest(
       (t.name !== 'edit_photo' || opts.photo) &&
       (t.name !== 'make_picture' || opts.pictures),
   );
-  const { text } = await askLlm(`Request: ${question}`, null, () => {}, {
+  const { text } = await askLlm(decidePrompt(question, opts.previous), null, () => {}, {
     system: catalogSystem(tools),
     maxTokens: 5,
     scratch: true,
