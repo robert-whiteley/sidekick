@@ -210,7 +210,8 @@ const same = (a: string, b: string) =>
 export function parseTurnReply(reply: string, heard = ''): string | null {
   const text = reply
     .replace(/```[a-z]*\n?/g, '')
-    .replace(/<[^>]+>/g, '')
+    .replace(/<[^>]*>/g, ' ')
+    .replace(/[ \t]+/g, ' ')
     .trim();
   if (!text) return null;
   const say = /\bSAY\s*\**\s*:\s*\**\s*([^\n]+)/i.exec(text);
