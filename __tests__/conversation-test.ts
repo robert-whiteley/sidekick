@@ -96,6 +96,17 @@ test('a fresh chat starts from the summary and the last turns word for word', ()
   expect(chatSystem('BASE', { summary: '', turns: [] })).toBe('BASE');
 });
 
+test("the owner's own answer style comes after the conversation, last", () => {
+  const style = 'Call me Captain Nemo';
+  const turns = [{ q: 'When is the next bus?', a: 'At 10:15.', at: 1 }];
+  const sys = chatSystem('BASE', { summary: 'Talked about buses.', turns }, style);
+  expect(sys.endsWith(`\nHow the user wants you to answer: ${style}`)).toBe(true);
+  expect(sys.indexOf(style)).toBeGreaterThan(sys.indexOf('You: At 10:15.'));
+  expect(chatSystem('BASE', { summary: '', turns: [] }, style)).toBe(
+    `BASE\nHow the user wants you to answer: ${style}`,
+  );
+});
+
 function deps(reply: string | (() => string), over?: Partial<CompactDeps>) {
   const saved: unknown[] = [];
   const prepared: string[] = [];

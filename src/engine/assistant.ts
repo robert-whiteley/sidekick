@@ -17,6 +17,7 @@ import {
   setChatSystemSource,
 } from './llm';
 import {
+  type ChatState,
   chatSystem,
   compact,
   type CompactReason,
@@ -146,17 +147,20 @@ function chatBudget(): number {
 
 /** The chat's instructions: the usual ones plus the user's "How Sidekick answers" text. */
 export const answerSystem = () => withAnswerStyle(SYSTEM_PROMPT, getSettings().answerStyle);
+/** The chat's instructions with the conversation so far, the owner's own text last. */
+const chatPrompt = (state: ChatState) =>
+  chatSystem(SYSTEM_PROMPT, state, getSettings().answerStyle);
 
 /** The one continuous conversation (loaded from the phone on first use). */
 export function conversation(): Conversation {
   if (!chat) {
     chat = new Conversation(loadChatState(), chatBudget());
-    prepareChat(chatSystem(answerSystem(), chat.state));
+    prepareChat(chatPrompt(chat.state));
   }
   return chat;
 }
 
-setChatSystemSource(() => chatSystem(answerSystem(), conversation().state));
+setChatSystemSource(() => chatPrompt(conversation().state));
 
 // New "How Sidekick answers" text: the model's chat starts again with it (from the summary and
 // the last turns, so nothing said is lost).
@@ -166,7 +170,7 @@ onSettingsChange((st) => {
   styleNow = st.answerStyle;
   if (!chat) return;
   chat.restart();
-  prepareChat(chatSystem(answerSystem(), chat.state));
+  prepareChat(chatPrompt(chat.state));
 });
 
 /** The running summary and recent turns (for a "what we talked about" view). */
@@ -190,7 +194,8 @@ export function compactChat(reason: CompactReason) {
       save: saveChatState,
       prepare: prepareChat,
     },
-    answerSystem(),
+    SYSTEM_PROMPT,
+    getSettings().answerStyle,
   );
 }
 
@@ -224,7 +229,7 @@ export async function forgetLastExchange(answerText: string, momentId?: number):
   const c = conversation();
   c.dropLast(answerText);
   saveChatState(c.state);
-  prepareChat(chatSystem(answerSystem(), c.state));
+  prepareChat(chatPrompt(c.state));
   lastQuestion = c.state.turns.at(-1)?.q;
   if (momentId != null) await deleteMoment(momentId);
 }
@@ -604,7 +609,7 @@ export async function answer(
   const idleBefore = conv.compactReason(Date.now()) === 'idle';
   // The model's chat continues; a fresh one (first question, after a restart or a compaction)
   // starts from the running summary and the last turns.
-  const system = chatSystem(answerSystem(), conv.state);
+  const system = chatPrompt(conv.state);
   let keep = offRecord ? offRecordStarted : conv.keepHistory();
   let promptChars = 0;
   /** The question reached the model's chat (Stop before that leaves the chat untouched). */
