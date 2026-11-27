@@ -207,11 +207,27 @@ describe('filling one tool', () => {
     expect((await fillTool('ping Sam', 'message', { ask: replies('{"none":true}') }))?.tool).toBe(
       'none',
     );
-    const bad = await fillTool('ping Sam', 'message', { ask: replies('{"to":"Sam"}') });
+    const bad = await fillTool('ping Sam', 'message', {
+      ask: replies('{"to":"Sam"}', '{"to":"Sam"}'),
+    });
     expect(bad?.error).toBeTruthy();
-    expect((await fillTool('ping Sam', 'message', { ask: replies('hmm') }))?.error).toBe(
+    expect((await fillTool('ping Sam', 'message', { ask: replies('hmm', 'hmm') }))?.error).toBe(
       'unparsed',
     );
+  });
+  it('asks once more with the reason when the schema refuses the call', async () => {
+    const ask = replies('{"torch":true}', '{"setting":"torch","on":true}');
+    const out = await fillTool('torch on', 'phone_setting', { ask, now: NOW });
+    expect(out).toMatchObject({ tool: 'phone_setting', args: { setting: 'torch', on: true } });
+    expect(ask).toHaveBeenCalledTimes(2);
+    expect(ask.mock.calls[1][0]).toContain('was refused: setting missing');
+  });
+  it('does not ask again about a message to the user themselves', async () => {
+    const ask = replies('{"to":"me","text":"a fun fact"}');
+    expect((await fillTool('text me a fun fact', 'message', { ask }))?.error).toBe(
+      'to is the user',
+    );
+    expect(ask).toHaveBeenCalledTimes(1);
   });
 });
 

@@ -528,6 +528,9 @@ export function localIso(d: Date): string {
   return `${d.getFullYear()}-${two(d.getMonth() + 1)}-${two(d.getDate())}T${two(d.getHours())}:${two(d.getMinutes())}`;
 }
 
+/** validateCall's refusal of a message, email or call to the user themselves. */
+export const TO_USER = 'to is the user';
+
 export type ToolCall = { tool: string; args: Record<string, unknown> };
 
 /**
@@ -667,7 +670,7 @@ export function validateCall(call: ToolCall, tools: ToolSpec[] = TOOLS): Validat
     typeof out.to === 'string' &&
     /^(me|myself|us|i|user|the user)$/i.test(out.to)
   )
-    return { ok: false, error: 'to is the user' };
+    return { ok: false, error: TO_USER };
   return { ok: true, args: out };
 }
 

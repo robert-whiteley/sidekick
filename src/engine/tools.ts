@@ -14,6 +14,7 @@ import {
   parseFillReply,
   rangePrompt,
   ROUTER_SYSTEM,
+  TO_USER,
   toolByName,
   validateCall,
   wantsModelRange,
@@ -418,19 +419,33 @@ export async function fillTool(
   if (!spec) return null;
   const t0 = Date.now();
   const ask = ctx.ask ?? defaultAsk;
-  const reply = await ask(
-    fillPrompt(question, ctx.now ?? new Date(), spec),
-    ROUTER_SYSTEM,
-    140,
-  ).catch(() => '');
+  const prompt = fillPrompt(question, ctx.now ?? new Date(), spec);
+  type Try = { reply: string; none?: boolean; args?: Record<string, unknown>; error?: string };
+  const tryOnce = async (p: string): Promise<Try> => {
+    const reply = await ask(p, ROUTER_SYSTEM, 140).catch(() => '');
+    const call = parseFillReply(reply, tool);
+    if (!call) return { reply, error: 'unparsed' };
+    if (call.tool === 'none') return { reply, none: true };
+    const v = validateCall(call, [spec]);
+    return v.ok ? { reply, args: v.args } : { reply, error: v.error, args: call.args };
+  };
+  let r = await tryOnce(prompt);
+  // A call the schema refuses (a made-up argument name, a value outside the list) is asked once
+  // more with the reason, so the model corrects it. A message to the user is refused on purpose.
+  if (r.error && r.error !== TO_USER)
+    r = await tryOnce(
+      `${prompt}\nYour reply ${r.reply.trim().slice(0, 200)} was refused: ${r.error}. Reply again.`,
+    );
   const ms = Date.now() - t0;
-  const call = parseFillReply(reply, tool);
-  if (!call) return { offered: [tool], tool: null, args: {}, error: 'unparsed', ms };
-  if (call.tool === 'none') return { offered: [tool], tool: 'none', args: {}, ms };
-  const v = validateCall(call, [spec]);
-  return v.ok
-    ? { offered: [tool], tool, args: v.args, ms }
-    : { offered: [tool], tool, args: call.args, error: v.error, ms };
+  if (r.none) return { offered: [tool], tool: 'none', args: {}, ms };
+  if (!r.error) return { offered: [tool], tool, args: r.args ?? {}, ms };
+  return {
+    offered: [tool],
+    tool: r.error === 'unparsed' ? null : tool,
+    args: r.args ?? {},
+    error: r.error,
+    ms,
+  };
 }
 
 /**

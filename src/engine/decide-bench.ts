@@ -1,8 +1,9 @@
 /**
  * Dev-only bench for "rules vs model" and thinking mode (docs/BENCH.md). Run on the phone from
- * the speed-test screen's deep link: sidekick://bench?run=decide&variant=fused|fused-lookup|
- * classify|full|embed, or run=thinking&budget=0|256|1024|default. Nothing is done: each request
- * is only classified (or answered in a throwaway chat). One JSON line per case on logcat:
+ * the speed-test screen's deep link: sidekick://bench?run=decide&variant=catalog|catalog-off|
+ * catalog-fill|classify|fused|fused-lookup|full|embed, run=thinking&variant=0|256|1024|-1|
+ * default|handoff, or run=background&variant=<budget>. Nothing is done: each request is only
+ * classified (or answered in a throwaway chat). One JSON line per case on logcat:
  * `[decide] {...}` / `[think] {...}`. The model is unloaded at the end so the app's own chat
  * starts again from its saved summary.
  */

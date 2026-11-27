@@ -85,17 +85,30 @@ words the answer must or must not contain. Categories: general knowledge, arithm
 units, short reasoning, every tool and command, near-misses that must not trigger a tool,
 refusals (messaging "me") and multi-step requests.
 
-- **Offline (the rules and the router's tool choice), any PC:**
-  `BENCH_OUT=/tmp/answers.json npx jest __tests__/answers-bench-test.ts` — every case through the
-  same rule order as the app (`src/engine/route-trace-logic.ts`), scored by
-  `src/engine/answers-bench-logic.ts`. Scores: `pass` (right rule and arguments), `model` (the
-  router gets a sensible tool list; the model decides on the phone), `router_risk` (a plain
-  question would wait ~5 s or more for the router), `fail`.
+- **Offline, any PC:** `npx jest __tests__/answers-bench-test.ts` checks the cases and the
+  scoring helpers (`src/engine/answers-bench-logic.ts`). What a request needs is the model's
+  (`src/engine/decide.ts`), so routing is scored only on the phone.
 - **On the phone (the model's answers and tool picks, with timings):** a dev or bench build,
   Speed test screen → "Answers bench", or by adb (needs the flag file below):
   `adb shell am start -a android.intent.action.VIEW -d "sidekick://bench?run=answers"`.
   One `[answers] {json}` line per case in logcat (`adb logcat -s ReactNativeJS`), then
   `[answers] summary`. The router only picks a tool; nothing is run, sent or saved.
+
+## Rules vs model, thinking (`bench/answers/decide-cases.ts`, `thinking-cases.ts`, `background-cases.ts`)
+
+`bash bench/answers/run-decide.sh <run> <variant> [only]` starts a run by deep link (flag file
+below), waits for it, and writes `$OUT/<run>-<variant>.jsonl` plus CPU ticks and battery before
+and after. Needs `ADB` and `OUT`; nothing is run, sent or saved.
+
+- `decide <variant>`: the 143 cases above plus 56 new wordings (other words, other languages,
+  near-misses); which sorter prompt: `catalog` (the app's), `catalog-off` (no lookup lines),
+  `catalog-fill` (also fills the chosen tool's arguments), `classify` (names only), `fused`,
+  `fused-lookup`, `full`, `embed` (`src/engine/decide-bench.ts`).
+- `thinking <budget|handoff>`: 24 questions (16 hard, 8 everyday) with thinking off (`0`), a token
+  budget, no limit (`-1`), or `handoff` (the model replies THINK to get thinking on).
+- `background <budget>`: 15 note, fact, who-is-who, recap and photo tasks. The photos are made-up
+  pictures from `python3 bench/answers/photos.py <dir>` (Pillow, HPND licence, bench only); set
+  `PHOTOS` to that folder. They are pushed to the app's folder and deleted after the run.
 
 ## Memory recall (`bench/recall/generate.ts`)
 
@@ -130,4 +143,5 @@ create. Delete it afterwards.
 
 ### Bench-only tools (answers and recall)
 
-None beyond the app, jest and adb. No extra dependencies.
+None beyond the app, jest and adb, except Pillow (HPND licence) for the background bench's
+made-up photos.

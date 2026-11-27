@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Runs the "rules vs model" or thinking bench on the phone by deep link and saves its log lines.
-# Usage: bash bench/answers/run-decide.sh decide <variant> [only]   (rules|fused|fused-lookup|
-#        classify|full|embed), thinking <budget|handoff> [only], or background <budget> [only].
+# Usage: bash bench/answers/run-decide.sh decide <variant> [only]   (catalog|catalog-off|
+#        catalog-fill|classify|fused|fused-lookup|full|embed), thinking <budget|handoff> [only],
+#        or background <budget> [only].
 # background: PHOTOS = a folder adb can read (on Windows adb, a Windows path) holding the
 # pictures from bench/answers/photos.py; they are pushed to the app's folder and deleted after.
 # Needs ADB, a dev/bench build installed, and the bench-links flag file (bench/README.md).
