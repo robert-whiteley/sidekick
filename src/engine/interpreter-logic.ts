@@ -4,9 +4,9 @@
  * logic (languages, the turn prompt, parsing the reply), tested in __tests__/interpreter-test.ts;
  * the session lives in interpreter.ts and the screen in src/features/interpreter.
  *
- * The model decides everything about meaning: the router picks the `interpret` tool and the
- * language; on the owner's turns a short model call decides whether the owner is talking to
- * Sidekick instead ("stop", "switch to French"). Words only decide whether that call is made.
+ * The model decides everything about meaning: the router picks the translate tool with
+ * `talk` and the language; on the owner's turns the same reply that translates says whether the
+ * owner was talking to Sidekick instead ("stop", "switch to French"). No word lists.
  *
  * Kept free of app imports so the bench (bench/interpreter) runs it under plain Node.
  */
@@ -137,6 +137,11 @@ export const CONTEXT_TURNS = 2;
 
 /**
  * One turn, translated. The answer comes as "SAY: …" so a stray note or echo is easy to drop.
+ * The owner's turns also start with "SIDEKICK:": the same call says whether the line was an
+ * instruction to Sidekick (stop / use another language) rather than said to the other person, so
+ * there is no second call and no word list. Wording chosen on the bench (bench/interpreter,
+ * docs/BENCH.md "Interpreter"): framed as "who is it said to", Gemma 4 E2B almost never left
+ * translating; without "requests to them" it also stopped on "please stop there".
  */
 export function turnPrompt(
   mine: InterpretLanguage,
@@ -156,62 +161,42 @@ export function turnPrompt(
     );
   const before = ctx.length ? `Conversation so far:\n${ctx.join('\n')}\n\n` : '';
   const who = side === 'me' ? 'Owner' : 'Other person';
-  return (
+  const line =
     `${before}Translate from ${from.name} into ${to.name}. Speech recognition may have small ` +
-    `errors.\n${who} (${from.name}): ${heard.slice(0, 600)}\n\n` +
-    `Reply\nSAY: <what they said, in ${to.name}>\nOne line only.`
-  );
-}
-
-/**
- * Might the owner be talking to Sidekick rather than to the other person? Only decides whether
- * the model is asked (controlPrompt, ~3.3 s on a Pixel 5); the model makes the call. Measured:
- * asked inside the translation itself, Gemma 4 E2B translated "stop interpreting" to the driver
- * in 34 of 35 cases (docs/BENCH.md "Interpreter").
- */
-export function mayBeForSidekick(heard: string): boolean {
-  return /\b(sidekick|interpret\w*|translat\w*|stop\w*|enough|done|finish\w*|end|over|switch\w*|change|instead|language|speaks?)\b/i.test(
-    heard,
-  );
-}
-
-/**
- * Asks who the owner's line is for. Framed as "who is it said to" with OTHER first: asked
- * "is this a STOP?", Gemma 4 E2B also stopped on "please stop the car here" (bench/interpreter).
- */
-export function controlPrompt(theirs: InterpretLanguage, heard: string): string {
+    `errors.\n${who} (${from.name}): ${heard.slice(0, 600)}\n\n`;
+  if (side === 'them') return `${line}Reply\nSAY: <what they said, in ${to.name}>\nOne line only.`;
   return (
-    `You are Sidekick, a live interpreter between the phone's owner (English) and someone who ` +
-    `speaks ${theirs.name}. The owner just said:\n"${heard.slice(0, 400)}"\n\n` +
-    'Who is this said to?\n' +
-    'OTHER = to the other person; it will be translated. This is almost always the case, also ' +
-    'when it asks them to stop something or mentions a language.\n' +
-    'END = to you: stop interpreting, the conversation is over.\n' +
-    'LANGUAGE: <language> = to you: switch to or use another language with the other person.\n' +
-    'Reply with one of: OTHER, END, LANGUAGE: <language>.'
+    line +
+    'Is the owner giving you, the interpreter (Sidekick), an instruction about the ' +
+    'interpreting itself?\n' +
+    'NO = it is for the other person (also requests to them like "stop at the corner", ' +
+    'goodbyes, or "is English OK?").\n' +
+    'END = they ask you, the interpreter, to stop interpreting.\n' +
+    'LANGUAGE: <language> = they ask you to use another language with the other person.\n\n' +
+    `Reply\nSIDEKICK: <NO, END or LANGUAGE: <language>>\nSAY: <what they said, in ${to.name}>`
   );
 }
-
-export const CONTROL_MAX_TOKENS = 12;
 
 export type ControlReply = { kind: 'stop' } | { kind: 'switch'; language: string } | null;
 
-/** The model's answer to controlPrompt → stop, switch, or null (translate it). */
+/**
+ * The "SIDEKICK:" line of an owner's turn → stop, switch, or null (for the other person:
+ * translate it). Anything unreadable or missing is null, so the turn is translated as normal.
+ */
 export function parseControlReply(reply: string): ControlReply {
-  const t = reply.replace(/[`*]/g, '').trim().split('\n')[0].trim();
+  const m = /(?:^|\n)\s*\**SIDEKICK\s*\**\s*:\s*\**\s*([^\n]*)/i.exec(reply.replace(/`/g, ''));
+  if (!m) return null;
+  const t = m[1].replace(/\*/g, '').trim();
   if (/^(END|STOP)\b/i.test(t)) return { kind: 'stop' };
   const sw = /^(?:LANGUAGE|SWITCH)\s*:?\s*(.+)$/i.exec(t);
   if (sw) {
-    const language = sw[1]
-      .trim()
-      .replace(/[."]+$/g, '')
-      .trim();
-    return language && !/^<?language>?$/i.test(language) ? { kind: 'switch', language } : null;
+    const language = sw[1].replace(/[."<>]+/g, '').trim();
+    return language && !/^language$/i.test(language) ? { kind: 'switch', language } : null;
   }
   return null;
 }
 
-/** Tokens for one reply: a long sentence in a wordy language, plus the "SAY:" prefix. */
+/** Tokens for one reply: a long sentence in a wordy language, plus the "SIDEKICK:" and "SAY:" lines. */
 export const TURN_MAX_TOKENS = 160;
 
 const same = (a: string, b: string) =>
@@ -234,7 +219,7 @@ export function parseTurnReply(reply: string, heard = ''): string | null {
     : text
         .split('\n')
         .map((l) => l.trim())
-        .filter(Boolean);
+        .filter((l) => l && !/^\**SIDEKICK\s*\**\s*:/i.test(l));
   // ("Taxi!" or a name can be the same in both languages: a lone echo stays.)
   const pick = lines.find((l) => !heard || !same(l, heard)) ?? lines[0] ?? '';
   return pick.replace(/^["“«「]+|["”»」]+$/g, '').trim() || null;
@@ -242,6 +227,8 @@ export function parseTurnReply(reply: string, heard = ''): string | null {
 
 /** The streamed reply so far → the translation text to show while it is still coming. */
 export function partialTranslation(reply: string): string | null {
+  // Not shown while the owner's line is for Sidekick ("SIDEKICK: END" comes before "SAY:").
+  if (parseControlReply(reply)) return null;
   const m = /\bSAY\s*\**\s*:\s*\**\s*([^\n]*)/i.exec(reply);
   if (!m) return null;
   return m[1].replace(/^["“«「]+/, '').trim() || null;

@@ -10,7 +10,7 @@ import { Directory, File } from 'expo-file-system';
 
 import SidekickNative from '../../modules/sidekick-native';
 import { WHISPER_DIR } from './interpreter';
-import { CONTROL_MAX_TOKENS, interpretLanguage, TURN_MAX_TOKENS } from './interpreter-logic';
+import { interpretLanguage, TURN_MAX_TOKENS } from './interpreter-logic';
 import { askLlm } from './llm';
 
 type Log = (line: string) => void;
@@ -43,7 +43,7 @@ async function mtCases(dir: string, log: Log) {
       {
         system: c.system,
         scratch: true,
-        maxTokens: c.control ? CONTROL_MAX_TOKENS : TURN_MAX_TOKENS,
+        maxTokens: TURN_MAX_TOKENS,
       },
     );
     const { system: _s, prompt: _p, ...rest } = c;

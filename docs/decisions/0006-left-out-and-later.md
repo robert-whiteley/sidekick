@@ -225,11 +225,20 @@ Read this before proposing any of these again. Each line says why.
   SenseVoice) failed on the bench's generated Japanese voice (63–112% characters wrong), which
   points at the made-up audio (Kokoro's Japanese voice) rather than the models; needs a real
   speaker. Arabic and the other non-European languages: translation measured, hearing not.
-- The owner talking to Sidekick mid-conversation: asked inside the translation, Gemma translated
-  "stop interpreting" to the other person in 34 of 35 cases; a separate short call only when the
-  line has a word that could point that way, framed as "who is this said to (OTHER / END /
-  LANGUAGE)", was right on 57 of 60 (all 9 stops, 3 of 6 language changes, none of 45 ordinary
-  lines such as "please stop the car here" ended the session). The Done button always works.
+- The owner talking to Sidekick mid-conversation: decided by the model in the same reply as the
+  translation (`SIDEKICK: NO / END / LANGUAGE: <language>` before `SAY:`), with no word list and
+  no second call. Asked as "is the owner giving you, the interpreter, an instruction about the
+  interpreting itself?", right on 57 of 60 lines (laptop): all 9 stops and all 6 language
+  changes, none of the ordinary lines such as "please stop the car here"; the 3 misses were
+  "Thank you very much, that's all for today", which ended the session. Asked as "who is this
+  said to (OTHER / END / LANGUAGE)" inside the same reply, Gemma never switched language (0 of 6)
+  and stopped on 0–9 of 9 depending on the wording.
+  The earlier design (a second call, only for lines with a word like "stop") was a word list
+  and missed "Can you use Italian with her instead?". The Done button always works.
+- Starting it: the translate tool with `talk: true`, not a tool of its own. As its own tool
+  the sorter picked plain translate for 3 of 5 conversation requests under every wording tried;
+  now 5 of 5 reach translate and 4 of 5 set `talk` ("translate for me and the driver" translated
+  the sentence).
 - Voices: the phone's own offline TTS (Android TextToSpeech / iOS AVSpeechSynthesizer), so no
   download from Sidekick. Missing voices are shown with a button to the phone's voice downloads
   (Android) or the Settings path (iPhone; apps can't install voices there).

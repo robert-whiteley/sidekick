@@ -11,10 +11,8 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import {
-  controlPrompt,
   interpretLanguage,
   interpretSystem,
-  mayBeForSidekick,
   type InterpretTurn,
   turnPrompt,
   // @ts-expect-error -- plain Node runs this file and needs the .ts extension
@@ -60,7 +58,7 @@ for (const code of langs) {
 }
 
 // The owner talking to Sidekick (or not): STOP / SWITCH / NO expected. Every owner line of the
-// conversations goes through too (expect "say"), with whether the word check would ask at all.
+// conversations goes through too (expect "say"), with no context, through the same turn prompt.
 const control = (data as unknown as { control?: { en: string; expect: string }[] }).control ?? [];
 const owner = data.turns.filter((t) => t.who === 'me').map((t) => ({ en: t.en, expect: 'say' }));
 for (const code of langs) {
@@ -72,10 +70,9 @@ for (const code of langs) {
         i,
         who: 'me',
         control: c.expect,
-        asked: mayBeForSidekick(c.en),
         src: c.en,
         system: interpretSystem(mine, theirs),
-        prompt: controlPrompt(theirs, c.en),
+        prompt: turnPrompt(mine, theirs, 'me', c.en, []),
       }),
     );
   });

@@ -5,7 +5,7 @@ END / LANGUAGE / OTHER decisions.
     python score.py out_gemma.jsonl [out_other.jsonl ...]
 
 Each line: {lang, i, who, from, to, src, ref, reply, ms} or, for control cases,
-{lang, i, control, asked, src, reply, ms} (see bench/README.md "Interpreter").
+{lang, i, control, src, reply, ms} (see bench/README.md "Interpreter").
 """
 import json, re, sys
 from collections import defaultdict
@@ -31,14 +31,19 @@ def say(reply: str, heard: str = '') -> str:
 
 
 def kind(reply: str) -> str:
-    """Mirror of parseControlReply: stop, switch:<first two letters>, or say."""
-    t = re.sub(r'[`*]', '', reply).strip().split('\n')[0].strip()
+    """Mirror of parseControlReply (the SIDEKICK: line): stop, switch:<first two letters>, or say."""
+    m = re.search(r'(?:^|\n)\s*\**SIDEKICK\s*\**\s*:\s*\**\s*([^\n]*)', reply.replace('`', ''), re.I)
+    if not m:
+        return 'say'
+    t = m.group(1).replace('*', '').strip()
     if re.match(r'^(END|STOP)\b', t, re.I):
         return 'stop'
     m = re.match(r'^(?:LANGUAGE|SWITCH)\s*:?\s*(.+)$', t, re.I)
     if m:
-        lang = m.group(1).strip().lower()
-        return 'switch:' + {'français': 'fr', 'italiano': 'it'}.get(lang, lang[:2])
+        lang = re.sub(r'[."<>]+', '', m.group(1)).strip().lower()
+        if not lang or lang == 'language':
+            return 'say'
+        return 'switch:' + {'français': 'fr', 'francés': 'fr', 'italiano': 'it'}.get(lang, lang[:2])
     return 'say'
 
 
@@ -68,15 +73,18 @@ for path in sys.argv[1:]:
         print(f'mean {d:7} {sum(v) / len(v):6.1f}')
     if groups:
         print(f'left untranslated (echoed): {echoes}')
+        owner = [r for r in rows if not r.get('control') and r['from'] == 'en']
+        wrong = [r for r in owner if kind(r['reply']) != 'say']
+        print(f'owner turns taken as said to Sidekick: {len(wrong)} of {len(owner)}')
+        for r in wrong:
+            print(f'  [{r["lang"]}] {r["src"]!r}: {r["reply"]!r}')
     if ctl:
-        # What the app does: only lines the word check passes are asked; the rest are translated.
         right = defaultdict(lambda: [0, 0])
         ms = []
         for r in ctl:
             exp = r['control']
-            k = kind(r['reply']) if r.get('asked', True) else 'say'
-            if r.get('asked', True):
-                ms.append(r['ms'])
+            k = kind(r['reply'])
+            ms.append(r['ms'])
             right[exp][0] += k == exp
             right[exp][1] += 1
             if k != exp:
@@ -84,4 +92,4 @@ for path in sys.argv[1:]:
         for exp, (ok, n) in sorted(right.items()):
             print(f'{exp:10} right {ok}/{n}')
         if ms:
-            print(f'check: {len(ms)} of {len(ctl)} lines asked, {sum(ms) / len(ms):.0f} ms each')
+            print(f'control lines: {len(ms)}, {sum(ms) / len(ms):.0f} ms each (whole turn)')

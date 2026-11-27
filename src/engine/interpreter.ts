@@ -5,13 +5,10 @@ import { Platform } from 'react-native';
 import SidekickNative from '../../modules/sidekick-native';
 import { connection, downloadFile, isDownloaded, wifiOnlyDownloads } from './downloads';
 import {
-  CONTROL_MAX_TOKENS,
-  controlPrompt,
   type InterpretLanguage,
   interpretLanguage,
   interpretSystem,
   languageFromName,
-  mayBeForSidekick,
   parseControlReply,
   type InterpretSide,
   type InterpretTurn,
@@ -150,7 +147,7 @@ export function startInterpreter(theirsCode: string): boolean {
 }
 
 /**
- * The `interpret` tool: the model named the other person's language. Opens the interpreter
+ * The translate tool with `talk` (tools.ts): the model named the other person's language. Opens the interpreter
  * screen and returns what Sidekick says.
  */
 export function openInterpreter(languageName: string): string {
@@ -294,42 +291,13 @@ export async function finishTurn() {
 }
 
 /** Times of the last turn (logged; the Speed test reads them). */
-export type TurnTiming = { hearMs: number; checkMs: number; translateMs: number };
+export type TurnTiming = { hearMs: number; translateMs: number };
 
 async function translateTurn(turn: InterpretTurn, recent: InterpretTurn[], hearMs: number) {
   const { mine, theirs } = state;
   const system = interpretSystem(mine, theirs);
   const t0 = Date.now();
-  let checkMs = 0;
   try {
-    // The owner may be talking to Sidekick ("that's enough, thanks"): the model decides.
-    if (turn.side === 'me' && mayBeForSidekick(turn.heard)) {
-      const c = parseControlReply(
-        (
-          await askLlm(controlPrompt(theirs, turn.heard), null, () => {}, {
-            system,
-            maxTokens: CONTROL_MAX_TOKENS,
-            scratch: true,
-          })
-        ).text,
-      );
-      checkMs = Date.now() - t0;
-      if (!state.active) return;
-      const others = state.turns.filter((t) => t !== turn);
-      if (c?.kind === 'stop') {
-        set({ turns: others, busy: null, live: null, ended: true });
-        stopInterpreter();
-        return;
-      }
-      if (c?.kind === 'switch') {
-        const next = languageFromName(c.language);
-        set({ turns: others, busy: null, live: null });
-        if (next && next.code !== 'en' && next.code !== theirs.code) startInterpreter(next.code);
-        else if (!next) set({ notice: `I can't interpret ${c.language} offline yet.` });
-        return;
-      }
-    }
-    const t1 = Date.now();
     const reply = (
       await askLlm(
         turnPrompt(mine, theirs, turn.side, turn.heard, recent),
@@ -342,8 +310,23 @@ async function translateTurn(turn: InterpretTurn, recent: InterpretTurn[], hearM
       )
     ).text;
     if (!state.active) return;
+    // The owner may have been talking to Sidekick ("that's enough, thanks"): the same reply says.
+    const c = turn.side === 'me' ? parseControlReply(reply) : null;
+    if (c) {
+      const others = state.turns.filter((t) => t !== turn);
+      if (c.kind === 'stop') {
+        set({ turns: others, busy: null, live: null, ended: true });
+        stopInterpreter();
+        return;
+      }
+      const next = languageFromName(c.language);
+      set({ turns: others, busy: null, live: null });
+      if (next && next.code !== 'en' && next.code !== theirs.code) startInterpreter(next.code);
+      else if (!next) set({ notice: `I can't interpret ${c.language} offline yet.` });
+      return;
+    }
     const said = parseTurnReply(reply, turn.heard);
-    const timing: TurnTiming = { hearMs, checkMs, translateMs: Date.now() - t1 };
+    const timing: TurnTiming = { hearMs, translateMs: Date.now() - t0 };
     lastTiming = timing;
     console.log(`[interpret] ${JSON.stringify({ side: turn.side, lang: theirs.code, ...timing })}`);
     const others = state.turns.filter((t) => t !== turn);

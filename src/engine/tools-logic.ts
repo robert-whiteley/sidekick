@@ -450,15 +450,18 @@ export const TOOLS: ToolSpec[] = [
   },
   {
     name: 'translate',
-    desc: 'translate text into another language',
+    desc: 'translate text into another language, or interpret a spoken conversation with someone who speaks it',
     kind: 'action',
-    args: { text: s('the text, or empty for the text in the photo'), to: req('language') },
-  },
-  {
-    name: 'interpret',
-    desc: 'live two-way spoken interpreting with someone who speaks another language (a conversation between two people, not translating a text)',
-    kind: 'action',
-    args: { language: req("the other person's language, in English, e.g. Spanish") },
+    args: {
+      text: s('the text, or empty for the text in the photo'),
+      to: req('language'),
+      // One tool for both: Gemma 4 E2B's sorter picked "translate" for 3 of 5 conversation
+      // requests when interpreting was a tool of its own (bench/interpreter/routing.ts).
+      talk: {
+        type: 'boolean',
+        desc: 'true if I want to talk with someone in that language: live interpreting both ways',
+      },
+    },
   },
   {
     name: 'repeat',
@@ -525,7 +528,6 @@ export const NOT_IN_ROUTINES = new Set([
   'call_back',
   'move_event',
   'clipboard',
-  'interpret',
 ]);
 const norm = (q: string) =>
   ` ${q

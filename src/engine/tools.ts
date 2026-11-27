@@ -313,8 +313,6 @@ export async function runTool(
       return command({ type: 'camera', on: a.on === true });
     case 'camera_setting':
       return command({ type: 'cameraSetting', change: cameraChangeFor(a, question) });
-    case 'interpret':
-      return { kind: 'reply', text: openInterpreter(str(a.language)) };
     case 'feedback':
       return runFeedback(str(a.text));
     case 'calculate':
@@ -340,6 +338,8 @@ export async function runTool(
       await saveFact(str(a.fact).replace(/[.!]+$/, ''));
       return { kind: 'reply', text: "Got it, I'll remember that." };
     case 'translate':
+      if (a.talk === true && !ctx.routine)
+        return { kind: 'reply', text: openInterpreter(str(a.to)) };
       return { kind: 'translate', text: str(a.text), to: str(a.to) };
     case 'repeat':
       return command({ type: 'repeat' });

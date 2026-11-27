@@ -107,6 +107,18 @@ describe('running a tool', () => {
     expect(out).toEqual({ kind: 'plan', plan });
     expect(planIntent).toHaveBeenCalledWith({ type: 'timer', seconds: 300, label: '' }, NOW);
   });
+  it('translate with talk opens the interpreter; without, it translates the text', async () => {
+    const talk = { text: '', to: 'Spanish', talk: true };
+    expect(await runTool('translate', talk, 'help me talk to him', quiet, NOW)).toEqual({
+      kind: 'reply',
+      text: 'Interpreting',
+    });
+    expect(await runTool('translate', { text: 'hello', to: 'Spanish' }, 'q', quiet, NOW)).toEqual({
+      kind: 'translate',
+      text: 'hello',
+      to: 'Spanish',
+    });
+  });
   it('sends an info tool to its own handler as canonical words', async () => {
     const out = await runTool('weather', { place: 'Leeds' }, 'umbrella needed in Leeds?', quiet);
     expect(out).toEqual({ kind: 'rules', text: "what's the weather in Leeds" });

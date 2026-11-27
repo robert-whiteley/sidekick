@@ -642,9 +642,7 @@ general, French "Est-ce pas grave", dropped greetings). Bergamot reversed a Japa
 | What                                                    | Result                                                                                               |
 | ------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
 | Translation turn (62 turns)                             | median 5.3 s, 90th percentile 6.0 s; first words after 3.2 s                                         |
-| Control check (60 owner lines)                          | 3.3 s each, only on the 30 lines with a trigger word                                                 |
 | chrF (Arabic, Japanese, Portuguese, 10 + 10 turns each) | 66.1 / 71.8, 53.1 / 57.6, 71.1 / 82.1 — within 5 points of the laptop                                |
-| Control decisions                                       | Same as the laptop (below)                                                                           |
 | English hearing (Parakeet v2, 20 clips)                 | 0.56 s median per line, 0.84 s worst                                                                 |
 | Peak app memory (PSS)                                   | 3.1 GB during the bench run (Gemma loaded)                                                           |
 | Downloads                                               | Whisper small 375 MB, Parakeet v3 487 MB (once, kept); Gemma and the voices are already on the phone |
@@ -668,18 +666,35 @@ WER % (CER for Japanese):
 Parakeet v3 for the European languages, Whisper small for the rest. Japanese is not verified:
 every model failed on Kokoro's Japanese voice, which points at the made-up audio.
 
-### Owner talking to Sidekick mid-conversation
+### Owner talking to Sidekick mid-conversation (laptop, 27 Nov)
 
-Asked inside the translation prompt, Gemma translated "stop interpreting" to the other person in
-34 of 35 cases. A separate short call ("who is this said to: OTHER / END / LANGUAGE"), only for
-lines with a trigger word, on Spanish, German and Japanese sessions:
+The owner's turn reply says it: `SIDEKICK: NO / END / LANGUAGE: <language>`, then `SAY:`. No
+word list, no second call. 60 owner lines (per language 5 said to Sidekick, 5 that only look like it,
+10 ordinary) in Spanish, German and Japanese sessions, by how the question is put:
 
-| Line said                               | Right                                                            |
-| --------------------------------------- | ---------------------------------------------------------------- |
-| To the other person                     | 45/45 (none ended the session, incl. "please stop the car here") |
-| Stop                                    | 9/9                                                              |
-| Switch to French                        | 3/3                                                              |
-| "Can you use Italian with her instead?" | 0/3 (kept translating)                                           |
+| Asked in the same reply as                            | Ordinary (45) | Stop (9) | Switch (6) | Laptop ms |
+| ----------------------------------------------------- | ------------- | -------- | ---------- | --------- |
+| "Who is this said to? OTHER / END / LANGUAGE"         | 42–45         | 0–9      | 0          | 1100–3900 |
+| "An instruction to you about the interpreting?" (app) | **42**        | **9**    | **6**      | 1350      |
+| The same without "requests to them like …"            | 41            | 9        | 5          | 1150      |
+| JSON `{"for_interpreter": …}`                         | 35            | 9        | 2          | 1680      |
+| Before: a second call, only with a word like "stop"   | 45            | 9        | 3          | +3.3 s    |
+
+The 3 misses: "Thank you very much, that's all for today" ended the session (all three
+languages). Owner turns inside the conversations, with context: 0 of 30 taken as said to
+Sidekick. Translation quality unchanged (chrF en→xx 66.6 vs 66.3, xx→en 71.8). On the phone
+this saves the 3.3 s second call on those lines and adds about 70 prompt tokens to every owner
+turn (not re-timed on the phone).
+
+Starting the interpreter (`routing.ts`, the app's sorter and then the tool's arguments):
+
+| Request                                                                    | As its own tool | translate + `talk`  |
+| -------------------------------------------------------------------------- | --------------- | ------------------- |
+| 5 conversation requests ("help me talk to this taxi driver in Spanish", …) | 1–2 of 5        | 4 of 5              |
+| "translate 'where is the station' into Spanish"                            | translate       | translate (no talk) |
+| 3 questions about a language                                               | answer          | answer              |
+
+The miss: "translate for me and the driver, he speaks German" translated the sentence.
 
 ### Still weak / not measured
 
@@ -689,3 +704,4 @@ lines with a trigger word, on Spanish, German and Japanese sessions:
 - The interpreter screen on a phone, and everything on iPhone (Apple speech, voices; the iOS
   code was not compiled here).
 - A turn of ~5 s is usable but slow; Bergamot is the faster fallback if it feels too slow.
+- The one-call stop / switch and the translate + `talk` start are measured on the laptop only.

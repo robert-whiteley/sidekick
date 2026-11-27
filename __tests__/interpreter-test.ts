@@ -1,16 +1,15 @@
 /** The interpreter's pure logic: languages, prompts, reading the model's replies, routing. */
 import {
-  controlPrompt,
   INTERPRET_LANGUAGES,
   interpretLanguage,
   languageFromName,
-  mayBeForSidekick,
   parseControlReply,
   parseTurnReply,
   partialTranslation,
   turnPrompt,
 } from '@/engine/interpreter-logic';
-import { relevantTools } from '@/engine/tools-logic';
+import { catalogSystem, DECIDE_TOOLS, lockSafe } from '@/engine/decide-logic';
+import { toolByName } from '@/engine/tools-logic';
 
 const en = interpretLanguage('en')!;
 const es = interpretLanguage('es')!;
@@ -85,36 +84,44 @@ describe('reading the translation', () => {
 });
 
 describe('is the owner talking to Sidekick?', () => {
-  it('asks the model only when a word could point that way', () => {
-    expect(mayBeForSidekick("OK Sidekick, that's enough")).toBe(true);
-    expect(mayBeForSidekick('Please stop the car here')).toBe(true);
-    expect(mayBeForSidekick('Can we use Dutch instead?')).toBe(true);
-    expect(mayBeForSidekick('How much is it to the old harbour?')).toBe(false);
+  it("the owner's turn asks who it is said to in the same reply; the other side's doesn't", () => {
+    expect(turnPrompt(en, es, 'me', 'Please stop here')).toContain(
+      'SIDEKICK: <NO, END or LANGUAGE',
+    );
+    expect(turnPrompt(en, es, 'them', 'Pare aquí')).not.toContain('SIDEKICK:');
   });
-  it('reads END / LANGUAGE / OTHER', () => {
-    expect(parseControlReply('END')).toEqual({ kind: 'stop' });
-    expect(parseControlReply('**END**')).toEqual({ kind: 'stop' });
-    expect(parseControlReply('LANGUAGE: French.')).toEqual({ kind: 'switch', language: 'French' });
-    expect(parseControlReply('LANGUAGE: <language>')).toBeNull();
-    expect(parseControlReply('OTHER')).toBeNull();
+  it('reads END / LANGUAGE / NO from the SIDEKICK line', () => {
+    expect(parseControlReply('SIDEKICK: END\nSAY: Ya está')).toEqual({ kind: 'stop' });
+    expect(parseControlReply('**SIDEKICK:** **END**')).toEqual({ kind: 'stop' });
+    expect(parseControlReply('SIDEKICK: LANGUAGE: French.\nSAY: x')).toEqual({
+      kind: 'switch',
+      language: 'French',
+    });
+    expect(parseControlReply('SIDEKICK: LANGUAGE: <language>')).toBeNull();
+    expect(parseControlReply('SIDEKICK: NO\nSAY: Pare aquí')).toBeNull();
+  });
+  it('an unreadable or missing SIDEKICK line translates as normal', () => {
+    expect(parseControlReply('SAY: Hola')).toBeNull();
+    expect(parseControlReply('SIDEKICK: NO\nSAY: Okay Sidekick: stop')).toBeNull();
     expect(parseControlReply('Hola')).toBeNull();
+    expect(parseControlReply('SIDEKICK: ???\nSAY: Hola')).toBeNull();
+    expect(parseTurnReply('SIDEKICK: NO\nSAY: Pare aquí, por favor.')).toBe(
+      'Pare aquí, por favor.',
+    );
+    expect(parseTurnReply('SIDEKICK: NO\nPare aquí.')).toBe('Pare aquí.');
   });
-  it('the prompt carries the line and the other language', () => {
-    const p = controlPrompt(es, 'Please stop here');
-    expect(p).toContain('"Please stop here"');
-    expect(p).toContain('speaks Spanish');
+  it("doesn't show a translation of a line meant for Sidekick while it streams", () => {
+    expect(partialTranslation('SIDEKICK: END\nSAY: Ya pue')).toBeNull();
+    expect(partialTranslation('SIDEKICK: NO\nSAY: Pare aq')).toBe('Pare aq');
   });
 });
 
 describe('routing', () => {
-  const names = (q: string) => relevantTools(q).map((t) => t.name);
-  it('offers the interpreter for a conversation', () => {
-    expect(names('help me talk to this taxi driver in Spanish')).toContain('interpret');
-    expect(names('be my interpreter, she speaks Japanese')).toContain('interpret');
-    expect(names('translate for me and the driver, he speaks German')).toContain('interpret');
-  });
-  it('not for translating a text, or a question about a language', () => {
-    expect(names("translate 'where is the station' into Spanish")).not.toContain('interpret');
-    expect(names('what language do they speak in Brazil')).not.toContain('interpret');
+  it('the translate tool can start the interpreter (talk), chosen by the model', () => {
+    const t = toolByName('translate')!;
+    expect(t.args.talk?.type).toBe('boolean');
+    expect(DECIDE_TOOLS).toContain(t);
+    expect(catalogSystem()).toContain('or interpret a spoken conversation');
+    expect(lockSafe('translate', { to: 'Spanish', talk: true })).toBe(false);
   });
 });

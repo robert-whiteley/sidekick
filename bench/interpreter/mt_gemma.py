@@ -19,7 +19,7 @@ with open(out, 'a') as f:
         c = json.loads(line)
         if (c['lang'], c['i'], c.get('control')) in done:
             continue
-        conv = eng.create_conversation(system_message=c['system'], max_output_tokens=160)
+        conv = eng.create_conversation(system_message=c['system'], max_output_tokens=c.pop('maxTokens', 160))
         t0 = time.time()
         msg = conv.send_message(c['prompt'])
         dt = time.time() - t0

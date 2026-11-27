@@ -194,6 +194,8 @@ owner lines that are (or only look like) instructions to Sidekick.
 | `mt_bergamot.py`          | The same through Firefox Translations (Bergamot) models, for comparison.                       |
 | `roundtrip.ts`            | Turns an output's English→X translations into X→English cases (round trip).                    |
 | `score.py`                | chrF per language and direction, ms per turn, untranslated echoes, control decisions.          |
+| `routing.ts`              | Sorter and translate-tool cases: does a conversation request start the interpreter?            |
+| `ts-resolve.mjs`          | Lets plain Node run the app's `.ts` files (imports without extensions), for `routing.ts`.      |
 | `gen_audio.py`            | Speaks the lines with offline TTS (16 kHz WAV) for the speech-to-text bench.                   |
 | `stt.py`                  | Words wrong (characters for Japanese) and time per line for Parakeet v3, Whisper, SenseVoice.  |
 | `fetch.sh`, `fetch_mt.py` | Download the models (about 4.5 GB).                                                            |
