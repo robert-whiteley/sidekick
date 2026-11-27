@@ -45,6 +45,19 @@ test('the window allows the limit per minute, then says how long to wait', () =>
   expect(w.left()).toBe(1);
 });
 
+test('how long until several requests in a row are allowed', () => {
+  const c = fakeClock();
+  const w = new RateWindow(3, 60_000, c.now);
+  expect(w.waitForMs(3)).toBe(0);
+  w.take(); // at 0 s
+  c.sleep(10_000);
+  w.take(); // at 10 s
+  c.sleep(10_000);
+  expect(w.waitForMs(1)).toBe(0);
+  expect(w.waitForMs(2)).toBe(40_000); // the first ages out at 60 s
+  expect(w.waitForMs(3)).toBe(50_000); // both at 70 s
+});
+
 test('Wikimedia limit stays under the 10 a minute allowed without contact details', () => {
   expect(WIKIMEDIA_PER_MIN).toBeLessThan(10);
 });

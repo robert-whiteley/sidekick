@@ -211,13 +211,13 @@ export const TOOLS: ToolSpec[] = [
   },
   {
     name: 'event',
-    desc: 'add a calendar event',
+    desc: 'add an appointment or meeting to my calendar (not an alarm or a reminder)',
     kind: 'action',
     args: { title: req(), when: req('time words, e.g. Friday at 3pm'), place: s() },
   },
   {
     name: 'reminder',
-    desc: 'a reminder notification with a message at a time, or a to-do (not an alarm sound)',
+    desc: 'remind me of something with a notification at a time, or a to-do (not an alarm sound; if you are to do or tell me something then, that is routine)',
     kind: 'action',
     args: { what: req('what to do'), when: s('time words, or empty for a to-do') },
   },
@@ -240,7 +240,10 @@ export const TOOLS: ToolSpec[] = [
     name: 'timer',
     desc: 'a countdown that rings after some minutes',
     kind: 'action',
-    args: { minutes: num(0.1, 1440, true), label: s() },
+    args: {
+      minutes: num(0.1, 1440, true, 'may be a fraction, e.g. 1.5 for 90 seconds'),
+      label: s(),
+    },
   },
   {
     name: 'navigate',
@@ -289,7 +292,7 @@ export const TOOLS: ToolSpec[] = [
   },
   {
     name: 'phone_setting',
-    desc: 'torch, volume, do not disturb, brightness, or open the wifi/bluetooth/airplane switch',
+    desc: 'torch, volume, do not disturb, brightness, or open the wifi/bluetooth/airplane switch (not the camera or listening)',
     kind: 'action',
     args: {
       setting: oneOf(
@@ -605,7 +608,11 @@ export function parseFillReply(reply: string, tool: string): ToolCall | null {
   const r = o as Record<string, unknown>;
   if (r.none === true || r.tool === 'none') return { tool: 'none', args: {} };
   // Also accepted: the router's own shape {"tool":…, "args":{…}}.
-  const inner = r.args ?? r.arguments;
+  // And the arguments under the tool's own name, {"listening":{"on":false}} (seen on the phone).
+  const keys = Object.keys(r);
+  const only = keys.length === 1 ? r[tool] : undefined;
+  const named = only && typeof only === 'object' ? only : undefined;
+  const inner = r.args ?? r.arguments ?? named;
   const args = inner && typeof inner === 'object' ? (inner as Record<string, unknown>) : r;
   return { tool, args };
 }

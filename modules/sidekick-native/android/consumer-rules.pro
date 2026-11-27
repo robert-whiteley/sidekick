@@ -12,3 +12,7 @@
 
 # sherpa-onnx's TTS calls the chunk callback's invoke([F)Ljava/lang/Integer; over JNI.
 -keep class dev.sidekick.engine.TtsChunks { *; }
+
+# The picture library (src/main/cpp/sd_jni.cpp) calls the progress callback's onProgress by name.
+# Renamed by R8, every picture failed with NoSuchMethodError on the phone (release build).
+-keep interface dev.sidekick.engine.ImageGen$Progress { *; }

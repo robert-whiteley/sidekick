@@ -12,7 +12,7 @@ import { listSpeakers } from '@/memory/store';
 import { fetchJson, fetchText, isOnline, searchWeb, type SearchOptions } from './lookup';
 import { mergeSources, USER_AGENT, type WebSource } from './lookup-logic';
 import { topicWords } from './news-logic';
-import { isWikimedia, politeFetch, wikimedia } from './rate-limit';
+import { isWikimedia, politeFetch, WIKIMEDIA_PER_MIN, wikimedia } from './rate-limit';
 import {
   chooseReads,
   cleanArticle,
@@ -22,6 +22,7 @@ import {
   htmlToText,
   MAX_PAGE_BYTES,
   MAX_PAGES,
+  MIN_WIKI_READS,
   PAGE_TIMEOUT_MS,
   parsePlan,
   parseWikipediaArticle,
@@ -39,6 +40,7 @@ import {
   RESEARCH_OFFLINE,
   searchesWithin,
   siteName,
+  WIKI_PER_SEARCH,
   wikipediaArticleUrl,
   wikipediaSearchUrl,
   wikipediaTitle,
@@ -95,6 +97,9 @@ export type ResearchDeps = {
   now: () => Date;
   /** Wikimedia requests this phone may still make this minute (rate-limit.ts). */
   wikiLeft?: () => number;
+  /** How long until [n] Wikimedia requests in a row are allowed. */
+  wikiWaitMs?: (n: number) => number;
+  sleep?: (ms: number) => Promise<void>;
 };
 
 /** Reads one result: a Wikipedia article through the API, anything else as HTML. */
@@ -229,6 +234,16 @@ export async function research(
   const wikiLeft = deps.wikiLeft ?? (() => wikimedia.left());
   // Fewer searches when Wikimedia's per-minute budget is short, keeping room to read articles.
   const all = planned.length ? planned : fallbackQueries(topic, names);
+  // Right after other look-ups Wikimedia's minute can be used up, and then every search came back
+  // empty ("I couldn't find anything", 3 of 10 on the phone with research after research).
+  // Research takes a minute anyway: wait for the window rather than answer with nothing.
+  const need = Math.min(WIKIMEDIA_PER_MIN, all.length * WIKI_PER_SEARCH + MIN_WIKI_READS);
+  const wait = (deps.wikiWaitMs ?? ((n: number) => wikimedia.waitForMs(n)))(need);
+  if (wait > 0) {
+    onStatus(progress.waiting(Math.ceil(wait / 1000)));
+    const sleep = deps.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
+    for (let left = wait; left > 0 && !cancelled(); left -= 1000) await sleep(Math.min(1000, left));
+  }
   const queries = all.slice(0, searchesWithin(all.length, wikiLeft()));
   timings.planMs = Date.now() - t0;
   if (!queries.length || cancelled()) return say(RESEARCH_NOTHING);

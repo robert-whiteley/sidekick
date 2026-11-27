@@ -498,6 +498,7 @@ export function cleanReport(text: string, sourceCount: number): string {
 /** Progress lines, as each step starts. */
 export const progress = {
   planning: 'Planning the research…',
+  waiting: (s: number) => `Waiting ${s} s for Wikipedia's per-minute limit…`,
   searching: (i: number, n: number, q: string) => `Searching ${i} of ${n}: ${q}…`,
   reading: (i: number, n: number, site: string) => `Reading ${i} of ${n}: ${site}…`,
   writing: (n: number) => `Writing the report from ${n} ${n === 1 ? 'source' : 'sources'}…`,

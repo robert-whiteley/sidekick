@@ -279,6 +279,28 @@ describe('research()', () => {
     expect(r.web.map((w) => w.url)).toEqual(['https://en.wikipedia.org/wiki/Tidal_power']);
   });
 
+  test('right after other look-ups: waits for the Wikimedia minute instead of finding nothing', async () => {
+    // Seen on the phone: research straight after research searched with no budget left.
+    const waits: number[] = [];
+    const asked: number[] = [];
+    const status: string[] = [];
+    const d = deps({
+      wikiWaitMs: (n) => (asked.push(n), 2500),
+      sleep: async (ms) => void waits.push(ms),
+    });
+    const r = await research(
+      'Research tidal power',
+      () => {},
+      (s) => status.push(s),
+      d,
+    );
+    expect(asked).toEqual([7]); // 2 searches × 2 + 3 reads
+    expect(waits).toEqual([1000, 1000, 500]);
+    expect(status).toContain("Waiting 3 s for Wikipedia's per-minute limit…");
+    expect(d.search).toHaveBeenCalledTimes(2);
+    expect(r.web.length).toBeGreaterThan(0);
+  });
+
   test('a page that cannot be read still gives its search snippet', async () => {
     const r = await research(
       'Research tidal power',

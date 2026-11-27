@@ -114,6 +114,24 @@ describe('filling one tool', () => {
       ),
     ).toEqual({ tool: 'edit_photo', args: { op: 'crop', shape: 'square' } });
   });
+  it('reads the arguments under the tool’s own name', () => {
+    // Seen on the phone for "Stop listening".
+    expect(parseFillReply('{"listening":{"on":false}}', 'listening')).toEqual({
+      tool: 'listening',
+      args: { on: false },
+    });
+    // A lone argument that shares the tool's name is still an argument.
+    expect(parseFillReply('{"timer":5}', 'timer')).toEqual({ tool: 'timer', args: { timer: 5 } });
+  });
+  it('tells the sorter alarms and reminders are not calendar events', () => {
+    const sys = catalogSystem(DECIDE_TOOLS);
+    expect(sys).toMatch(/^event: .*not an alarm or a reminder/m);
+    expect(sys).toMatch(/^reminder: .*that is routine/m);
+    expect(sys).toMatch(/^phone_setting: .*not the camera or listening/m);
+    expect(fillPrompt('90 seconds', new Date(2026, 10, 27), toolByName('timer')!)).toContain(
+      '1.5 for 90 seconds',
+    );
+  });
   it('reads bare arguments, the router shape, none, and refuses junk', () => {
     expect(parseFillReply('{"minutes":5}', 'timer')).toEqual({
       tool: 'timer',
