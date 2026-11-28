@@ -239,7 +239,7 @@ flow_settings_by_voice() {
 flow_web_no() {
   # With Online off, each answer is followed by the short WEB/NO check (does this need the web?);
   # it must finish and log its result for every question.
-  has '^Online: ' && { tap '^Online: ' || return 1; }
+  has '^Online: ' && { tap '^Online: .*' || return 1; }
   wait_for '^Offline: answers come only' 30 || return 1
   local q fail=0 n end
   for q in 'Who won the 2026 Tour de France?' 'What is 17 times 23?' 'What did I do yesterday?'; do
@@ -258,7 +258,7 @@ flow_web_no() {
 # online_on: online lookup on, with the chat's Online button (as a user would).
 online_on() {
   has '^Online: ' && return 0
-  tap '^Offline: answers come only' || return 1
+  tap '^Offline: answers come only.*' || return 1
   wait_for '^Online: ' 30
 }
 
