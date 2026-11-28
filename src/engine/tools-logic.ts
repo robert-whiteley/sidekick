@@ -529,6 +529,17 @@ export const TOOLS: ToolSpec[] = [
     },
   },
   {
+    // Typed or said in the chat, not to the interpreter screen (which reads its own turns):
+    // without a session open the reply says so (interpreter-logic.ts interpreterControl).
+    name: 'interpreter',
+    desc: "stop interpreting, or change the other person's language in the interpreter",
+    kind: 'action',
+    args: {
+      stop: { type: 'boolean', desc: 'true to stop interpreting' },
+      to: s("the other person's new language, if named"),
+    },
+  },
+  {
     name: 'repeat',
     desc: 'say the last answer again',
     kind: 'action',
@@ -594,6 +605,7 @@ export const NOT_IN_ROUTINES = new Set([
   'camera',
   'camera_setting',
   'app_setting',
+  'interpreter',
   // A routine's text can carry outside words: never send, reply, call back, move or read copied text.
   'draft',
   'reply_message',

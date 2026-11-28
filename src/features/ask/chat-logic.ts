@@ -146,3 +146,27 @@ export function partialStatus(text: string, maxWords = 14): string {
   const shown = words.length > maxWords ? `…${words.slice(-maxWords).join(' ')}` : words.join(' ');
   return `“${shown}…”`;
 }
+
+/**
+ * Talking over an answer stops it; what is said next is the next question. If nothing comes
+ * within this long (the words were cut off, too short or not heard), the chat says so.
+ */
+export const BARGE_WAIT_MS = 15_000;
+
+export const NOT_HEARD_AFTER_BARGE =
+  "I stopped to listen, but didn't catch what you said. Please say it again.";
+
+/**
+ * Nothing was heard after talking over the answer [replyId]: its empty bubble (stopped before a
+ * word) gets the plain line; a part-answer is kept and the line follows it as its own message.
+ */
+export function quietAfterBargeIn(
+  msgs: ChatMessage[],
+  replyId: string | null,
+  at: number,
+): ChatMessage[] {
+  const reply = replyId ? msgs.find((m) => m.id === replyId) : undefined;
+  if (reply && !reply.text.trim())
+    return patchMessage(msgs, reply.id, { text: NOT_HEARD_AFTER_BARGE, pending: false });
+  return [...msgs, { id: `a${at}b`, role: 'assistant', text: NOT_HEARD_AFTER_BARGE, at }];
+}

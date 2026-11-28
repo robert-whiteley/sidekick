@@ -117,7 +117,7 @@ export function catalogSystem(tools: ToolSpec[] = DECIDE_TOOLS, lookup = true): 
   return (
     'You sort requests to a phone assistant. Reply with one word only.\n' +
     'answer: a question, a chat, advice, or a request to write, explain or plan something; also ' +
-    'questions about a photo that comes with the request.\n' +
+    'questions about a photo or file that comes with the request.\n' +
     'memory: a question about my own life that my saved memories answer: what I saw, heard, said, ' +
     'did or noted, people I know, where I left things, and recaps.\n' +
     (lookup
@@ -141,8 +141,13 @@ export function decidePrompt(
   question: string,
   previous?: { q: string; a: string },
   photo = false,
+  file = false,
 ): string {
-  const line = photo ? `Request (with a photo): ${question}` : `Request: ${question}`;
+  const line = photo
+    ? `Request (with a photo): ${question}`
+    : file
+      ? `Request (with a file attached): ${question}`
+      : `Request: ${question}`;
   if (!previous) return line;
   const clip = (t: string, n: number) => (t.length > n ? `${t.slice(0, n)}…` : t);
   return (

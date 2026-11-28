@@ -36,6 +36,12 @@ import { IPHONE, onIphone, platformText } from './platform-text';
 import { questionPart, SYSTEM_PROMPT, withAnswerStyle } from './prompts';
 import { keptFile } from '@/memory/media-files';
 import { speechClipFor, usedSpeechClip } from './speech-clip';
+import {
+  WEB_OFFER_MAX_TOKENS,
+  WEB_OFFER_SYSTEM,
+  wantsWebOffer,
+  webOfferPrompt,
+} from '@/web/lookup-logic';
 import type { Moment } from '@/memory/store';
 import { MEMORY_LIMIT, memoryContext, pickFacts } from './prompt-budget';
 import {
@@ -121,6 +127,11 @@ export type AnswerResult = {
   /** A button under the answer that opens a screen in the app (e.g. the erase brush). */
   /** open: Android opens this original (a found photo or file) in the phone's own app. */
   link?: { label: string; href: string; open?: string };
+  /**
+   * Asked with [attached]: the model chose no phone tool, so nothing was done here and the caller
+   * answers about the attached file itself (shared-doc.ts answerShared).
+   */
+  notTool?: boolean;
 };
 
 /**
@@ -268,6 +279,17 @@ export async function answer(
     dryActions?: boolean;
     /** The answer will be read out: plain sentences, no lists or tables. */
     voiceAnswer?: boolean;
+    /**
+     * Online lookup off and the answer couldn't give the facts asked for (the model checks after
+     * the answer is shown): offer the "Search the web in your browser" link under it.
+     */
+    onWebOffer?: () => void;
+    /**
+     * A file is attached in the chat: only the tool choice runs here, so "turn off spoken answers"
+     * still changes the setting; anything else comes back as `notTool` for the caller to answer
+     * about the file.
+     */
+    attached?: boolean;
   },
 ): Promise<AnswerResult> {
   onText = trackAnswer(onText); // "repeat that"
@@ -341,6 +363,8 @@ export async function answer(
       case 'rules':
         return answer(o.text, null, onText, { ...opts, routed: true });
       case 'translate':
+        // "Translate this" with a file attached: the file is translated by the caller.
+        if (opts?.attached && !o.text.trim()) return null;
         return translate(o.text, o.to, !o.text.trim());
       case 'recap': {
         const recap = await answerRecap(o.req, onText);
@@ -481,7 +505,7 @@ export async function answer(
 
   // Cells pasted into the question (a bill, a list of figures): worked out exactly on them like
   // an attached spreadsheet, not added up by the model.
-  const pasted = photoNow || opts?.routed ? null : pastedTable(question);
+  const pasted = photoNow || opts?.routed || opts?.attached ? null : pastedTable(question);
   if (pasted) {
     const r = await answerPastedTable(pasted, onText, status, offRecord);
     return { text: r.text, usedPhoto: null, sources: [], ms: r.ms, ttftMs: 0 };
@@ -489,7 +513,7 @@ export async function answer(
 
   // A link in the question ("summarise https://…"): that one page is read (Online on) and the
   // answer comes from it, with the page shown as the source; offline it waits (shared-doc.ts).
-  const pageUrl = photoNow ? null : firstUrl(question);
+  const pageUrl = photoNow || opts?.attached ? null : firstUrl(question);
   if (pageUrl) {
     const r = await answerAboutPage(pageUrl, question, onText, status, offRecord);
     if (saveHere && !r.waitingOnline && !answerStopped())
@@ -525,6 +549,7 @@ export async function answer(
       previous: last && chatNow.idleFor(Date.now()) < IDLE_COMPACT_MS ? last : undefined,
       draftOpen,
       photo: !!photoNow,
+      file: !!opts?.attached,
     }).catch(() => ({ decision: { kind: 'answer' } as Decision, ms: 0, reply: '' }));
     const mem = decision.kind === 'answer' && decision.memory ? ' memory' : '';
     console.log(`[decide] ${decisionLabel(decision)}${mem} (${reply}) in ${ms} ms`);
@@ -549,6 +574,10 @@ export async function answer(
       }
     }
     if (locked) return done(UNLOCK_FIRST);
+    if (opts?.attached) {
+      console.log(`[decide] about the attached file`);
+      return { text: '', usedPhoto: null, sources: [], ms: 0, ttftMs: 0, notTool: true };
+    }
     lookupWanted = decision.kind === 'lookup';
     newsWanted = decision.kind === 'lookup' && !!decision.news;
     // A tool that didn't run falls through to an answer without a view on memory.
@@ -700,6 +729,7 @@ export async function answer(
   // (Send now asks it together with the new message). The model's chat may hold the question
   // with no answer: the next question starts a fresh chat from the summary and the kept turns.
   if (answerStopped() && !text.trim()) {
+    console.log(`[ask] stopped before the answer began${reachedModel ? '' : ' (not asked yet)'}`);
     if (reachedModel) {
       if (offRecord) offRecordStarted = false;
       else conv.restart();
@@ -754,6 +784,32 @@ export async function answer(
     void usedSpeechClip(question, text, notes ? sources : [], askUsedClip).then(
       (clip) => clip && show(clip),
     );
+  }
+
+  // Online lookup off, and nothing offered yet: if the answer couldn't give the facts asked for
+  // ("I don't know"), the model says so in a short check and the browser link is offered.
+  if (
+    opts?.onWebOffer &&
+    !getSettings().webLookup &&
+    !lookupWanted &&
+    !image &&
+    !looked.offline &&
+    !opts.routine &&
+    !answerStopped() &&
+    text.trim()
+  ) {
+    const offer = opts.onWebOffer;
+    void askLlm(webOfferPrompt(question, text), null, () => {}, {
+      system: WEB_OFFER_SYSTEM,
+      maxTokens: WEB_OFFER_MAX_TOKENS,
+      scratch: true,
+    })
+      .then((r) => {
+        const yes = wantsWebOffer(r.text);
+        console.log(`[lookup] offline answer: ${yes ? 'browser link offered' : 'answered'}`);
+        if (yes) offer();
+      })
+      .catch(() => {});
   }
 
   return {

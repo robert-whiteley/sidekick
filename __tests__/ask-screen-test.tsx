@@ -6,6 +6,8 @@ import { AskScreen } from '@/features/ask/AskScreen';
 
 const mockAnswer = jest.fn();
 const mockStop = jest.fn();
+const mockShared = jest.fn();
+const mockListeners: Record<string, (e: Record<string, unknown>) => void> = {};
 
 jest.mock('@op-engineering/op-sqlite', () => ({ open: jest.fn() }));
 jest.mock('expo-camera', () => ({
@@ -85,12 +87,24 @@ jest.mock('@/features/ask/LiveConversation', () => ({ LiveConversation: () => nu
 jest.mock('@/features/ask/WebLookupUi', () => ({
   OnlineBadge: () => null,
   WebSources: () => null,
-  WebSearchLink: () => null,
+  WebSearchLink: () => {
+    const { Text } = jest.requireActual('react-native');
+    return <Text>Search in your browser</Text>;
+  },
+}));
+jest.mock('@/engine/shared-doc', () => ({
+  ...jest.requireActual('@/engine/shared-doc'),
+  pickAttachment: async () => ({ filePath: '/cache/notes.pdf', fileName: 'notes.pdf' }),
+  attachmentFor: async () => ({ kind: 'pdf', name: 'notes.pdf', at: 1, text: 'The notes.' }),
+  answerShared: (...a: unknown[]) => mockShared(...a),
 }));
 jest.mock('../modules/sidekick-native', () => ({
   __esModule: true,
   default: {
-    addListener: () => ({ remove: () => {} }),
+    addListener: (name: string, f: (e: Record<string, unknown>) => void) => {
+      mockListeners[name] = f;
+      return { remove: () => {} };
+    },
     kvGet: () => null,
     kvSet: () => {},
   },
@@ -286,4 +300,128 @@ test('long-press send while answering sends now; idle it still goes Off the reco
   expect(mockAnswer.mock.calls[1][0]).toBe('short one');
   expect(mockAnswer.mock.calls[1][3]).toMatchObject({ offTheRecord: false });
   await act(async () => pending.shift()!('Done.'));
+});
+
+test('with a file attached the request is still sorted: a setting is changed, not answered about the file', async () => {
+  mockShared.mockReset();
+  mockShared.mockResolvedValue({ text: 'The file says hello.', ms: 1 });
+  mockAnswer.mockImplementation(async (_q: string, _p: unknown, onText: (t: string) => void) => {
+    onText('Spoken answers are off.');
+    return { text: 'Spoken answers are off.', usedPhoto: null, sources: [], ms: 1, ttftMs: 1 };
+  });
+  await render(<AskScreen />);
+  await screen.findByText('Level 2, by the lift.');
+  await fireEvent.press(screen.getByLabelText('Attach a file'));
+  expect(await screen.findByText(/notes\.pdf/)).toBeTruthy();
+  const box = screen.getByPlaceholderText(/./);
+  await fireEvent.changeText(box, 'turn off spoken answers');
+  await fireEvent.press(screen.getByLabelText('Send'));
+  expect(await screen.findByText('Spoken answers are off.')).toBeTruthy();
+  expect(mockAnswer.mock.calls[0][3]).toMatchObject({ attached: true });
+  expect(mockShared).not.toHaveBeenCalled();
+  // No phone tool chosen: answered about the file.
+  mockAnswer.mockImplementation(async () => ({
+    text: '',
+    usedPhoto: null,
+    sources: [],
+    ms: 0,
+    ttftMs: 0,
+    notTool: true,
+  }));
+  await fireEvent.changeText(box, 'what does it say?');
+  await fireEvent.press(screen.getByLabelText('Send'));
+  expect(await screen.findByText('The file says hello.')).toBeTruthy();
+  expect(mockShared.mock.calls[0][1]).toBe('what does it say?');
+});
+
+test('an offline answer the model says needed the web gets the browser link', async () => {
+  mockAnswer.mockImplementation(
+    async (
+      _q: string,
+      _p: unknown,
+      onText: (t: string) => void,
+      o: { onWebOffer?: () => void },
+    ) => {
+      onText("I don't know when it opened.");
+      setTimeout(() => o.onWebOffer?.(), 0);
+      return {
+        text: "I don't know when it opened.",
+        usedPhoto: null,
+        sources: [],
+        ms: 1,
+        ttftMs: 1,
+      };
+    },
+  );
+  await render(<AskScreen />);
+  await screen.findByText('Level 2, by the lift.');
+  await fireEvent.changeText(
+    screen.getByPlaceholderText('Ask Sidekick'),
+    'when did the bridge open?',
+  );
+  await fireEvent.press(screen.getByLabelText('Send'));
+  expect(await screen.findByText("I don't know when it opened.")).toBeTruthy();
+  expect(await screen.findByText('Search in your browser')).toBeTruthy();
+});
+
+test('an ordinary answer has no browser link', async () => {
+  await render(<AskScreen />);
+  await screen.findByText('Level 2, by the lift.');
+  await fireEvent.changeText(screen.getByPlaceholderText('Ask Sidekick'), 'what car?');
+  await fireEvent.press(screen.getByLabelText('Send'));
+  expect(await screen.findByText('A red car.')).toBeTruthy();
+  expect(screen.queryByText('Search in your browser')).toBeNull();
+});
+
+const waitingAnswers = () => {
+  const pending: ((text: string) => void)[] = [];
+  mockAnswer.mockImplementation(
+    () =>
+      new Promise((resolve) =>
+        pending.push((text) => resolve({ text, usedPhoto: null, sources: [], ms: 1, ttftMs: 1 })),
+      ),
+  );
+  return pending;
+};
+
+test('talked over, then nothing heard: the stopped answer says so instead of staying empty', async () => {
+  jest.useFakeTimers({ doNotFake: ['Date'] });
+  try {
+    const pending = waitingAnswers();
+    await render(<AskScreen />);
+    await screen.findByText('Level 2, by the lift.');
+    await act(async () => mockListeners.onQuestion({ text: 'time in Tokyo?', followUp: false }));
+    await act(async () => mockListeners.onBargeIn({}));
+    // Stopped before a word; the correction was cut off and never arrives.
+    await act(async () => pending.shift()!(''));
+    expect(screen.queryByText(/didn't catch what you said/)).toBeNull();
+    await act(async () => {
+      jest.advanceTimersByTime(16_000);
+    });
+    expect(screen.getByText(/didn't catch what you said/)).toBeTruthy();
+  } finally {
+    jest.useRealTimers();
+  }
+});
+
+test('talked over, then the question comes: answered with the stopped one, no "didn\'t catch"', async () => {
+  jest.useFakeTimers({ doNotFake: ['Date'] });
+  try {
+    const pending = waitingAnswers();
+    await render(<AskScreen />);
+    await screen.findByText('Level 2, by the lift.');
+    await act(async () => mockListeners.onQuestion({ text: 'time in Tokyo?', followUp: false }));
+    await act(async () => mockListeners.onBargeIn({}));
+    await act(async () => pending.shift()!(''));
+    await act(async () => mockListeners.onQuestion({ text: 'no, in Osaka', followUp: true }));
+    expect(mockAnswer.mock.calls[1][0]).toBe('time in Tokyo?\n\nno, in Osaka');
+    await act(async () => pending.shift()!('It is 9 pm in Osaka.'));
+    await act(async () => {
+      jest.advanceTimersByTime(16_000);
+    });
+    expect(screen.getByText('It is 9 pm in Osaka.')).toBeTruthy();
+    expect(screen.queryByText(/didn't catch what you said/)).toBeNull();
+  } finally {
+    jest.useRealTimers();
+  }
 });

@@ -39,9 +39,16 @@ test('the sorter is told when a photo comes with the request (from app state, no
   await decideRequest('What is this?', { photo: true });
   expect(mockAsk.mock.calls[0][0]).toBe('Request (with a photo): What is this?');
   expect((mockAsk.mock.calls[0][3] as { system: string }).system).toMatch(
-    /questions about a photo that comes with the request/,
+    /questions about a photo or file that comes with the request/,
   );
   mockAsk.mockClear();
   await decideRequest('What is this?');
   expect(mockAsk.mock.calls[0][0]).toBe('Request: What is this?');
+});
+
+test('the sorter is told when a file is attached, so a setting request is still a tool', async () => {
+  mockAsk.mockClear();
+  await decideRequest('turn off spoken answers', { file: true });
+  expect(mockAsk.mock.calls[0][0]).toBe('Request (with a file attached): turn off spoken answers');
+  expect((mockAsk.mock.calls[0][3] as { system: string }).system).toMatch(/^app_setting: /m);
 });
