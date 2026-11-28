@@ -222,6 +222,9 @@ export async function research(
     onText(text);
     return { text, web: [], queries: [], ms: Date.now() - t0, timings, pagesRead: 0, local: true };
   };
+  // Stopped (Stop or Send now): no words at all, so the chat shows it as stopped and nothing else.
+  // It used to say "I couldn't find anything online" (phone check, 28 Nov).
+  const stop = () => say('');
   if (!deps.enabled()) return say(RESEARCH_OFFLINE);
   if (!(await deps.online())) return { ...say(RESEARCH_NO_INTERNET), offline: true };
   const names = await deps.knownNames().catch(() => [] as string[]);
@@ -248,7 +251,8 @@ export async function research(
   }
   const queries = all.slice(0, searchesWithin(all.length, wikiLeft()));
   timings.planMs = Date.now() - t0;
-  if (!queries.length || cancelled()) return say(RESEARCH_NOTHING);
+  if (cancelled()) return stop();
+  if (!queries.length) return say(RESEARCH_NOTHING);
 
   // 2. Search, one query after another (GDELT allows one request per 5 s; a gentle pace for all).
   const t1 = Date.now();
@@ -267,7 +271,8 @@ export async function research(
     }
   }
   timings.searchMs = Date.now() - t1;
-  if (!found.length || cancelled()) return say(RESEARCH_NOTHING);
+  if (cancelled()) return stop();
+  if (!found.length) return say(RESEARCH_NOTHING);
 
   // 3. Read: the first results of each search first, so every part of the plan is covered.
   const byQuery = queries.map((q) => found.filter((f) => f.query === q));
@@ -291,7 +296,7 @@ export async function research(
     if (!toRead.includes(f) && f.source.text) pages.push({ ...f, text: f.source.text });
   }
   timings.readMs = Date.now() - t2;
-  if (cancelled()) return say('Research stopped.');
+  if (cancelled()) return stop();
 
   // 4. Write: one pass over the best passages, within the model's window.
   const picked = pickPassages(pages, topic);

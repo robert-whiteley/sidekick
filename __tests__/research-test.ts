@@ -369,6 +369,8 @@ describe('research()', () => {
     );
     expect(d.search).toHaveBeenCalledTimes(1);
     expect(r.local).toBe(true);
+    // Not "nothing found": a stopped run has no words, and the chat marks it Stopped.
+    expect(r.text).toBe('');
   });
 });
 
