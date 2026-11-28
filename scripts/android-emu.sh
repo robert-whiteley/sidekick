@@ -253,19 +253,26 @@ flow_settings_by_voice() {
 }
 
 flow_web_no() {
-  # With Online off, each answer is followed by the short WEB/NO check (does this need the web?);
-  # it must finish and log its result for every question.
+  # With Online off, every question gets an answer from the phone and, when the model thinks it
+  # needed the web, the browser link: a question the model sends to the web straight away, or the
+  # short WEB/NO check after an answer (it must finish and log its result).
   has '^Online: ' && { tap '^Online: .*' || return 1; }
   wait_for '^Offline: answers come only' 30 || return 1
-  local q fail=0 n end
+  local q fail=0 n l end
   for q in 'Who won the 2026 Tour de France?' 'What is 17 times 23?' 'What did I do yesterday?'; do
     n=$(grep -ac 'offline answer' "$LOGS/app.log")
+    l=$(grep -ac '\[decide\] lookup' "$LOGS/app.log")
     ask "$q" || { fail=1; continue; }
+    if [ "$(grep -ac '\[decide\] lookup' "$LOGS/app.log")" -gt "$l" ]; then
+      note "$q: sent to the web, so no WEB/NO check"
+      continue
+    fi
     end=$((SECONDS + 120))
     until [ "$(grep -ac 'offline answer' "$LOGS/app.log")" -gt "$n" ]; do
       [ $SECONDS -ge $end ] && { note "no WEB/NO result after: $q"; fail=1; break; }
       sleep 3
     done
+    note "$q: $(grep -ao 'offline answer: .*' "$LOGS/app.log" | tail -1)"
   done
   keyboard_down
   online_on || fail=1
