@@ -25,7 +25,8 @@ mkdir -p "$LOGS"
 DUMP="$LOGS/.ui.xml"
 FILES=${FILES:-$PWD/test-files}
 
-A() { adb -s "$SERIAL" "$@"; }
+# No stdin for adb: it would eat the input of a `while read` loop.
+A() { adb -s "$SERIAL" "$@" </dev/null; }
 note() { echo "[$(date +%T)] $*"; }
 
 # ---------- the screen ----------
@@ -113,9 +114,17 @@ send() {
   tap '^(Ask Sidekick|Ask about it)$' || return 1
   sleep 1
   type_text "$1"
-  sleep 1
+  # Send shows once the text is in the field; while an answer runs on the emulator's busy CPU
+  # that can take a while, so wait, and type once more if the field stayed empty.
+  if ! wait_for '^Send$' 45; then
+    shot "send-$(date +%s)"
+    has '^(Ask Sidekick|Ask about it)$' && tap '^(Ask Sidekick|Ask about it)$' && type_text "$1"
+    wait_for '^Send$' 45 || return 1
+  fi
   tap '^Send$'
 }
+# idle: until no answer is running (no Stop button), so each flow starts on a quiet chat.
+idle() { wait_gone '^Stop$' "${1:-$SLOW}"; }
 ask() {
   local n
   n=$(($(answers) + 1))
@@ -217,22 +226,24 @@ flow_settings_by_voice() {
   shot settings_approve_card
   sleep 2 # Approve works only after a short wait
   tap '^Approve$' || return 1
-  wait_for 'is now on' 60
+  wait_for 'Done: turn on online lookup|is now on' 60
 }
 
 flow_offline_queue() {
-  # Only Sidekick loses the internet; the emulator stays online.
-  A shell cmd connectivity set-package-networking-enabled false "$PKG"
-  sleep 3
+  # Airplane mode, as on a phone: the app goes by the system's network state.
+  A shell cmd connectivity airplane-mode enable
+  sleep 5
   local ok=0
-  ask "What's the weather in Leeds tomorrow?" || ok=1
+  send "What's the weather in Leeds tomorrow?" || ok=1
   if [ $ok = 0 ]; then
-    wait_for 'Waiting for the internet' 60 || ok=1
+    wait_for 'Waiting for the internet' "$SLOW" || ok=1
     shot offline_waiting
     [ $ok = 0 ] && { tap '^Cancel$' || ok=1; }
     [ $ok = 0 ] && { wait_gone 'Waiting for the internet' 30 || ok=1; }
   fi
-  A shell cmd connectivity set-package-networking-enabled true "$PKG"
+  A shell cmd connectivity airplane-mode disable
+  local end=$((SECONDS + 60))
+  until A shell ping -c 1 -W 2 8.8.8.8 >/dev/null 2>&1 || [ $SECONDS -ge $end ]; do sleep 2; done
   return $ok
 }
 
@@ -319,6 +330,7 @@ case "${1:-}" in
     for f in "$@"; do
       note "flow $f"
       t0=$SECONDS
+      [ "$f" = first_run ] || idle >/dev/null || true
       if "flow_$f"; then r=PASS; else r=FAIL; fi
       shot "$f"
       texts >"$LOGS/$f-screen.txt" 2>/dev/null || true
