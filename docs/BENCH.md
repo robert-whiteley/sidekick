@@ -680,6 +680,69 @@ eavesdropping" (`stop_listening`, refused by the argument step), "turn off the c
 weather on Mars, "get me up at half six", "bring the volume down" (refused by the argument step)
 and "write a text I could send".
 
+### Argument step and app bugs (28 Nov 2026)
+
+**Why "stop listening" and "bring the volume down" were refused.** The schema and the validator
+were right. The model keyed its reply by the tool's name (`{"listening": false}`) or by a choice
+(`{"volume": "down"}`, `{"do not disturb": true}`), or left out a required argument that the
+one-line signature's example did not show (translate's language). The retry asked again in the
+same words plus the reason, and the model wrote the same shape again. Now the retry lists the
+arguments one per line, each marked required or optional, with an example of all the required
+ones, and leaves out the refused reply: shown it, the model copied it. The first prompt is
+unchanged, because listing the arguments there made up or dropped optional values (volume 100,
+the weather's day). The test set was every catalog tool: the bench items plus made-up requests for
+the tools the bench has none for (laptop, same Gemma file, the app's checks):
+
+| Argument step                                                   | First try | After the retry |
+| --------------------------------------------------------------- | --------- | --------------- |
+| Main                                                            | 139/150   | 141/150         |
+| **Arguments listed, refused reply left out**                    | 139/150   | **146/150**     |
+| The same, with 9 more requests for settings and the interpreter | 146/159   | 155/159         |
+
+All of listening, volume, do not disturb and translate were right after. Still wrong: "Skip this
+song" (`{"none": true}`), "Cancel the timer" (the timer tool has no cancel), "What is the keep
+period for recordings?" (a setting id made up), and e-mailing yourself (refused on purpose).
+
+**App bugs from the cloud emulator.**
+
+- "Stop the interpreter" stopped the music. The sorter said "stop", and a reply that is one of a
+  tool's choices was read as that tool (media). A choice word now names a tool only when no other
+  tool line has it. An example "Close the interpreter → interpreter" was added.
+- "Delete everything from the last hour" got a plain line with no DELETE sheet. The sorter said
+  it couldn't delete data, and the argument step gave `{"setting": "delete_last_hour"}` with no
+  `do`, which was read as "say what it is". Now an action setting named without `do` is done, a
+  value given means set, and a switch named alone is said. The app_setting line now says it
+  deletes what Sidekick kept, and there is an example "Delete everything from today → app_setting".
+  "Turn on online lookup" filled `{"do": "on"}` on the laptop each time, so it gets the Approve
+  card. The case with no card was not seen again.
+- "What did I do yesterday?" offered a web search. Examples now say "What did I eat on Sunday? →
+  memory". On the laptop it is sorted as recap or memory, and both skip the web check.
+- A pasted table asked for a total per team got one grand total. The model added one SUMIF per
+  team (`SUMIF(…"Red"…)+SUMIF(…"Blue"…)+…`). On 11 made-up questions on a Team/Item/Cost table
+  it kept doing that with any description, and a GROUPBY example was copied into questions that
+  were not about groups. So code splits such a sum: each conditional total is shown with its
+  formula, then the sum ("Together"). Text in single quotes (`'Red'`) is now read as text, not a
+  sheet name. A string value with bare quotes (`"=COUNTIFS(C:C, ">10")"`) is now read too.
+  8 of the 11 were right, against 5 before. Still wrong: "the total cost per team" (one team's
+  average), "count the items per team" and "which team spent the most".
+
+**Sorter.** With the four examples and the app_setting line: laptop 191/202 (held out 40/41),
+the same as main. All 5 bug questions were right, and 9 of the 10 own-life questions. Fixed:
+"get me up at half six", the tallest mountain, "what did I just say". New misses: "when does my
+meeting end" (held out) and "flip the camera". Line edits for the other misses (calculate for time
+sums, camera settings, the weather on Mars) made 188/202, so they were not built.
+
+**In the app on the emulator** (x86_64, `decide&variant=app`): **192/202** (held out 39/41), the
+same total as before (192, 40/41), 5.8 s a request. Now right: "stop listening", "stop
+eavesdropping", "bring the volume down", "get me up at half six" and the train time sum. Now
+wrong: the tallest mountain and "when does my meeting end" (both
+held out), "what did I just say" (find on phone), how GPS works (navigate), and "skip this song"
+(media chosen, then `{"none": true}` from the argument step). Still wrong: the bat and ball sum
+(calculate), "turn off the camera", the weather on Mars, "write a text I could send" and "in
+one minute, tell me a fun fact" (answered). In the chat: "Stop the interpreter" says it isn't open, "Delete everything from
+the last hour" opens the DELETE sheet, "Turn on online lookup" shows the Approve card, and "What
+did I do yesterday?" goes to memory with no web offer.
+
 ### Thinking
 
 Gemma 4's thinking mode (`thinkingBudget` per turn: off, a token budget, or -1 for no limit) is

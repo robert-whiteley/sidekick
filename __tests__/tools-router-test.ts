@@ -124,8 +124,20 @@ describe('running a tool', () => {
     const ask = replies('{"setting":"internet search"}', '{"do":"get","setting":"online_lookup"}');
     const pick = await fillTool('is internet search on?', 'app_setting', { ask, now: NOW });
     expect(ask).toHaveBeenCalledTimes(2);
-    expect(ask.mock.calls[1][0]).toMatch(/was refused: setting not one of/);
+    expect(ask.mock.calls[1][0]).toMatch(/was refused \(setting not one of/);
     expect(pick?.args).toEqual({ do: 'get', setting: 'online_lookup' });
+  });
+  it('asks again with the arguments one per line when the reply is keyed wrongly', async () => {
+    // "Stop listening" on the emulator: {"listening": false} twice, so it was answered instead.
+    const ask = replies('{"listening": false}', '{"on": false}');
+    const pick = await fillTool('stop listening', 'listening', { ask, now: NOW });
+    expect(pick).toMatchObject({ tool: 'listening', args: { on: false } });
+    const retry = ask.mock.calls[1][0];
+    expect(retry).toContain('Tool listening, to start or stop listening');
+    expect(retry).toContain('\n- on: boolean, required\n');
+    expect(retry).toContain('A reply was refused (on missing)');
+    expect(retry).toContain('for example {"on": true}');
+    expect(retry).not.toContain('listening(');
   });
   it('runs an action through the normal draft path', async () => {
     const plan = { kind: 'reply', text: 'Timer set for 5 minutes.' };
@@ -277,7 +289,7 @@ describe('filling one tool', () => {
     const out = await fillTool('torch on', 'phone_setting', { ask, now: NOW });
     expect(out).toMatchObject({ tool: 'phone_setting', args: { setting: 'torch', on: true } });
     expect(ask).toHaveBeenCalledTimes(2);
-    expect(ask.mock.calls[1][0]).toContain('was refused: setting missing');
+    expect(ask.mock.calls[1][0]).toContain('was refused (setting missing)');
   });
   it('does not ask again about a message to the user themselves', async () => {
     const ask = replies('{"to":"me","text":"a fun fact"}');

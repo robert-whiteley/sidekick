@@ -13,6 +13,7 @@ import { askLlm } from './llm';
 import {
   parseRangeReply,
   fillPrompt,
+  fillRetryPrompt,
   parseFillReply,
   rangePrompt,
   ROUTER_SYSTEM,
@@ -477,9 +478,7 @@ export async function fillTool(
   // A call the schema refuses (a made-up argument name, a value outside the list) is asked once
   // more with the reason, so the model corrects it. A message to the user is refused on purpose.
   if (r.error && r.error !== TO_USER)
-    r = await tryOnce(
-      `${prompt}\nYour reply ${r.reply.trim().slice(0, 200)} was refused: ${r.error}. Reply again.`,
-    );
+    r = await tryOnce(fillRetryPrompt(question, ctx.now ?? new Date(), spec, r.error));
   const ms = Date.now() - t0;
   const reply = r.reply.trim().slice(0, 200);
   if (r.none) return { offered: [tool], tool: 'none', args: {}, reply, ms };

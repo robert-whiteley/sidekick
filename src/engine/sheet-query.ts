@@ -14,6 +14,7 @@ import {
   resultText,
   runFormula,
   splitFormulas,
+  splitTop,
 } from '@/files/formula';
 import { formatValue, type Sheet, sheetSummary } from '@/files/sheet';
 import {
@@ -48,6 +49,35 @@ export function sheetTool(sheets: Sheet[]): ToolSpec {
 }
 
 const asFormula = (f: string) => (f.trim().startsWith('=') ? f.trim() : `=${f.trim()}`);
+
+/** Conditional totals: one value each, for the rows matching their conditions. */
+const CONDITIONAL = /^=?\s*(SUMIFS?|COUNTIFS?|AVERAGEIFS?|MAXIFS|MINIFS)\s*\(/i;
+
+/** Whether [term] is one call whose bracket closes at its end. */
+function oneCall(term: string): boolean {
+  let depth = 0;
+  let quote = '';
+  for (let i = 0; i < term.length; i++) {
+    const c = term[i];
+    if (quote) {
+      if (c === quote) quote = '';
+    } else if (c === '"' || c === "'") quote = c;
+    else if (c === '(') depth++;
+    else if (c === ')' && --depth === 0) return i === term.length - 1;
+  }
+  return false;
+}
+
+/**
+ * The terms of [formula] when it adds up conditional totals (SUMIF(...)+SUMIF(...)), else null.
+ * Asked for "a total per team", the model wrote one SUMIF per team added together, so the answer
+ * was one grand total (cloud emulator; a description with a GROUPBY example didn't stop it on the
+ * laptop). Each term is then shown with its own result, and the sum after them.
+ */
+export function conditionalTerms(formula: string): string[] | null {
+  const terms = splitTop(formula, '+');
+  return terms.length > 1 && terms.every((t) => CONDITIONAL.test(t) && oneCall(t)) ? terms : null;
+}
 
 /** The answer text: what it is, the result, and the formula used. */
 export function sheetAnswerText(result: string, formula: string, label?: string): string {
@@ -92,7 +122,9 @@ export async function answerSheetQuestion(
           );
           return { kind: 'answer', text, formula: asFormula(formula), sheets: changed };
         }
-        const parts = splitFormulas(formula);
+        const split = splitFormulas(formula);
+        const terms = split.length === 1 ? conditionalTerms(formula) : null;
+        const parts = terms ?? split;
         if (parts.length > 1) {
           // Several formulas for a question in parts: each result with its own formula.
           const values = parts.map((f) => runFormula(f, ctx));
@@ -101,6 +133,7 @@ export async function answerSheetQuestion(
             last = { formula, error: `${asFormula(parts[bad])} gives ${resultError(values[bad])}` };
           else {
             const lines = values.map((v, i) => `${resultText(v)} (${asFormula(parts[i])})`);
+            if (terms) lines.push(`Together: ${resultText(runFormula(formula, ctx))}`);
             return {
               kind: 'answer',
               text: `${label ? `${label}:\n` : ''}${lines.join('\n')}`,

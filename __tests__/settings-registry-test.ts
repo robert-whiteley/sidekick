@@ -15,6 +15,7 @@ import {
   REGISTRY,
   type RegistryCtx,
   settingById,
+  settingOp,
   SETTING_IDS,
   switchSettingId,
 } from '@/engine/settings-registry';
@@ -323,4 +324,16 @@ describe('planning a spoken change', () => {
       text: 'Consent mode: Automatic.',
     });
   });
+});
+
+// The fill gave {"setting":"delete_last_hour"} with no do: that was read as "say what it is", so
+// no DELETE sheet came.
+test('a setting named without what to do: an action is done, a switch is said', () => {
+  const del = settingById('delete_last_hour')!;
+  const web = settingById('online_lookup')!;
+  expect(settingOp(del, undefined, undefined)).toBe('set');
+  expect(settingOp(web, undefined, undefined)).toBe('get');
+  expect(settingOp(web, undefined, true)).toBe('set');
+  expect(settingOp(web, 'on', undefined)).toBe('on');
+  expect(settingOp(web, 'enable', undefined)).toBe('get');
 });

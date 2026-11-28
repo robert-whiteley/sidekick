@@ -164,6 +164,10 @@ export const DECIDE_EXAMPLES: [string, string][] = [
   ['What does the word reminder mean?', 'answer'],
   ['In ten minutes tell me a joke', 'routine'],
   ['Who wrote Hamlet?', 'answer'],
+  ['Close the interpreter', 'interpreter'],
+  ['Delete everything from today', 'app_setting'],
+  ['What did I eat on Sunday?', 'memory'],
+  ['Wake me at quarter past six', 'alarm'],
 ];
 
 /** The examples whose reply is in this catalog (a tool left out drops its examples). */
@@ -215,11 +219,17 @@ export function parseClassify(text: string, tools: ToolSpec[] = DECIDE_TOOLS): D
     .filter((x) => w.split('_').length > 1 && w.includes(x.name))
     .sort((a, b) => b.name.length - a.name.length)[0];
   if (inside) return { kind: 'do', tool: inside.name };
-  // A tool's main choice instead of its name ("upscale" for edit_photo, seen on the phone).
+  // A tool's main choice instead of its name ("upscale" for edit_photo, seen on the phone), when
+  // that word belongs to that tool alone. "stop" is media's choice but also in the lines of
+  // listening, the interpreter, camera watches and ringing: "Stop the interpreter" stopped the
+  // music every time (cloud emulator, 28 Nov).
   const byChoice = tools.filter((x) =>
     Object.values(x.args).some((a) => a.required && a.values?.includes(w)),
   );
-  if (byChoice.length === 1) return { kind: 'do', tool: byChoice[0].name };
+  const word = new RegExp(`\\b${w}\\b`, 'i');
+  const named = tools.filter((x) => word.test(x.desc));
+  if (byChoice.length === 1 && named.every((x) => x === byChoice[0]))
+    return { kind: 'do', tool: byChoice[0].name };
   return { kind: 'answer' };
 }
 

@@ -49,12 +49,11 @@ import {
   sectionDefs,
   settingById,
   type SettingDef,
-  type SettingOp,
   type SettingPlan,
   type SettingValue,
   planSetting,
   readValue,
-  SETTING_OPS,
+  settingOp,
   SWITCH_OF,
   writePatch,
 } from './settings-registry';
@@ -560,16 +559,11 @@ async function openDeleteSheet(d: SettingDef, plan: Extract<SettingPlan, { kind:
 
 // --- The tool ---
 
-const OPS = new Set<string>(SETTING_OPS);
-
 /**
  * Runs one app_setting call: returns the short line to say. [a] has been checked against the
  * tool's schema (setting is a registry id or 'all').
  */
 export async function appSettingTool(a: Record<string, unknown>): Promise<string> {
-  const op = (
-    OPS.has(String(a.do)) ? String(a.do) : a.value === undefined ? 'get' : 'set'
-  ) as SettingOp;
   const id = typeof a.setting === 'string' ? a.setting : '';
   const platform = iphone() ? 'ios' : 'android';
   if (!id || id === 'all') {
@@ -580,6 +574,7 @@ export async function appSettingTool(a: Record<string, unknown>): Promise<string
   if (!d) return 'I don’t know that setting.';
   if (d.android && iphone()) return `${d.name} isn’t on iPhone.`;
   const choices = runtimeChoices(d);
+  const op = settingOp(d, a.do, a.value);
 
   if (op === 'list') {
     const lines = sectionDefs(d.section, platform).map((x) =>

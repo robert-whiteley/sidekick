@@ -12,11 +12,44 @@ import {
 } from '../src/engine/decide-logic';
 import {
   argExample,
+  escapeInnerQuotes,
   fillPrompt,
+  fillRetryPrompt,
   parseFillReply,
+  requiredExample,
   toolByName,
   TOOLS,
 } from '../src/engine/tools-logic';
+
+// The schema refused "stop listening" ({"listening": false}), "bring the volume down"
+// ({"volume": "down"}), "switch on do not disturb" and "say good night in Italian" (no language),
+// and the retry repeated the same shape. The retry now lists the arguments one per line
+// (laptop, 150 argument calls: 141 → 146 right after the retry; the first try is unchanged).
+describe('the retry after a refused call', () => {
+  it('lists every argument of every tool, marked required or optional, with no signature', () => {
+    for (const t of TOOLS) {
+      const p = fillRetryPrompt('q', new Date(2026, 10, 28), t, 'x missing');
+      expect(p).toContain(`Tool ${t.name}, to ${t.desc}.`);
+      expect(p).not.toContain(`${t.name}(`);
+      for (const [n, a] of Object.entries(t.args))
+        expect(p).toMatch(
+          new RegExp(`\\n- ${n}: .*, ${a.required ? 'required' : 'optional'}(\\n|$)`),
+        );
+      const ex = JSON.parse(requiredExample(t)) as Record<string, unknown>;
+      for (const [n, a] of Object.entries(t.args)) if (a.required) expect(ex).toHaveProperty(n);
+    }
+  });
+  it('shows the required arguments in its example (translate: the language)', () => {
+    expect(requiredExample(toolByName('translate')!)).toBe('{"to": "..."}');
+    expect(requiredExample(toolByName('phone_setting')!)).toBe('{"setting": "torch"}');
+    expect(requiredExample(toolByName('message')!)).toMatch(/^\{"to": "\.\.\.", "\w+": /);
+  });
+  it('says what the media choices mean, so "skip" is next', () => {
+    expect(fillPrompt('skip this song', new Date(2026, 10, 28), toolByName('media')!)).toContain(
+      'next skips to the next track',
+    );
+  });
+});
 
 describe('parseDecision (bench variant)', () => {
   it('reads a DO marker naming a known tool', () => {
@@ -245,4 +278,35 @@ describe('the sorter examples', () => {
     const bench = new Set([...CASES, ...DECIDE_CASES].map((c: { q: string }) => c.q.toLowerCase()));
     for (const [q] of DECIDE_EXAMPLES) expect(bench.has(q.toLowerCase())).toBe(false);
   });
+});
+
+// The model writes formulas with bare quotes inside the JSON string; that failed as "not JSON".
+test('reads a reply whose string values hold bare quotes', () => {
+  expect(
+    parseFillReply('```json\n{\n  "formula": "=COUNTIFS(C:C, ">10")"\n}\n```', 'query_sheet'),
+  ).toEqual({ tool: 'query_sheet', args: { formula: '=COUNTIFS(C:C, ">10")' } });
+  expect(
+    parseFillReply('{"formula": "=SUMIFS([Cost],[Team],"Red")", "label": "Red"}', 'query_sheet'),
+  ).toEqual({
+    tool: 'query_sheet',
+    args: { formula: '=SUMIFS([Cost],[Team],"Red")', label: 'Red' },
+  });
+  expect(parseFillReply('{"formula": "=SUMIFS(C:C, A:A, \\"Red\\")"}', 'query_sheet')).toEqual({
+    tool: 'query_sheet',
+    args: { formula: '=SUMIFS(C:C, A:A, "Red")' },
+  });
+  expect(escapeInnerQuotes('{"a": 1}')).toBe('{"a": 1}');
+});
+
+// "Stop the interpreter": the sorter said "stop", media's choice, so the music was stopped.
+test('a choice word that other tool lines also use is not read as that tool', () => {
+  expect(parseClassify('stop')).toEqual({ kind: 'answer' });
+  expect(parseClassify('upscale')).toEqual({ kind: 'do', tool: 'edit_photo' });
+});
+
+test('the sorter has an example for the interpreter and for deleting what Sidekick kept', () => {
+  const sys = catalogSystem();
+  expect(sys).toContain('Request: Close the interpreter\ninterpreter');
+  expect(sys).toContain('Request: Delete everything from today\napp_setting');
+  expect(sys).toMatch(/^app_setting: .*delete what Sidekick kept/m);
 });

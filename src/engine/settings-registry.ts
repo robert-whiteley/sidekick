@@ -1426,6 +1426,19 @@ export const SETTING_OPS = [
 ] as const;
 export type SettingOp = (typeof SETTING_OPS)[number];
 
+/**
+ * What the model's call asks for. Without a `do`: a value is a change; a setting that is an
+ * action (delete the last hour, back up now) is run, since it has nothing to read; any other
+ * is read. An action used to be read, so "Delete everything from the last hour", filled as
+ * {"setting":"delete_last_hour"}, only said what the action was, with no DELETE sheet (cloud
+ * emulator and laptop, 28 Nov).
+ */
+export function settingOp(d: SettingDef, op: unknown, value: unknown): SettingOp {
+  if ((SETTING_OPS as readonly string[]).includes(String(op))) return op as SettingOp;
+  if (value !== undefined) return 'set';
+  return d.type === 'action' ? 'set' : 'get';
+}
+
 export type SettingPlan =
   /** Nothing to change: say this. */
   | { kind: 'say'; text: string }
