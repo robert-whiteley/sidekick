@@ -20,11 +20,17 @@ fs.mkdirSync(lockHeld);
 const lockFree = `${tmp}/free.lock`;
 
 type Result = 'ok' | 'deny' | 'ask';
-function run(input: object, lock = lockHeld): Result {
+const claudeHome = `${tmp}/claude-home`;
+function run(input: object, lock = lockHeld, configDir = claudeHome): Result {
   const r = cp.spawnSync('python3', [`${root}/scripts/claude-guard.py`], {
     input: JSON.stringify({ cwd: root, ...input }),
     encoding: 'utf8',
-    env: { ...process.env, SIDEKICK_PHONE_LOCK: lock, CLAUDE_PROJECT_DIR: root },
+    env: {
+      ...process.env,
+      SIDEKICK_PHONE_LOCK: lock,
+      CLAUDE_PROJECT_DIR: root,
+      CLAUDE_CONFIG_DIR: configDir,
+    },
   });
   if (r.status === 2) return 'deny';
   if (r.status !== 0) throw new Error(r.stderr);
@@ -34,7 +40,6 @@ function run(input: object, lock = lockHeld): Result {
 }
 const bash = (command: string, lock?: string) =>
   run({ tool_name: 'Bash', tool_input: { command } }, lock);
-const edit = (file_path: string) => run({ tool_name: 'Edit', tool_input: { file_path } });
 
 const table: [string, Result][] = [
   // store builds and publishing
@@ -126,5 +131,31 @@ describe('claude-guard: edits', () => {
     [`${root}/modules/sidekick-native/android/build.gradle`, 'ok'],
     [`${root}/docs/SPEC.md`, 'ok'],
     ['/elsewhere/CLAUDE.md', 'ok'],
-  ] as [string, Result][])('%s → %s', (p, want) => expect(edit(p)).toBe(want));
+    [`${root}/.claude/memory/x.md`, 'deny'],
+    [`${claudeHome}/CLAUDE.md`, 'ask'],
+    [`${claudeHome}/projects/p/memory/MEMORY.md`, 'ask'],
+    [`${claudeHome}/settings.json`, 'ok'],
+  ] as [string, Result][])('%s → %s', (p, want) =>
+    expect(run({ tool_name: 'Edit', tool_input: { file_path: p } }, lockHeld, claudeHome)).toBe(
+      want,
+    ),
+  );
+});
+
+describe('claude-guard: notes written from the shell', () => {
+  it.each([
+    ['echo rule > CLAUDE.md', 'deny'],
+    ['printf x >> src/AGENTS.md', 'deny'],
+    ["bash -c 'echo x > CLAUDE.md'", 'deny'],
+    ['echo x | tee docs/CLAUDE.md', 'deny'],
+    ['cp /tmp/x .claude/rules/a.md', 'deny'],
+    ['cat > CLAUDE.md <<EOF\nrule\nEOF', 'deny'],
+    [`echo x > ${claudeHome}/projects/p/memory/a.md`, 'ask'],
+    ['echo "> CLAUDE.md" > /dev/null', 'ok'],
+    ['git commit -m "no CLAUDE.md > here"', 'ok'],
+    ['echo x > docs/SPEC.md', 'ok'],
+    ['npx jest 2>&1 | tail', 'ok'],
+  ] as [string, Result][])('%s → %s', (command, want) =>
+    expect(run({ tool_name: 'Bash', tool_input: { command } }, lockHeld, claudeHome)).toBe(want),
+  );
 });
