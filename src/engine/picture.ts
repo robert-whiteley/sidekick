@@ -9,7 +9,7 @@ import { Platform } from 'react-native';
 
 import SidekickNative from '../../modules/sidekick-native';
 import { downloadFile, isDownloaded, modelPath, wifiOnlyDownloads } from './downloads';
-import { askLlm, unloadLlm } from './llm';
+import { answerStopped, askLlm, unloadLlm } from './llm';
 import { PICTURE_FILES } from './models';
 import {
   PICTURE_BLOCKED,
@@ -160,9 +160,15 @@ export async function makePicture(
   stopped = false;
   onStatus('Checking the request…');
   const allowed = await pictureAllowed(question, prompt);
-  if (!allowed || stopped) {
+  // Stop during the check leaves the check with no reply, which reads as refused: it is a stop,
+  // not a blocked picture (phone check, 28 Nov: "sexual images aren't allowed" for a lighthouse).
+  if (stopped || answerStopped()) {
     running = false;
-    return res(allowed ? PICTURE_STOPPED : PICTURE_BLOCKED);
+    return res(PICTURE_STOPPED);
+  }
+  if (!allowed) {
+    running = false;
+    return res(PICTURE_BLOCKED);
   }
   onStatus('Getting ready to draw…');
   const sub = SidekickNative.addListener('onPicture', (e) =>
