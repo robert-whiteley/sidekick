@@ -48,6 +48,9 @@ const REQUEST_ROOM_MS = 1000;
 /** Requests that got an answer from a server / that never reached one (network error, timeout). */
 const net = { reached: 0, failed: 0 };
 
+/** The counts now, to tell afterwards whether some steps reached any server at all. */
+export const netCounts = () => ({ ...net });
+
 /** GET JSON with a timeout; any failure is null (the answer then stays offline). */
 export async function fetchJson(
   url: string,

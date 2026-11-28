@@ -9,7 +9,7 @@ import { SYSTEM_PROMPT } from '@/engine/prompts';
 import { getSettings } from '@/engine/settings';
 import { listSpeakers } from '@/memory/store';
 
-import { fetchJson, fetchText, isOnline, searchWeb, type SearchOptions } from './lookup';
+import { fetchJson, fetchText, isOnline, netCounts, searchWeb, type SearchOptions } from './lookup';
 import { mergeSources, USER_AGENT, type WebSource } from './lookup-logic';
 import { topicWords } from './news-logic';
 import { isWikimedia, politeFetch, WIKIMEDIA_PER_MIN, wikimedia } from './rate-limit';
@@ -90,6 +90,11 @@ export type ResearchDeps = {
   ask: (prompt: string, maxTokens: number, onText?: (full: string) => void) => Promise<string>;
   /** The usual lookup sources plus more Wikipedia articles (see [researchSearch]). */
   search: (query: string, opts: SearchOptions) => Promise<WebSource[]>;
+  /**
+   * The searches so far reached no server at all: Android says online but Sidekick's requests
+   * can't get out (a firewall app, Data Saver, a dead Wi-Fi). Treated like being offline.
+   */
+  unreachable?: () => boolean;
   /** A page's readable text, '' when it can't be read. */
   read: (source: WebSource) => Promise<string>;
   searxUrl: () => string;
@@ -150,6 +155,9 @@ export async function researchSearch(
   return mergeSources([base, wiki], 6);
 }
 
+/** One research run's searches reached a server (reset at the start of each run). */
+let reachedServer = true;
+
 export const defaultDeps: ResearchDeps = {
   enabled: () => getSettings().webLookup,
   online: isOnline,
@@ -166,7 +174,15 @@ export const defaultDeps: ResearchDeps = {
     });
     return text;
   },
-  search: (q, opts) => researchSearch(q, opts),
+  search: async (q, opts) => {
+    const before = netCounts();
+    const found = await researchSearch(q, opts);
+    const now = netCounts();
+    if (now.reached > before.reached) reachedServer = true;
+    else if (now.failed === before.failed) reachedServer = true; // nothing asked: not a failure
+    return found;
+  },
+  unreachable: () => !reachedServer,
   read: (s) => readSource(s),
   searxUrl: () => getSettings().searxngUrl,
   feeds: () => getSettings().newsFeeds,
@@ -256,6 +272,7 @@ export async function research(
 
   // 2. Search, one query after another (GDELT allows one request per 5 s; a gentle pace for all).
   const t1 = Date.now();
+  reachedServer = false;
   const found: { source: WebSource; query: string }[] = [];
   const seen = new Set<string>();
   for (let i = 0; i < queries.length && !cancelled(); i++) {
@@ -272,6 +289,9 @@ export async function research(
   }
   timings.searchMs = Date.now() - t1;
   if (cancelled()) return stop();
+  // No server answered at all: it waits and runs once back online, like being offline (phone
+  // check, 28 Nov: with Sidekick's network blocked it said "I couldn't find anything online").
+  if (!found.length && deps.unreachable?.()) return { ...say(RESEARCH_NO_INTERNET), offline: true };
   if (!found.length) return say(RESEARCH_NOTHING);
 
   // 3. Read: the first results of each search first, so every part of the plan is covered.
