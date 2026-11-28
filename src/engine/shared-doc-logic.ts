@@ -4,6 +4,7 @@
  * share is, how a long text is cut to fit the model, the (small) prompts, and who said what in a
  * recording. Pure; tested in __tests__/shared-doc-test.ts.
  */
+import type { FileType } from '@/files/kinds';
 import type { Sheet } from '@/files/sheet';
 import { chunkText } from '@/memory/sources-logic';
 import {
@@ -39,6 +40,8 @@ export type Attachment = {
   error?: string;
   /** What kind of file it is in words ("Word document", "Spreadsheet"). */
   typeLabel?: string;
+  /** A spreadsheet's file type (xlsx, ods, csv…): a changed sheet is saved in kind. */
+  fileType?: FileType;
   /** A spreadsheet's sheets (questions are worked out on them) and its summary. */
   sheets?: Sheet[];
   summary?: string;
@@ -338,4 +341,17 @@ export function pastedTable(text: string): { table: string; question: string } |
     .filter(Boolean)
     .join('\n');
   return { table: [header, ...lines.slice(from + 1, to)].join('\n'), question };
+}
+
+/**
+ * How a changed spreadsheet is saved: a workbook (Excel, OpenDocument, old Excel) as an Excel
+ * workbook with all its sheets, a CSV / pasted table as CSV. An .xlsx was saved as CSV before.
+ */
+export function sheetSaveAs(type: FileType | undefined): {
+  ext: 'xlsx' | 'csv';
+  mime: string;
+} {
+  return type === 'xlsx' || type === 'xls' || type === 'ods'
+    ? { ext: 'xlsx', mime: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }
+    : { ext: 'csv', mime: 'text/csv' };
 }

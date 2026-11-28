@@ -116,15 +116,16 @@ export function classifySystem(tools: ToolSpec[] = DECIDE_TOOLS): string {
 export function catalogSystem(tools: ToolSpec[] = DECIDE_TOOLS, lookup = true): string {
   return (
     'You sort requests to a phone assistant. Reply with one word only.\n' +
-    'answer: a question, a chat, advice, or a request to write, explain or plan something; also ' +
-    'questions about a photo or file that comes with the request.\n' +
+    'answer: a question, a chat, advice, or a request to write, explain or plan something, also ' +
+    'about what a tool below does (what it is or how it works); also questions about a photo or ' +
+    'file that comes with the request.\n' +
     'memory: a question about my own life that my saved memories answer: what I saw, heard, said, ' +
     'did or noted, people I know, where I left things, and recaps.\n' +
     (lookup
       ? 'lookup: needs current facts from the internet (prices, scores, recent events).\n' +
         'news: the latest news or headlines, in general or on a topic.\n'
       : '') +
-    'Or the phone tool that does what I ask:\n' +
+    'Or the phone tool that does what I ask (only when I want the phone to do that now):\n' +
     tools.map((t) => `${t.name}: ${t.desc}`).join('\n') +
     '\nPick a tool only when I want the phone to do that now; talking about a thing is answer. ' +
     'Asking you to text, call or email me myself is answer (you reply here).'

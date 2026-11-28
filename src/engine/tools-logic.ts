@@ -161,7 +161,7 @@ export const TOOLS: ToolSpec[] = [
   },
   {
     name: 'research',
-    desc: 'research a topic online in several searches and write a short report with sources',
+    desc: 'only when I ask you to research a topic: several web searches and a short report with sources',
     kind: 'info',
     args: {
       topic: req('what to research, as asked'),
@@ -260,7 +260,7 @@ export const TOOLS: ToolSpec[] = [
   },
   {
     name: 'reminder',
-    desc: 'remind me of something with a notification at a time, or a to-do (not an alarm sound; if you are to do or tell me something then, that is routine)',
+    desc: 'remind me of something with a notification at a time, or a to-do (if you are to do or tell me something then, that is routine)',
     kind: 'action',
     args: { what: req('what to do'), when: s('time words, or empty for a to-do') },
   },

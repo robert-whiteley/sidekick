@@ -1,5 +1,10 @@
 /** Lookup off: the browser link only under an answer the model says needed the web. */
-import { WEB_OFFER_SYSTEM, wantsWebOffer, webOfferPrompt } from '@/web/lookup-logic';
+import {
+  WEB_OFFER_SYSTEM,
+  wantsWebOffer,
+  webOfferCheckWanted,
+  webOfferPrompt,
+} from '@/web/lookup-logic';
 
 test('the check sees the question and the answer, clipped', () => {
   const p = webOfferPrompt('When did the bridge open?', "I don't know.");
@@ -19,5 +24,23 @@ test("the model's one word decides; anything else is no link", () => {
 
 test('questions about the user get their own word, ME, which is no link', () => {
   expect(WEB_OFFER_SYSTEM).toMatch(/ME if the question is about the user/);
-  expect(webOfferPrompt('What did I do yesterday?', "I don't know.")).toMatch(/ME, NO or WEB:$/);
+  expect(webOfferPrompt('What did I do yesterday?', "I don't know.")).toMatch(/NO, ME or WEB:$/);
+});
+
+test('no check when the sorter said the answer is in the memories, or the link is shown anyway', () => {
+  const base = {
+    lookupOn: false,
+    lookupWanted: false,
+    photo: false,
+    queuedOffline: false,
+    routine: false,
+    stopped: false,
+    text: "I don't know.",
+  };
+  expect(webOfferCheckWanted(base)).toBe(true);
+  expect(webOfferCheckWanted({ ...base, memoryWanted: false })).toBe(true);
+  expect(webOfferCheckWanted({ ...base, memoryWanted: true })).toBe(false);
+  expect(webOfferCheckWanted({ ...base, lookupWanted: true })).toBe(false);
+  expect(webOfferCheckWanted({ ...base, lookupOn: true })).toBe(false);
+  expect(webOfferCheckWanted({ ...base, text: ' ' })).toBe(false);
 });

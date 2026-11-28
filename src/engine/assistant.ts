@@ -40,6 +40,7 @@ import {
   WEB_OFFER_MAX_TOKENS,
   WEB_OFFER_SYSTEM,
   wantsWebOffer,
+  webOfferCheckWanted,
   webOfferPrompt,
 } from '@/web/lookup-logic';
 import type { Moment } from '@/memory/store';
@@ -787,16 +788,20 @@ export async function answer(
   }
 
   // Online lookup off, and nothing offered yet: if the answer couldn't give the facts asked for
-  // ("I don't know"), the model says so in a short check and the browser link is offered.
+  // ("I don't know"), the model says so in a short check and the browser link is offered. Not
+  // when the sorter said the answer is in the owner's memories: no web search knows their life.
   if (
     opts?.onWebOffer &&
-    !getSettings().webLookup &&
-    !lookupWanted &&
-    !image &&
-    !looked.offline &&
-    !opts.routine &&
-    !answerStopped() &&
-    text.trim()
+    webOfferCheckWanted({
+      lookupOn: !!getSettings().webLookup,
+      lookupWanted,
+      memoryWanted,
+      photo: !!image,
+      queuedOffline: !!looked.offline,
+      routine: !!opts.routine,
+      stopped: answerStopped(),
+      text,
+    })
   ) {
     const offer = opts.onWebOffer;
     void askLlm(webOfferPrompt(question, text), null, () => {}, {
