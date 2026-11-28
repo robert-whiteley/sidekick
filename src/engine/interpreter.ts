@@ -13,6 +13,7 @@ import {
   END_CHECK_MAX_TOKENS,
   endCheckPrompt,
   endConfirmed,
+  interpreterControl,
   parseControlReply,
   type InterpretSide,
   type InterpretTurn,
@@ -207,6 +208,17 @@ export function openInterpreter(languageName: string): string {
   startInterpreter(l.code);
   router.push('/interpret');
   return `Interpreting English and ${l.name}. Tap your mic to speak, and theirs for them.`;
+}
+
+/** The interpreter tool, asked in the chat: stop, or switch the other person's language. */
+export function controlInterpreter(stop: boolean, languageName: string): string {
+  const c = interpreterControl(state.active, stop, languageName);
+  console.log(`[interpret] from the chat: ${c.kind}${state.active ? '' : ' (not open)'}`);
+  if (c.kind === 'say') return c.text;
+  if (c.kind === 'open') return openInterpreter(c.language);
+  set({ ended: true });
+  stopInterpreter();
+  return 'Interpreting stopped.';
 }
 
 /** Ends the session: frees the speech model, stops any voice. Nothing is kept. */

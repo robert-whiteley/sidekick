@@ -107,6 +107,7 @@ export const TOOL_NET: Record<string, NetNeed> = {
   time_in: 'offline',
   remember: 'offline',
   translate: 'offline',
+  interpreter: 'offline',
   repeat: 'offline',
   help: 'offline',
   scan: 'offline',

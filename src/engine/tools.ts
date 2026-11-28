@@ -7,7 +7,7 @@
 import { Linking } from 'react-native';
 import { moveEventTo, planIntent, planTelephony, scheduleDraft } from './actions';
 import { feedbackIntent, supportEmail } from './feedback';
-import { openInterpreter } from './interpreter';
+import { controlInterpreter, openInterpreter } from './interpreter';
 import { navigateOffline } from './online-queue';
 import { askLlm } from './llm';
 import {
@@ -374,6 +374,8 @@ export async function runTool(
       if (a.talk === true && !ctx.routine)
         return { kind: 'reply', text: openInterpreter(str(a.to)) };
       return { kind: 'translate', text: str(a.text), to: str(a.to) };
+    case 'interpreter':
+      return { kind: 'reply', text: controlInterpreter(a.stop === true, str(a.to)) };
     case 'repeat':
       return command({ type: 'repeat' });
     case 'help':
