@@ -743,6 +743,40 @@ one minute, tell me a fun fact" (answered). In the chat: "Stop the interpreter" 
 the last hour" opens the DELETE sheet, "Turn on online lookup" shows the Approve card, and "What
 did I do yesterday?" goes to memory with no web offer.
 
+### Root fixes: totals per group, timer cancel, media skip, files (28 Nov 2026)
+
+**Totals per group.** The model could not be made to write one total per team as a formula. Now
+`query_sheet` takes `group_by` (the column), `aggregate` (sum, count, average, max, min) and
+`of` (the column to add up; the sheet's only number column if left out), and code writes the
+formula. The question decides what is shown: a group named by its header ("per team", "which
+team") gives one result for each group, largest first; groups named by value ("team Red") give
+their own totals; no group named ("the total cost") gives one total over all rows. Formulas stay
+for everything else. On the 11 Team/Item/Cost questions: **10 of 11** right, against 8 with PR 73
+and 5 on main. "Which team spent the most" and "count the items per team" are right; "the total
+cost per team" is answered by one conditional total per team and the sum.
+
+**Refused requests.** The timer can now be cancelled and music can skip a song. Android has no
+way for an app to cancel a timer that is still counting down, so cancel stops a ringing timer and
+opens the Clock's timers, and the reply says so. On iPhone, the timer and music controls say
+plainly that iPhone doesn't let apps do it, and where to do it. "What is the keep period for
+recordings?" made up a setting id; `keep_periods` now names all the keep settings, says each one,
+and asks which one to change. Argument step (laptop, 159 requests): 149 on the first try, **158
+after the retry**. Only e-mailing yourself is refused, on purpose.
+
+**With a file attached**, tools that read the camera, the phone or a typed sum (scan, camera,
+watch, find on phone, clipboard, messages, calls, recap, calculate, convert, …) are not offered
+to the sorter, so a question about a CSV, slides, a ZIP or "what is in this file?" goes to the
+file. Phone actions such as app settings, alarms and messages are still offered.
+
+**The DELETE sheet** was there in the cloud but hidden behind the keyboard: with edge-to-edge on
+Android 16 the window isn't resized for it. The sheet now moves up above the keyboard.
+
+**Sorter** (laptop): **192/202**, held out **40/41**, against 191 and 40 with PR 73. Skip a song,
+cancel the timer, the keep period and "what did Tom say about the plumber" were right. A new
+line for the timer made 189 (held out 38), so the timer line is unchanged and cancel is only an
+argument. The plumber question still changes with the order of the prompt, so it may be wrong now
+and then.
+
 ### Thinking
 
 Gemma 4's thinking mode (`thinkingBudget` per turn: off, a token budget, or -1 for no limit) is

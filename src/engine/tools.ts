@@ -240,6 +240,7 @@ export async function runTool(
       return intent({ type: 'alarm', hour: +m[1], minute: +m[2], label: str(a.label) });
     }
     case 'timer':
+      if (a.do === 'cancel') return intent({ type: 'cancelTimer' });
       return intent({
         type: 'timer',
         seconds: Math.round((a.minutes as number) * 60),
@@ -260,7 +261,10 @@ export async function runTool(
       return intent(
         a.command === 'what'
           ? { type: 'nowPlaying' }
-          : { type: 'media', cmd: str(a.command) as MediaCommand },
+          : {
+              type: 'media',
+              cmd: (a.command === 'skip' ? 'next' : str(a.command)) as MediaCommand,
+            },
       );
     case 'draft':
       return intent(a.do === 'send' ? { type: 'sendIt' } : { type: 'cancelIt' });

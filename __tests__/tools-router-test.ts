@@ -239,6 +239,21 @@ describe('running a tool', () => {
     await runTool('media', { command: 'what' }, 'what song is this', quiet, NOW);
     expect(planIntent).toHaveBeenCalledWith({ type: 'nowPlaying' }, NOW);
   });
+  // "Skip this song" and "Cancel the timer" got {"none": true}: neither was a choice.
+  it('media "skip" goes to the next song; a timer can be cancelled, and needs minutes otherwise', async () => {
+    jest.mocked(planIntent).mockResolvedValue({ kind: 'reply', text: 'Done.' } as never);
+    await runTool('media', { command: 'skip' }, 'skip this song', quiet, NOW);
+    await runTool('timer', { do: 'cancel' }, 'cancel the timer', quiet, NOW);
+    expect(jest.mocked(planIntent).mock.calls.map((c) => c[0])).toEqual([
+      { type: 'media', cmd: 'next' },
+      { type: 'cancelTimer' },
+    ]);
+    expect(validateCall({ tool: 'timer', args: { do: 'cancel' } }).ok).toBe(true);
+    expect(validateCall({ tool: 'timer', args: { label: 'eggs' } })).toEqual({
+      ok: false,
+      error: 'minutes missing',
+    });
+  });
   it('the clipboard is added to a normal answer', async () => {
     expect(await runTool('clipboard', {}, 'what did I copy?', quiet, NOW)).toEqual({
       kind: 'answer',

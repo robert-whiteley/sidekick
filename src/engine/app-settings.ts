@@ -48,6 +48,7 @@ import {
   SECTION_NAMES,
   sectionDefs,
   settingById,
+  SETTING_GROUPS,
   type SettingDef,
   type SettingPlan,
   type SettingValue,
@@ -569,6 +570,16 @@ export async function appSettingTool(a: Record<string, unknown>): Promise<string
   if (!id || id === 'all') {
     const names = Object.values(SECTION_NAMES).join(', ');
     return `Ask about one part of Settings: ${names}. Or name the setting.`;
+  }
+  if (SETTING_GROUPS[id]) {
+    // Several settings named at once: each said; a change asks which one.
+    const defs = SETTING_GROUPS[id]
+      .map(settingById)
+      .filter((x): x is SettingDef => !!x && !(x.android && iphone()));
+    const asking = a.do === undefined || a.do === 'get' || a.do === 'list';
+    if (!asking || a.value !== undefined)
+      return `Which one? ${defs.map((x) => x.name).join(', ')}.`;
+    return `${defs.map((x) => describeLine(x, currentValue(x), runtimeChoices(x))).join('; ')}.`;
   }
   const d = settingById(id);
   if (!d) return 'I don’t know that setting.';

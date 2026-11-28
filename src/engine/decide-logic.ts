@@ -18,6 +18,33 @@ export const DECIDE_TOOLS: ToolSpec[] = TOOLS.filter(
 );
 
 /**
+ * Tools that answer from somewhere else than an attached file: the camera, what the phone or
+ * memory holds, or a sum typed in the request. Not offered while a file is attached, so a
+ * question about it goes to the file: with them offered, "What is in this file?" and questions
+ * about a CSV, slides or a ZIP went to scan, and an Excel total to calculate (emulator flows).
+ * Phone actions (settings, messages, alarms) stay.
+ */
+export const NOT_WITH_FILE = new Set([
+  'scan',
+  'watch',
+  'stop_watching',
+  'list_watches',
+  'camera',
+  'camera_setting',
+  'find_on_phone',
+  'clipboard',
+  'phone_info',
+  'read_messages',
+  'texts',
+  'calls',
+  'missed',
+  'recap',
+  'play_recording',
+  'calculate',
+  'convert',
+]);
+
+/**
  * What may run while the phone is locked (hands-free, screen off): nothing personal. Checked on
  * the model's filled call, so it holds in any wording: timers, alarms, sums and dates, the
  * torch and volume, battery, ringing the phone, speech speed, the camera, and stopping listening.

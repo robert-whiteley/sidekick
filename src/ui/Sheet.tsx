@@ -1,5 +1,5 @@
 import { type ReactNode, useContext } from 'react';
-import { Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { KeyboardAvoidingView, Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaInsetsContext } from 'react-native-safe-area-context';
 
 import { AppText } from './Text';
@@ -27,17 +27,22 @@ export function Sheet(props: {
       onRequestClose={props.onClose}
       statusBarTranslucent
     >
-      <View style={styles.fill}>
+      {/* The keyboard pushes the sheet up: the modal's window isn't resized for it (edge to edge),
+          so a field near the bottom and the buttons under it were hidden while typing (the
+          DELETE sheet in the cloud emulator flows). */}
+      <KeyboardAvoidingView style={styles.fill} behavior="padding">
         <Pressable style={s.scrim} onPress={props.onClose} accessibilityLabel="Close" />
         <View style={[s.sheet, { paddingBottom: bottom + space.sm }]}>
           <View style={s.grabber} />
           <AppText variant="titleSmall" style={styles.title} accessibilityRole="header">
             {props.title}
           </AppText>
-          <ScrollView style={styles.body}>{props.children}</ScrollView>
+          <ScrollView style={styles.body} keyboardShouldPersistTaps="handled">
+            {props.children}
+          </ScrollView>
           {props.footer ? <View style={styles.footer}>{props.footer}</View> : null}
         </View>
-      </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }
