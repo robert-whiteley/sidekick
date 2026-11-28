@@ -275,10 +275,10 @@ flow_web_no() {
   local q fail=0 n l end
   for q in 'Who won the 2026 Tour de France?' 'What is 17 times 23?' 'What did I do yesterday?'; do
     n=$(grep -ac 'offline answer' "$LOGS/app.log")
-    l=$(grep -ac '\[decide\] answer' "$LOGS/app.log")
+    l=$(grep -ac '\[decide\] answer (' "$LOGS/app.log")
     ask "$q" || { fail=1; continue; }
-    if [ "$(grep -ac '\[decide\] answer' "$LOGS/app.log")" -le "$l" ]; then
-      note "$q: $(grep -ao '\[decide\] [a-z:_]*' "$LOGS/app.log" | tail -1), not the model's own answer, so no WEB/NO check"
+    if [ "$(grep -ac '\[decide\] answer (' "$LOGS/app.log")" -le "$l" ]; then
+      note "$q: $(grep -ao '\[decide\] [a-z:_ ]*' "$LOGS/app.log" | tail -1), not a general answer (a tool, a lookup or memory), so no WEB/NO check"
       continue
     fi
     end=$((SECONDS + 120))
