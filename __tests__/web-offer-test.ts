@@ -12,10 +12,12 @@ test("the model's one word decides; anything else is no link", () => {
   expect(wantsWebOffer('WEB')).toBe(true);
   expect(wantsWebOffer(' web.')).toBe(true);
   expect(wantsWebOffer('NO')).toBe(false);
+  expect(wantsWebOffer('ME')).toBe(false);
   expect(wantsWebOffer('')).toBe(false);
   expect(wantsWebOffer('website')).toBe(false);
 });
 
-test("the user's own life, notes or phone never get the link", () => {
-  expect(WEB_OFFER_SYSTEM).toMatch(/own life, notes or phone/);
+test('questions about the user get their own word, ME, which is no link', () => {
+  expect(WEB_OFFER_SYSTEM).toMatch(/ME if the question is about the user/);
+  expect(webOfferPrompt('What did I do yesterday?', "I don't know.")).toMatch(/ME, NO or WEB:$/);
 });

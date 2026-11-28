@@ -268,17 +268,19 @@ export function cleanModelQuery(text: string, knownNames: string[]): string | nu
  * answer gets the "Search the web in your browser" link (never a joke, a recipe or the user's
  * own life, where a web search wouldn't help).
  */
+// A third word, ME, for questions about the user: with only WEB or NO, Gemma said WEB for every
+// "what did I do..." answer that couldn't say (0 of 8 made-up cases right; 8 of 8 with ME).
 export const WEB_OFFER_SYSTEM =
-  'You check an answer from an offline assistant. Reply with one word only: WEB if the answer ' +
-  'does not give what was asked because it needs facts the assistant does not have, and a web ' +
-  "search could find them; NO if it answers, or if the question is about the user's own life, " +
-  'notes or phone, or a web search would not help.';
+  'You check an answer from an offline assistant. Reply with one word only: ME if the question ' +
+  'is about the user or people they know (what they did, said, have, planned or saved); NO if ' +
+  'the answer gives what was asked; WEB if it does not give the public facts asked for and a ' +
+  'web search could find them.';
 
 export const WEB_OFFER_MAX_TOKENS = 3;
 
 export function webOfferPrompt(question: string, answer: string): string {
-  return `Question: ${question.trim().slice(0, 400)}\nAnswer: ${answer.trim().slice(0, 600)}\n\nWEB or NO:`;
+  return `Question: ${question.trim().slice(0, 400)}\nAnswer: ${answer.trim().slice(0, 600)}\n\nME, NO or WEB:`;
 }
 
-/** The check's reply: WEB (any case, possibly with punctuation) offers the link. */
+/** The check's reply: only WEB (any case, possibly with punctuation) offers the link; ME and NO don't. */
 export const wantsWebOffer = (reply: string) => /^\W*WEB\b/i.test(reply.trim());
