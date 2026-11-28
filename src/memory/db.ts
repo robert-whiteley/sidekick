@@ -261,6 +261,7 @@ async function openDb(): Promise<DB> {
     }
     setAside(path);
     d = open({ name: 'memory.db', encryptionKey: key, ...where });
+    if (!readable(d)) throw new Error('The new memory file could not be opened either.');
     console.log('[db] the old memory file could not be read with its key; started a new one');
     notices.post({
       key: 'memory-reset',
@@ -291,18 +292,32 @@ function readable(d: DB): boolean {
   }
 }
 
+/**
+ * Moves the file aside with its journal files: a -wal or -shm left behind belongs to the old key
+ * and makes the new file unreadable too. The path is encoded: on iPhone it is under "Application
+ * Support", and a bare space made the move miss the file (seen in the iPhone Simulator).
+ */
 function setAside(path: string) {
-  try {
-    const f = new File(`file://${path}`);
-    if (f.exists) f.move(new File(`file://${path}.unreadable-${Date.now()}`));
-  } catch (e) {
-    console.log(`[db] could not set the unreadable file aside: ${String(e)}`);
+  const stamp = Date.now();
+  const uri = (p: string) => `file://${encodeURI(p)}`;
+  const moved: string[] = [];
+  for (const suffix of ['', '-wal', '-shm', '-journal']) {
+    const from = uri(`${path}${suffix}`);
     try {
-      new File(`file://${path}`).delete();
-    } catch {
-      // Nothing more to do: the open below reports it.
+      const f = new File(from);
+      if (!f.exists) continue;
+      f.move(new File(uri(`${path}.unreadable-${stamp}${suffix}`)));
+      moved.push(suffix || 'db');
+    } catch (e) {
+      console.log(`[db] could not set ${suffix || 'the file'} aside: ${String(e)}`);
+      try {
+        new File(from).delete();
+      } catch {
+        // Nothing more to do: the open below reports it.
+      }
     }
   }
+  console.log(`[db] set aside: ${moved.join(', ') || 'nothing'}`);
 }
 
 /**

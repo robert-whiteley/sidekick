@@ -1,6 +1,6 @@
 /**
  * Dev-only check of the flows that failed on the iPhone (TestFlight, 27 Nov), run in the iOS
- * Simulator by .github/workflows/ios-sim.yml (sidekick://bench?run=flows) or on a phone from the
+ * Simulator by .github/workflows/ios-sim.yml (launch argument -benchRun run=flows) or on a phone from the
  * speed-test screen. One `[flows] {json}` line per step, read from the log:
  * - db: the encrypted memory database opens (first run, or over an older build's file);
  * - picture: "Make a picture of a lighthouse at sunset" is answered as a picture request (on the

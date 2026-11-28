@@ -30,19 +30,21 @@ jest.mock('expo-crypto', () => ({
   getRandomBytes: (n: number) => new Uint8Array(n).fill(++mockBytes),
 }));
 const mockMove = jest.fn();
+let mockFiles: string[] = [];
 jest.mock('expo-file-system', () => ({
   File: class {
     uri: string;
+    exists: boolean;
     constructor(uri: string) {
       this.uri = uri;
+      this.exists = mockFiles.includes(uri);
     }
-    exists = true;
     move = (to: { uri: string }) => mockMove(this.uri, to.uri);
     delete = () => {};
   },
 }));
 
-function fakeDb(opts: { readable: boolean }): FakeDb {
+function fakeDb(opts: { readable: boolean; path?: string }): FakeDb {
   return {
     executeSync: jest.fn((sql: string) => {
       if (!opts.readable && sql.startsWith('SELECT count(*) FROM sqlite_master'))
@@ -50,7 +52,7 @@ function fakeDb(opts: { readable: boolean }): FakeDb {
       return { rows: [] };
     }),
     close: jest.fn(),
-    getDbPath: () => '/data/memory.db',
+    getDbPath: () => opts.path ?? '/data/memory.db',
   };
 }
 
@@ -65,6 +67,7 @@ beforeEach(() => {
   mockSetItem.mockClear();
   mockMove.mockClear();
   mockKeychain = null;
+  mockFiles = ['file:///data/memory.db'];
 });
 
 test('first run: callers at the same moment share one open and one key', async () => {
@@ -125,4 +128,28 @@ test('after closeDb (Delete all my data) nothing opens the file again', async ()
   closeDb();
   await expect(getDb()).rejects.toThrow(/being deleted/);
   expect(mockOpen).toHaveBeenCalledTimes(1);
+});
+
+test('the file goes aside with its journal files, its path encoded (a space on iPhone)', async () => {
+  mockKeychain = 'cd'.repeat(32);
+  const dir = '/var/app/Library/Application Support/sidekick/data';
+  const enc = 'file:///var/app/Library/Application%20Support/sidekick/data/memory.db';
+  mockFiles = [enc, `${enc}-wal`, `${enc}-shm`];
+  mockOpen
+    .mockReturnValueOnce(fakeDb({ readable: false, path: `${dir}/memory.db` }))
+    .mockReturnValueOnce(fakeDb({ readable: true }));
+  const { getDb } = loadDb();
+  await getDb();
+  const moved = mockMove.mock.calls.map((c) => c[0]);
+  expect(moved).toEqual([enc, `${enc}-wal`, `${enc}-shm`]);
+  expect(mockMove.mock.calls[1][1]).toMatch(/memory\.db\.unreadable-\d+-wal$/);
+});
+
+test('a new file that still cannot be read fails plainly, without a new-memory notice', async () => {
+  mockKeychain = 'cd'.repeat(32);
+  mockOpen.mockImplementation(() => fakeDb({ readable: false }));
+  const { getDb } = loadDb();
+  const { notices } = loadNotices();
+  await expect(getDb()).rejects.toThrow(/could not be opened either/);
+  expect(notices.all.map((n) => n.key)).not.toContain('memory-reset');
 });

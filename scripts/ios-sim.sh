@@ -9,7 +9,7 @@
 #   scripts/ios-sim.sh reset                       remove the app, its data and its keychain key
 #   scripts/ios-sim.sh launch <repo dir> <tag> <models dir> [<bench query>] [<wait s>]
 #       install that build over what is there (data kept, like an App Store update), start its
-#       Metro, launch, optionally open sidekick://bench?<query>, wait for "[bench] ... done" or
+#       Metro, launch, optionally run the speed test with <query> (a launch argument), wait for "[bench] ... done" or
 #       <wait s>, then save logs/<tag>-*.log and a screenshot.
 set -euo pipefail
 
@@ -47,9 +47,6 @@ case "${1:-}" in
       const all = Object.entries(d).filter(([r]) => r.includes("iOS")).flatMap(([, v]) => v);
       const p = all.filter((x) => /^iPhone \d+$/.test(x.name)).pop() ?? all.find((x) => x.name.startsWith("iPhone"));
       console.log(p.udid);')
-    # sidekick:// links open without the "Open in Sidekick?" question (it would stop the check).
-    defaults write "$HOME/Library/Developer/CoreSimulator/Devices/$udid/data/Library/Preferences/com.apple.launchservices.schemeapproval" \
-      "com.apple.CoreSimulator.CoreSimulatorBridge-->sidekick" -string "$BUNDLE"
     xcrun simctl boot "$udid" || true
     xcrun simctl bootstatus "$udid" -b >/dev/null
     echo "$udid"
@@ -106,16 +103,20 @@ case "${1:-}" in
     xcrun simctl spawn booted log stream --style compact --level debug \
       --predicate 'process == "Sidekick"' >"$LOGS/$tag-device.log" 2>&1 &
     logger=$!
-    xcrun simctl launch booted "$BUNDLE"
+    # The check starts from a launch argument (src/app/_layout.tsx): a sidekick:// link would stop
+    # at iOS's "Open in Sidekick?" question.
+    if [ -n "$query" ]; then
+      xcrun simctl launch booted "$BUNDLE" -benchRun "$query"
+    else
+      xcrun simctl launch booted "$BUNDLE"
+    fi
     # A Debug launch fetches the JS from Metro, which bundles it first (a minute or more).
     end=$((SECONDS + 900))
     until grep -q 'Bundled' "$LOGS/$tag-metro.log" 2>/dev/null; do
       [ $SECONDS -ge $end ] && { echo "Metro never finished the bundle"; break; }
       sleep 5
     done
-    sleep 30
     if [ -n "$query" ]; then
-      xcrun simctl openurl booted "sidekick://bench?$query&t=$(date +%s)"
       end=$((SECONDS + wait))
       until grep -qE '\[bench\] .* (done|failed)' "$LOGS/$tag-metro.log" "$LOGS/$tag-device.log" 2>/dev/null; do
         [ $SECONDS -ge $end ] && { echo "no '[bench] done' within ${wait}s"; break; }

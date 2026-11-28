@@ -1,6 +1,7 @@
-import { DarkTheme, DefaultTheme, Stack, ThemeProvider } from 'expo-router';
+import { DarkTheme, DefaultTheme, type Href, Stack, ThemeProvider, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { StyleSheet, View } from 'react-native';
+import { useEffect } from 'react';
+import { Platform, Settings, StyleSheet, View } from 'react-native';
 
 import { errorDetailsFor } from '@/engine/error-details';
 import { AppLockGate } from '@/features/lock/AppLockGate';
@@ -32,7 +33,25 @@ function navTheme(dark: boolean, c: Colors) {
   };
 }
 
+/**
+ * Development builds on the iOS Simulator: `simctl launch ... -benchRun run=flows` opens the speed
+ * test with that request (scripts/ios-sim.sh). A sidekick:// link would stop at iOS's "Open in
+ * Sidekick?" question, which nothing can answer on a test runner. Only whoever starts the app
+ * can pass a launch argument, and the speed test still needs its `bench-links` file.
+ */
+function useBenchLaunch() {
+  const router = useRouter();
+  useEffect(() => {
+    if (!__DEV__ || Platform.OS !== 'ios') return;
+    const q: unknown = Settings.get('benchRun');
+    if (typeof q !== 'string' || !q) return;
+    const t = setTimeout(() => router.push(`/bench?${q}&t=${Date.now()}` as Href), 1000);
+    return () => clearTimeout(t);
+  }, [router]);
+}
+
 export default function RootLayout() {
+  useBenchLaunch();
   const dark = useScheme() === 'dark';
   const c = useColors();
   return (
