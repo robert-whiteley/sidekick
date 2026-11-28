@@ -3,7 +3,7 @@
  * worked out in code, a broken one is asked for again with the reason, and a new column comes
  * back as a changed sheet. The model is a stub here.
  */
-import { answerSheetQuestion, sheetTool } from '@/engine/sheet-query';
+import { answerSheetQuestion, conditionalTerms, sheetTool } from '@/engine/sheet-query';
 import { csvSheet, toCsv } from '@/files/sheet';
 
 const sheets = [
@@ -83,4 +83,36 @@ test('a new column comes back as a changed sheet that saves as CSV', async () =>
   expect(r.text).toContain('Added the column "With VAT" (3 rows: 12.12, 24.24, 6');
   expect(toCsv(r.sheets[0]).split(/\r?\n/)[1]).toBe('2026-03-02,Ann,10.1,12.12');
   expect(sheets[0].rows[0]).toHaveLength(3);
+});
+
+// "A total per team" got one grand total: the model added one SUMIF per team (cloud emulator).
+test('conditional totals added together: each shown with its result, then the sum', async () => {
+  const { ask } = stub(
+    '{"formula": "=SUMIF(B:B, \\"Ann\\", C:C) + SUMIF(B:B, \\"Bob\\", C:C)", "label": "Totals"}',
+  );
+  const r = await answerSheetQuestion('A total for each customer', sheets, 0, ask);
+  expect(r).toEqual({
+    kind: 'answer',
+    text: 'Totals:\n15.1 (=SUMIF(B:B, "Ann", C:C))\n20.2 (=SUMIF(B:B, "Bob", C:C))\nTogether: 35.3',
+    formula: '=SUMIF(B:B, "Ann", C:C); =SUMIF(B:B, "Bob", C:C)',
+  });
+});
+
+test('only a plain sum of conditional totals is split', () => {
+  expect(conditionalTerms('=SUMIFS(C:C,A:A,"Red")+COUNTIF(A:A,"Blue")')).toEqual([
+    '=SUMIFS(C:C,A:A,"Red")',
+    'COUNTIF(A:A,"Blue")',
+  ]);
+  expect(conditionalTerms('=SUMIF(A:A,"Red",C:C)')).toBeNull();
+  expect(conditionalTerms('=SUMIF(A:A,"Red",C:C)*2+SUMIF(A:A,"Blue",C:C)')).toBeNull();
+  expect(conditionalTerms('=SUMIF(A:A,"Red",C:C)-SUMIF(A:A,"Blue",C:C)')).toBeNull();
+  expect(conditionalTerms('=SUM(C:C)+SUMIF(A:A,"Blue",C:C)')).toBeNull();
+  expect(conditionalTerms('=SUMIF(A:A,"a+b",C:C)')).toBeNull();
+});
+
+test('text in single quotes is read as text, not a sheet name', async () => {
+  const { ask } = stub('{"formula": "=SUMIFS(C:C, B:B, \'Ann\')"}');
+  const r = await answerSheetQuestion('How much did Ann spend?', sheets, 0, ask);
+  expect(r).toMatchObject({ kind: 'answer', formula: "=SUMIFS(C:C, B:B, 'Ann')" });
+  expect(r.kind === 'answer' && r.text).toMatch(/^15\.1\n/);
 });

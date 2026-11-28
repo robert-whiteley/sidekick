@@ -148,8 +148,14 @@ function tokenize(src: string, sheets: string[] = []): Tok[] {
     }
     if (c === "'") {
       const end = s.indexOf("'", i + 1);
-      if (end < 0 || s[end + 1] !== '!')
-        throw new FormulaError("a 'sheet name' must be followed by !");
+      if (end < 0) throw new FormulaError("a 'sheet name' must be followed by !");
+      if (s[end + 1] !== '!') {
+        // Text in single quotes, as the model writes it: SUMIFS(C:C, A:A, 'Red'). Excel refuses
+        // it; the question was plain, so it is read as "Red".
+        out.push({ t: 'str', v: s.slice(i + 1, end) });
+        i = end + 1;
+        continue;
+      }
       out.push({ t: 'sheet', v: s.slice(i + 1, end) });
       i = end + 2;
       continue;
@@ -2097,6 +2103,11 @@ export type FormulaResult = { value: Value; formula: string };
  * outside brackets, quotes and braces (inside them it separates arguments or array rows).
  */
 export function splitFormulas(src: string): string[] {
+  return splitTop(src, ';');
+}
+
+/** [src] split at each [sep] outside brackets and quotes, trimmed, empty parts dropped. */
+export function splitTop(src: string, sep: string): string[] {
   const parts: string[] = [];
   let depth = 0;
   let quote = '';
@@ -2108,7 +2119,7 @@ export function splitFormulas(src: string): string[] {
     } else if (c === '"' || c === "'") quote = c;
     else if (c === '(' || c === '[' || c === '{') depth++;
     else if (c === ')' || c === ']' || c === '}') depth = Math.max(0, depth - 1);
-    else if (c === ';' && depth === 0) {
+    else if (c === sep && depth === 0) {
       parts.push(src.slice(start, i));
       start = i + 1;
     }

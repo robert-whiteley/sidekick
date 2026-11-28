@@ -325,7 +325,12 @@ export const TOOLS: ToolSpec[] = [
     name: 'media',
     desc: 'control what is playing, or say what it is',
     kind: 'action',
-    args: { command: oneOf(['play', 'pause', 'next', 'previous', 'stop', 'what'], true) },
+    args: {
+      command: {
+        ...oneOf(['play', 'pause', 'next', 'previous', 'stop', 'what'], true),
+        desc: 'next skips to the next track; what says what is playing',
+      },
+    },
   },
   {
     name: 'open_app',
@@ -448,8 +453,9 @@ export const TOOLS: ToolSpec[] = [
     name: 'app_setting',
     desc:
       "say or change one of Sidekick's own settings (privacy, listening, online lookup, " +
-      'consent, app lock, keep periods, voices, connections, models, routines, your data), or ' +
-      'list a part of Settings. Not the phone’s own settings',
+      'consent, app lock, keep periods, voices, connections, models, routines), list a part of ' +
+      'Settings, or delete what Sidekick kept (the last hour, today, everything). Not the ' +
+      'phone’s own settings',
     kind: 'action',
     args: {
       do: oneOf([...SETTING_OPS]),
@@ -663,6 +669,38 @@ Reply with one JSON object of this tool's arguments, keyed by the argument names
 }
 
 /**
+ * The second try after the schema refused a reply: the same request with the arguments one per
+ * line, each marked required or optional, and the reason (not the refused reply: shown it, the
+ * model wrote it again).
+ *
+ * The retry used to repeat [fillPrompt] with the reason added, and the model repeated its shape:
+ * from the one-line signature `listening(on: boolean): start or stop…` it keyed the reply by the
+ * tool's name ({"listening": false}) or by a choice ({"volume": "down"}, {"do not disturb":
+ * true}), or left out a required argument the example did not show (translate's language), so
+ * "stop listening" and "bring the volume down" were refused (emulator bench, 28 Nov). With this
+ * retry 146 of 150 calls were right, against 141 (laptop, docs/BENCH.md). Used only for the
+ * retry: as the first prompt it also changed good values (optional arguments dropped or made up).
+ */
+export function fillRetryPrompt(
+  question: string,
+  now: Date,
+  tool: ToolSpec,
+  error: string,
+): string {
+  const args = Object.entries(tool.args).map(
+    ([n, a]) =>
+      `- ${argLine(n, a).replace(/^(\w+)\?/, '$1')}, ${a.required ? 'required' : 'optional'}`,
+  );
+  return `Now: ${now.toDateString()} ${localIso(now).slice(11)}.
+Request: ${JSON.stringify(question)}
+Tool ${tool.name}, to ${tool.desc}.
+Arguments:
+${args.join('\n') || '(none)'}
+
+A reply was refused (${error}). Reply with one JSON object of this tool's arguments, keyed by the argument names above (for example ${requiredExample(tool)}), only those said or implied by the request. If this tool does not fit the request, reply {"none":true}.`;
+}
+
+/**
  * A one-key example of the reply's shape, from the tool's first argument. Without it the model
  * wrote edit_photo's choice as the key ({"crop":"square"}) instead of {"op":"crop"}, and every
  * call was refused (phone bench, 27 Nov).
@@ -670,8 +708,21 @@ Reply with one JSON object of this tool's arguments, keyed by the argument names
 export function argExample(tool: ToolSpec): string {
   const [name, a] = Object.entries(tool.args)[0] ?? [];
   if (!name || !a) return '{}';
-  const v = a.values?.[0] ?? (a.type === 'number' ? 1 : a.type === 'boolean' ? true : '...');
-  return JSON.stringify({ [name]: v }).replace(/":/g, '": ');
+  return JSON.stringify({ [name]: sampleValue(a) }).replace(/":/g, '": ');
+}
+
+const sampleValue = (a: ArgSpec) =>
+  a.values?.[0] ?? (a.type === 'number' ? 1 : a.type === 'boolean' ? true : '...');
+
+/** The retry's example: every required argument (or the first one), with sample values. */
+export function requiredExample(tool: ToolSpec): string {
+  const all = Object.entries(tool.args);
+  const required = all.filter(([, a]) => a.required);
+  const shown = required.length ? required : all.slice(0, 1);
+  if (!shown.length) return '{}';
+  return JSON.stringify(Object.fromEntries(shown.map(([n, a]) => [n, sampleValue(a)])))
+    .replace(/":/g, '": ')
+    .replace(/,"/g, ', "');
 }
 
 /** The reply to [fillPrompt] → a call to [tool], {tool:'none'}, or null (not JSON). */
@@ -682,7 +733,11 @@ export function parseFillReply(reply: string, tool: string): ToolCall | null {
   try {
     o = JSON.parse(json);
   } catch {
-    return null;
+    try {
+      o = JSON.parse(escapeInnerQuotes(json));
+    } catch {
+      return null;
+    }
   }
   if (!o || typeof o !== 'object') return null;
   const r = o as Record<string, unknown>;
@@ -695,6 +750,18 @@ export function parseFillReply(reply: string, tool: string): ToolCall | null {
   const inner = r.args ?? r.arguments ?? named;
   const args = inner && typeof inner === 'object' ? (inner as Record<string, unknown>) : r;
   return { tool, args };
+}
+
+/**
+ * Escapes quotes left bare inside a JSON string value: the model writes formulas as
+ * {"formula": "=COUNTIFS(C:C, ">10")"}, which isn't JSON, so the question failed (laptop, 28
+ * Nov). A value runs to the quote that is followed by the next key or the closing brace.
+ */
+export function escapeInnerQuotes(json: string): string {
+  return json.replace(
+    /(:\s*")([\s\S]*?)("(?=\s*,\s*"[^"\n]+"\s*:|\s*\}))/g,
+    (_m, open: string, body: string, close: string) => open + body.replace(/\\?"/g, '\\"') + close,
+  );
 }
 
 /** The model's reply → a tool call, {tool:'none'}, or null (not JSON). */
