@@ -13,7 +13,15 @@ import { embedDocument } from './search-logic';
 
 export const BENCH_PREFIX = 'bench:';
 
-export type BenchRow = { key: string; kind: string; at: number; text: string; filler?: boolean };
+export type BenchRow = {
+  key: string;
+  kind: string;
+  at: number;
+  text: string;
+  filler?: boolean;
+  /** A saved recording of a heard line (its play button). */
+  audioPath?: string;
+};
 
 export type StoreCounts = {
   /** Rows that aren't bench data, by kind (counts only). */
@@ -89,7 +97,7 @@ export async function addBenchRows(
         // Marked as already read, so no background pass (follow-ups, facts, OCR, photo vectors)
         // makes suggestions from test data that would outlive it.
         const ins = await tx.execute(
-          'INSERT INTO moments (kind, at, text, source_key, source_ver, embedded, from_at, followups_scanned, facts_scanned, photo_ocr, image_embedded) VALUES (?, ?, ?, ?, ?, 1, ?, 1, 1, 1, 1)',
+          'INSERT INTO moments (kind, at, text, source_key, source_ver, embedded, from_at, followups_scanned, facts_scanned, photo_ocr, image_embedded, audio_path) VALUES (?, ?, ?, ?, ?, 1, ?, 1, 1, 1, 1, ?)',
           [
             r.kind,
             r.at,
@@ -97,6 +105,7 @@ export async function addBenchRows(
             `${BENCH_PREFIX}${r.key}`,
             'bench',
             r.kind === 'conversation_note' ? r.at - 20 * 60_000 : null,
+            r.audioPath ?? null,
           ],
         );
         let v: number[];
@@ -138,6 +147,10 @@ export async function clearBenchRows(): Promise<number> {
   const d = await getDb();
   const where = "substr(source_key, 1, 6) = 'bench:'";
   const count = n(await d.execute(`SELECT COUNT(*) AS n FROM moments WHERE ${where}`));
+  const audio = await d.execute(
+    `SELECT audio_path FROM moments WHERE ${where} AND audio_path IS NOT NULL`,
+  );
+  for (const r of audio.rows) SidekickNative.deleteFile(r.audio_path as string);
   for (const table of ['moments_vec', 'photos_vec'])
     await d.execute(`DELETE FROM ${table} WHERE id IN (SELECT id FROM moments WHERE ${where})`);
   await d.execute(`DELETE FROM moments WHERE ${where}`);
