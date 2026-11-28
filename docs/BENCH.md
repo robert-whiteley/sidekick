@@ -646,6 +646,40 @@ between alarm, reminder and event). Also tried: saying in the call line that ano
 translate (13/13 extras, but more misses elsewhere), and a longer translate line (188/211).
 Not yet checked on the phone.
 
+### Sorter examples (28 Nov 2026)
+
+With the tool lines alone about a fifth of the 202 bench items sat at the edge: each rewording
+fixed about three and broke about three others. Tried changes of structure on the laptop
+(same Gemma file, sorter only, the system prompt read once and cloned per request as in the app).
+40 ids picked at random (seed 68; 41 items, one id is used twice) were held out and not tuned on; 5 made-up questions about
+the owner's own life ("Is my passport still valid?") were checked too, all wanting an answer.
+
+| Sorter                                                               | All 202 | Tuned 161 | Held out 41 | Own life 5 |
+| -------------------------------------------------------------------- | ------- | --------- | ----------- | ---------- |
+| Tool lines only (main)                                               | 176     | 141       | 35          | 0          |
+| **Worked examples after the lines (23, made up, `DECIDE_EXAMPLES`)** | **191** | **151**   | **40**      | **4**      |
+| 18 of those examples                                                 | 187     | 149       | 38          | 3          |
+| Two steps: a group (answer, memory, online, phone), then the tool    | 126     | 102       | 24          | 3          |
+| Two steps, each with the examples                                    | 172     | 138       | 34          | 2          |
+
+**Built: the examples.** They are read once with the tool lines (the prefix cache), so a request
+still costs its own words and one word of reply; the prompt grows by about 250 tokens, read once
+per model load. The two-step sorter echoed the request's verb ("Set", "Switch") instead of a
+group, and needs a third kept prompt (the app keeps two). Scoring each tool name's likelihood
+needs a scoring call: the laptop's LiteRT-LM has one, the Android 0.20 library has neither
+scoring nor constrained decoding, so it was not tried. Still wrong after: "in one minute, tell me
+a fun fact" (answered), "turn off the camera" (camera settings), "send me a message" and "call
+me" (the tool), "get me up at half six" (reminder), "write a text I could send" (message), two
+time sums (calculate), "the tallest mountain", "what's the weather on Mars" and "what time is my train
+tomorrow" (lookup).
+**In the app on the emulator** (x86_64, same Gemma file, `decide&variant=app`: the app's sorter
+and then the arguments): **192/202** (held out 40/41) against 177/202 (36/41) before, 13.6 s a
+request with the arguments against 14.7 s. "Is my passport still valid?" in the chat: memory.
+Misses there: the two time sums, "in one minute, tell me a fun fact", "stop listening" and "stop
+eavesdropping" (`stop_listening`, refused by the argument step), "turn off the camera", the
+weather on Mars, "get me up at half six", "bring the volume down" (refused by the argument step)
+and "write a text I could send".
+
 ### Thinking
 
 Gemma 4's thinking mode (`thinkingBudget` per turn: off, a token budget, or -1 for no limit) is

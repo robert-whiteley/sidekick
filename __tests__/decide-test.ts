@@ -1,5 +1,6 @@
 import {
   catalogSystem,
+  DECIDE_EXAMPLES,
   decidePrompt,
   DECIDE_TOOLS,
   decideHint,
@@ -206,4 +207,42 @@ test('the sorter keeps research for a research request and talk about a tool as 
     /phone tool that does what I ask \(only when I want the phone to do that now\)/,
   );
   expect(sys).not.toMatch(/^reminder: .*alarm/m);
+});
+
+// About a fifth of the bench sat at the edge with the tool lines alone, so each new line flipped
+// others. Worked examples of the near pairs settle them (laptop, all 202 items: 176 -> 191, the
+// 41 held out of tuning 35 -> 40), and "Is my passport still valid?" is no longer a web search.
+describe('the sorter examples', () => {
+  it('follow the catalog, each reply a word the sorter reads', () => {
+    const sys = catalogSystem();
+    expect(sys).toContain('\nExamples:\nRequest: ');
+    for (const [q, a] of DECIDE_EXAMPLES) {
+      expect(sys).toContain(`Request: ${q}\n${a}`);
+      const d = parseClassify(a);
+      expect(decisionLabel(d)).toBe(
+        a === 'memory'
+          ? 'answer'
+          : a === 'news'
+            ? 'lookup'
+            : a === 'answer' || a === 'lookup'
+              ? a
+              : `do:${a}`,
+      );
+    }
+  });
+
+  it('leave out the examples for a tool or a lookup that is not offered', () => {
+    const tools = DECIDE_TOOLS.filter((t) => t.name !== 'alarm');
+    const sys = catalogSystem(tools, false);
+    expect(sys).not.toContain('Ring at 5:45 tomorrow so I wake up');
+    expect(sys).not.toMatch(/^(lookup|news)$/m);
+    expect(sys).toContain('Request: Remind me to call the bank at 3\nreminder');
+  });
+
+  it('are not bench lines', () => {
+    const { CASES } = jest.requireActual('../bench/answers/cases');
+    const { DECIDE_CASES } = jest.requireActual('../bench/answers/decide-cases');
+    const bench = new Set([...CASES, ...DECIDE_CASES].map((c: { q: string }) => c.q.toLowerCase()));
+    for (const [q] of DECIDE_EXAMPLES) expect(bench.has(q.toLowerCase())).toBe(false);
+  });
 });
