@@ -20,7 +20,7 @@ import { clipText, type WebSource } from '@/web/lookup-logic';
 import { isOnline } from '@/web/lookup';
 import { fetchPage } from '@/web/page';
 import { siteOf } from '@/web/page-logic';
-import { askLlm } from './llm';
+import { answerStopped, askLlm } from './llm';
 import { queueOnline } from './online-queue';
 import { getSettings } from './settings';
 import type { SharedItem } from './share-in';
@@ -28,6 +28,8 @@ import {
   type Attachment,
   clockOf,
   combinePrompt,
+  DOC_NOTHING_FOUND,
+  usefulNotes,
   DOC_LIMITS,
   DOC_SYSTEM,
   docLabel,
@@ -390,9 +392,14 @@ export async function answerFromText(
         ).text,
       );
     }
-    onStatus('Writing the answer…');
-    answer = (await ask(combinePrompt(question, label, notes), DOC_LIMITS.answerTokens, onText))
-      .text;
+    if (!usefulNotes(notes).length && !answerStopped()) {
+      answer = DOC_NOTHING_FOUND;
+      onText(answer);
+    } else {
+      onStatus('Writing the answer…');
+      answer = (await ask(combinePrompt(question, label, notes), DOC_LIMITS.answerTokens, onText))
+        .text;
+    }
   }
   answer = answer.trim();
   if (partial) {
