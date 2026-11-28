@@ -110,18 +110,22 @@ wait_log() {
 }
 # ask <question>: types it into the chat and sends it; then waits for its answer to finish.
 send() {
-  has '^(Ask Sidekick|Ask about it)$' || home || return 1
-  tap '^(Ask Sidekick|Ask about it)$' || return 1
-  sleep 1
-  type_text "$1"
-  # Send shows once the text is in the field; while an answer runs on the emulator's busy CPU
-  # that can take a while, so wait, and type once more if the field stayed empty.
-  if ! wait_for '^Send$' 45; then
-    shot "send-$(date +%s)"
-    has '^(Ask Sidekick|Ask about it)$' && tap '^(Ask Sidekick|Ask about it)$' && type_text "$1"
-    wait_for '^Send$' 45 || return 1
+  # While an answer streams, the screen never settles and uiautomator often can't read it, so
+  # this reads the screen only when it must: the field is tapped only when the keyboard is down,
+  # and the message goes with Send when it can be found, else with the keyboard's send key.
+  if ! A shell dumpsys input_method | grep -q 'mInputShown=true'; then
+    tap '^(Ask Sidekick|Ask about it)$' || { home && tap '^(Ask Sidekick|Ask about it)$'; } || return 1
+    sleep 1
   fi
-  tap '^Send$'
+  type_text "$1"
+  sleep 2
+  local c
+  if c=$(where '^Send$'); then
+    # shellcheck disable=SC2086
+    A shell input tap $c
+  else
+    A shell input keyevent KEYCODE_ENTER
+  fi
 }
 # idle: until no answer is running (no Stop button), so each flow starts on a quiet chat.
 idle() { wait_gone '^Stop$' "${1:-$SLOW}"; }
@@ -221,8 +225,8 @@ flow_recording_play() {
 }
 
 flow_settings_by_voice() {
-  send 'Turn on online lookup' || return 1
-  wait_for '^Approve$' "$SLOW" || return 1
+  ask 'Turn on online lookup' || return 1
+  wait_for '^Approve$' 30 || { note 'no Approve card: not routed to the setting'; return 1; }
   shot settings_approve_card
   sleep 2 # Approve works only after a short wait
   tap '^Approve$' || return 1
@@ -232,25 +236,33 @@ flow_settings_by_voice() {
 flow_web_no() {
   # With Online off, each answer is followed by the short WEB/NO check (does this need the web?);
   # it must finish and log its result for every question.
-  tap '^Online: .*Tap to go offline' || return 1
-  wait_for '^Offline' 30 || return 1
-  local q fail=0 n
+  has '^Online: ' && { tap '^Online: ' || return 1; }
+  wait_for '^Offline: answers come only' 30 || return 1
+  local q fail=0 n end
   for q in 'Who won the 2026 Tour de France?' 'What is 17 times 23?' 'What did I do yesterday?'; do
     n=$(grep -ac 'offline answer' "$LOGS/app.log")
     ask "$q" || { fail=1; continue; }
-    local end=$((SECONDS + 120))
+    end=$((SECONDS + 120))
     until [ "$(grep -ac 'offline answer' "$LOGS/app.log")" -gt "$n" ]; do
       [ $SECONDS -ge $end ] && { note "no WEB/NO result after: $q"; fail=1; break; }
       sleep 3
     done
   done
   keyboard_down
-  tap '^Offline' && wait_for '^Online: ' 30 || fail=1
+  online_on || fail=1
   return $fail
+}
+# online_on: online lookup on, with the chat's Online button (as a user would).
+online_on() {
+  has '^Online: ' && return 0
+  tap '^Offline: answers come only' || return 1
+  wait_for '^Online: ' 30
 }
 
 flow_offline_queue() {
-  # Airplane mode, as on a phone: the app goes by the system's network state.
+  # Airplane mode, as on a phone: the app goes by the system's network state. Online lookup on
+  # first, or the weather would be answered offline instead of queued.
+  online_on || return 1
   A shell cmd connectivity airplane-mode enable
   sleep 5
   local ok=0
@@ -288,28 +300,42 @@ flow_folder_search() {
 }
 
 flow_send_queue() {
+  local stop before started
+  started=$(grep -ac '\[decide\] answer' "$LOGS/app.log")
+  before=$(answers)
   send 'Write a 300 word story about a lighthouse keeper named Tamsin' || return 1
   wait_for '^Stop$' 120 || return 1
-  local before
-  before=$(answers)
-  send 'What is the capital of France?' || return 1
-  wait_for '^(Next|Queued)$' 30 || return 1
-  has '^Send now$' || { note 'no Send now on the queued message'; return 1; }
-  shot send_queue_queued
+  # Where Stop is (keyboard down, as when it is tapped), read now: once the words stream the
+  # screen may not be readable.
   keyboard_down
-  # Wait for the first words, so Stop leaves a part-answer marked Stopped.
-  wait_log '\[decide\]' 300 || return 1
+  stop=$(where '^Stop$') || return 1
+  send 'What is the capital of France?' || return 1
+  sleep 3
+  shot send_queue_queued
+  if has '^(Next|Queued)$'; then
+    has '^Send now$' || { note 'no Send now on the queued message'; return 1; }
+  else
+    note 'the screen could not be read while answering; the queue is checked by its answer below'
+  fi
+  keyboard_down
+  # Wait for the story's first words, so Stop leaves a part-answer marked Stopped.
+  local end=$((SECONDS + 300))
+  until [ "$(grep -ac '\[decide\] answer' "$LOGS/app.log")" -gt "$started" ]; do
+    [ $SECONDS -ge $end ] && { note 'the story never started'; return 1; }
+    sleep 3
+  done
   sleep 20
-  tap '^Stop$' || return 1
-  wait_for '^Stopped$' 60 || return 1
+  # shellcheck disable=SC2086
+  A shell input tap $stop
   wait_answers $((before + 2)) || return 1
   sleep 3
+  has '^Stopped$' || { note 'no Stopped on the part-answer'; return 1; }
   has 'Paris' || { note 'the queued question was not answered'; return 1; }
 }
 
 flow_delete_confirm() {
-  send 'Delete everything from the last hour' || return 1
-  wait_for 'Type DELETE to confirm' "$SLOW" || return 1
+  ask 'Delete everything from the last hour' || return 1
+  wait_for 'Type DELETE to confirm' 30 || { note 'no DELETE sheet: not routed to deleting'; return 1; }
   shot delete_sheet
   tap '^DELETE$' || return 1 # the empty field shows DELETE as its hint
   sleep 1
