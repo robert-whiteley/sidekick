@@ -10,6 +10,7 @@
  */
 import SidekickNative from '../../modules/sidekick-native';
 import { CASES } from '../../bench/answers/cases';
+import { inPart } from './bench-part';
 import { DECIDE_CASES } from '../../bench/answers/decide-cases';
 import { THINK_CASES } from '../../bench/answers/thinking-cases';
 import { BG_CASES, type BgCase } from '../../bench/answers/background-cases';
@@ -112,8 +113,15 @@ async function ask(prompt: string, system: string, maxTokens: number, thinkingBu
 
 const cosine = (a: number[], b: number[]) => a.reduce((s, x, i) => s + x * b[i], 0);
 
-export async function runDecideBench(log: Log, variant: string, only?: string): Promise<void> {
-  const all = items().filter((x) => !only || only.split(',').some((p) => x.id.startsWith(p)));
+export async function runDecideBench(
+  log: Log,
+  variant: string,
+  only?: string,
+  part?: string,
+): Promise<void> {
+  const all = items()
+    .filter((x) => !only || only.split(',').some((p) => x.id.startsWith(p)))
+    .filter((_, i) => inPart(i, part));
   let ok = 0;
   let scored = 0;
   let totalMs = 0;

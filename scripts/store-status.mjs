@@ -178,13 +178,10 @@ function run(id) {
 }
 
 // ---------- Check ----------
-let now;
-try {
-  const [a, p] = await Promise.all([apple(), play().catch(() => null)]);
-  now = { apple: a, play: p, run: run(marker?.watch?.build?.run) };
-} catch {
-  process.exit(0); // offline, or the key isn't on this machine: say nothing
-}
+// Each store on its own: a missing key or an outage for one still reports the other.
+const [a, p] = await Promise.all([apple().catch(() => null), play().catch(() => null)]);
+if (!a && !p) process.exit(0); // offline, or no key on this machine: say nothing
+const now = { apple: a, play: p, run: run(marker?.watch?.build?.run) };
 
 if (show) {
   console.log(JSON.stringify(now, null, 2));
@@ -196,8 +193,10 @@ const last = marker.last ?? {};
 const lines = [];
 const changed = (k, v) => JSON.stringify(last[k]) !== JSON.stringify(v);
 
-if (changed('version', now.apple.version)) lines.push(`App Store: version ${now.apple.version}`);
-if (changed('build', now.apple.build)) lines.push(`TestFlight: newest build ${now.apple.build}`);
+if (now.apple && changed('version', now.apple.version))
+  lines.push(`App Store: version ${now.apple.version}`);
+if (now.apple && changed('build', now.apple.build))
+  lines.push(`TestFlight: newest build ${now.apple.build}`);
 if (now.run && changed('run', now.run.state))
   lines.push(`Release run ${w.build.run}: ${now.run.state}`);
 if (now.play && changed('play', now.play))
@@ -210,20 +209,21 @@ if (now.play && changed('play', now.play))
 
 // Problems that haven't changed are repeated once a day.
 const problems = [];
-if (w.iosReview && now.apple.rejected) problems.push(`App Store review: ${now.apple.version}`);
-if (now.apple.buildBad) problems.push(`TestFlight: build ${now.apple.build}`);
+if (w.iosReview && now.apple?.rejected) problems.push(`App Store review: ${now.apple.version}`);
+if (now.apple?.buildBad) problems.push(`TestFlight: build ${now.apple.build}`);
 if (now.run?.done && !now.run.ok) problems.push(`Release run ${w.build.run} ${now.run.state}`);
 if (problems.length && !lines.length && Date.now() - (marker.nagAt ?? 0) > DAY)
   lines.push(...problems.map((p) => 'Still: ' + p));
 
-// Done when the review is approved, the build is processed and no Play draft is waiting.
+// Done when the review is approved, the build is processed and no Play draft is waiting. Without
+// the App Store key (a cloud check with only the Play key) Apple's side is never called done.
 const buildDone =
   !w.build ||
   ((now.run ? now.run.done && now.run.ok : true) &&
-    now.apple.buildValid &&
-    now.apple.buildUploaded &&
+    !!now.apple?.buildValid &&
+    !!now.apple.buildUploaded &&
     new Date(now.apple.buildUploaded) > new Date(w.build.startedAt));
-const reviewDone = !w.iosReview || now.apple.approved;
+const reviewDone = !w.iosReview || !!now.apple?.approved;
 // Play uploads land as drafts; outstanding until the owner rolls them out (Play then reviews).
 const playDone =
   !(w.build || w.play) ||
@@ -239,8 +239,8 @@ if (buildDone && reviewDone && playDone) {
   writeMarker({
     ...marker,
     last: {
-      version: now.apple.version,
-      build: now.apple.build,
+      version: now.apple?.version ?? last.version,
+      build: now.apple?.build ?? last.build,
       run: now.run?.state,
       play: now.play,
     },

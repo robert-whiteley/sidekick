@@ -1,0 +1,76 @@
+name: Store status
+# Where the store builds stand, from any session (cloud or laptop) without keys on the machine:
+# Google Play tracks (GOOGLE_SERVICE_ACCOUNT_JSON, the key release.yml uploads with), the App Store
+# version and newest TestFlight build (only when the ASC_KEY_ID, ASC_ISSUER_ID and ASC_KEY_P8
+# secrets are set) and the newest release run. Read-only: it changes nothing in either store.
+#   gh workflow run store-status.yml        then: gh run view <id> --log
+# Scheduled every 6 hours, but it only looks while a release run is under 14 days old. Fails
+# when Apple rejected the version, a TestFlight build is invalid or the newest release run failed.
+on:
+  # A branch named store-status/<anything> runs it too (to try a change before it is on main).
+  push:
+    branches: ['store-status/**']
+  workflow_dispatch:
+  schedule:
+    - cron: '23 */6 * * *'
+permissions:
+  contents: read
+  actions: read
+concurrency: store-status
+jobs:
+  status:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: A release under 14 days old
+        id: recent
+        run: |
+          since=$(date -u -d '14 days ago' +%Y-%m-%dT%H:%M:%SZ)
+          gh api "repos/$GITHUB_REPOSITORY/actions/workflows/release.yml/runs?per_page=1" \
+            --jq '.workflow_runs[0] // {} | [.id, .status, .conclusion, .created_at, .head_sha[0:7]] | @tsv' > run.tsv || true
+          read -r id status conclusion created sha < run.tsv || true
+          echo "Newest release run: ${id:-none} ${status:-} ${conclusion:-} ${created:-} ${sha:-}" | tee -a "$GITHUB_STEP_SUMMARY"
+          echo "id=${id:-}" >> "$GITHUB_OUTPUT"
+          echo "conclusion=${conclusion:-}" >> "$GITHUB_OUTPUT"
+          if [ "$GITHUB_EVENT_NAME" = schedule ] && { [ -z "${created:-}" ] || [[ "$created" < "$since" ]]; }; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          fi
+      - if: steps.recent.outputs.skip != 'true'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - if: steps.recent.outputs.skip != 'true'
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+      - name: Stores
+        if: steps.recent.outputs.skip != 'true'
+        env:
+          PLAY_KEY: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+          RUN_CONCLUSION: ${{ steps.recent.outputs.conclusion }}
+        run: |
+          key="$RUNNER_TEMP/play.json"
+          [ -n "$PLAY_KEY" ] && printf '%s' "$PLAY_KEY" > "$key"
+          GOOGLE_SERVICE_ACCOUNT_KEY_PATH="$key" node scripts/store-status.mjs --show > state.json || true
+          rm -f "$key"
+          [ -s state.json ] || echo '{}' > state.json
+          # Plain lines, not JSON: lines of the Play key's JSON ("{", "}") are masked in logs.
+          {
+            node -e '
+              const s = JSON.parse(require("fs").readFileSync("state.json", "utf8"));
+              if (s.apple) console.log(`App Store: version ${s.apple.version}; newest TestFlight build ${s.apple.build}`);
+              for (const [t, rs] of Object.entries(s.play ?? {})) console.log(`Google Play ${t}: ${rs.join("; ")}`);
+              if (!s.apple && !s.play) console.log("No store could be reached.");'
+            [ -n "$ASC_KEY_ID" ] || echo 'App Store: no ASC_KEY_ID / ASC_ISSUER_ID / ASC_KEY_P8 secrets, so only Google Play is shown.'
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+          node -e '
+            const s = JSON.parse(require("fs").readFileSync("state.json", "utf8"));
+            const bad = [];
+            if (s.apple?.rejected) bad.push(`App Store review: ${s.apple.version}`);
+            if (s.apple?.buildBad) bad.push(`TestFlight: build ${s.apple.build}`);
+            if (process.env.RUN_CONCLUSION && !["success", ""].includes(process.env.RUN_CONCLUSION))
+              bad.push(`release run ${process.env.RUN_CONCLUSION}`);
+            if (bad.length) { for (const b of bad) console.log(`::error::${b}`); process.exit(1); }'

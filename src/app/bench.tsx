@@ -131,15 +131,16 @@ export default function BenchScreen() {
   // Answers, routing and recall bench (src/engine/answers-bench.ts): JSON lines on logcat.
   // Started by deep link too: sidekick://bench?run=answers|recall-load|recall|recall-search|
   // recall-clear|facts|research|photo-edit|decide|thinking|background|flows [&only=<id prefixes>]
-  // [&size=<rows>] [&variant=<decide variant or thinking budget>] (src/engine/decide-bench.ts).
+  // [&size=<rows>] [&variant=<decide variant or thinking budget>] [&part=<k>/<n>, decide: every
+  // n-th case from the k-th] (src/engine/decide-bench.ts).
   const quiet = (line: string) => {
     console.log(line);
     setLog((l) => [...l.slice(-40), line.slice(0, 200)]);
   };
-  const bench = (what: string, only?: string, size?: number, variant?: string) =>
+  const bench = (what: string, only?: string, size?: number, variant?: string, part?: string) =>
     run(what, async () => {
       if (what === 'answers') await runAnswersBench(quiet, only);
-      else if (what === 'decide') await runDecideBench(quiet, variant ?? 'fused', only);
+      else if (what === 'decide') await runDecideBench(quiet, variant ?? 'fused', only, part);
       else if (what === 'thinking') await runThinkingBench(quiet, variant ?? 'default', only);
       else if (what === 'background')
         await runBackgroundBench(
@@ -169,6 +170,7 @@ export default function BenchScreen() {
     size?: string;
     t?: string;
     variant?: string;
+    part?: string;
   }>();
   useEffect(() => {
     // Links run only on a phone set up for testing: a `bench-links` file in the app's external
@@ -183,13 +185,14 @@ export default function BenchScreen() {
           params.only,
           params.size ? Number(params.size) : undefined,
           params.variant,
+          params.part,
         ),
       500,
     );
     return () => clearTimeout(t);
     // A new `t` re-runs the same request.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [params.run, params.only, params.size, params.t, params.variant]);
+  }, [params.run, params.only, params.size, params.t, params.variant, params.part]);
 
   const download = (files: ModelFile[]) =>
     run('download', async () => {

@@ -111,6 +111,35 @@ Every setting is in one registry, `src/engine/settings-registry.ts` (pure): id, 
 
 Core features must work on both platforms; Android-only extras are optional.
 
+## Checks
+
+Everything except the real-phone checks runs on free GitHub-hosted runners (public repo, standard
+runners only), so any session, laptop or cloud, can start and read them with
+`node scripts/checks.mjs` (REST only: cloud sessions can't use GraphQL, so `gh pr checks` fails
+there).
+
+| Workflow           | What it checks                                                                                                                                                                                                                                                                                                                                                                                                                                | When                                                   |
+| ------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------ |
+| `ci.yml`           | privacy, licences, lint, types, format, tests, expo-doctor; native builds when native files change                                                                                                                                                                                                                                                                                                                                            | every PR and push to main                              |
+| `codeql.yml`       | CodeQL (JavaScript/TypeScript)                                                                                                                                                                                                                                                                                                                                                                                                                | every PR, push to main, weekly                         |
+| `ios-sim.yml`      | iPhone Simulator: fresh install, first run, `run=flows`, upgrade over an older build (`scripts/ios-sim.sh`)                                                                                                                                                                                                                                                                                                                                   | manual, or a branch `ios-sim/*`                        |
+| `android-emu.yml`  | Android emulator (x86_64 build, Gemma on the emulator's CPU): first run, interpreter-not-open reply, pasted table, every file type, a recording's play button, settings by voice with Approve, the WEB/NO check with Online off, offline queue with Cancel (airplane mode), folder search through the system picker, send queue with Stop, the DELETE sheet, a screenshot of every settings page, the decide bench (`scripts/android-emu.sh`) | manual, or a branch `android-emu/*`                    |
+| `store-status.yml` | Play tracks, App Store version and TestFlight build (`scripts/store-status.mjs --show`), newest release run                                                                                                                                                                                                                                                                                                                                   | manual; every 6 h while a release is under 14 days old |
+| `release.yml`      | store builds for both stores from one commit                                                                                                                                                                                                                                                                                                                                                                                                  | manual, owner's OK                                     |
+
+The emulator flows drive the real UI with `adb` (`input`, `uiautomator dump`, share intents) and
+read the app's log. They run side by side, one emulator job per group (the decide bench in three
+parts, `part=k/n`), each first_run included, from a booted-emulator snapshot kept in the cache. The
+APK is cached under a hash of everything that goes into it, so a change to the flow scripts alone
+never rebuilds it; the iPhone Simulator run keeps its app the same way. On a laptop emulator that
+is already set up, `SET_UP=1 scripts/android-emu.sh run <flow>` skips first_run. The made-up test files come from `scripts/android-test-files.py`; the heard
+line behind the play-button flow is bench data (`run=flows&only=heard`, removed by
+`run=recall-clear`). Left for a real phone: speed, memory beside Gemma on a real 4–8 GB phone, heat
+and battery, real microphones and voices (wake word, barge-in, the owner's voice), the camera, the
+GPU and NPU backends, and store-signed builds. The SessionStart hook (`scripts/session-start.sh`)
+never fails a session: it fast-forwards main, installs the packages in a cloud container, says
+"Disk low" under 15 GB free, and runs the silent store check when something is outstanding.
+
 ## Security
 
 See [SECURITY.md](SECURITY.md) and [PRIVACY.md](PRIVACY.md).

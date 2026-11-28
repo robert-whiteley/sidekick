@@ -150,8 +150,13 @@ def check_release_sh(w):
 
 
 def check_gh(w):
+    store = "Store build for Google Play and the App Store: needs the owner's OK."
     if len(w) >= 4 and w[1] == 'workflow' and w[2] == 'run' and re.fullmatch(r'release(\.ya?ml)?', w[3]):
-        ask("Store build for Google Play and the App Store: needs the owner's OK.")
+        ask(store)
+    # The same through the REST API (cloud sessions, scripts/checks.mjs).
+    if len(w) >= 3 and w[1] == 'api' and any(
+            re.search(r'actions/workflows/release(\.ya?ml)?/dispatches', a) for a in w[2:]):
+        ask(store)
 
 
 def check_package_add(p, w):

@@ -9,8 +9,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "timeout 15 git fetch -q origin 2>/dev/null; git merge --ff-only -q origin/main 2>/dev/null; [ -f .claude/store-pending.json ] && PATH=\"$(ls -d \"$HOME\"/.nvm/versions/node/*/bin 2>/dev/null | tail -1):$PATH\" timeout 60 node scripts/store-status.mjs 2>/dev/null; true",
-            "timeout": 90
+            "command": "bash \"$CLAUDE_PROJECT_DIR\"/scripts/session-start.sh 2>/dev/null; true",
+            "timeout": 600
           }
         ]
       }

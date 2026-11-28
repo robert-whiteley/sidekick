@@ -10,6 +10,11 @@
  *   natively, so this must finish without errors).
  * Off the record: nothing is kept. Downloads the chat model and the embedder if missing.
  * `only=db,picture` runs just those steps.
+ *
+ * Only when asked for by name (`only=heard`, scripts/android-emu.sh): a made-up heard line with a
+ * recording (`sk-test/sk-test-heard.wav` in the app's external files folder, put there by adb),
+ * so the chat can be asked about it and must show that recording's play button. Bench data:
+ * `run=recall-clear` removes it and its recording.
  */
 import SidekickNative from '../../modules/sidekick-native';
 import { answer } from './assistant';
@@ -18,6 +23,8 @@ import { errorDetailsFor } from './error-details';
 import { allRequiredFiles } from './llm-candidates';
 import { ensureLlm } from './llm';
 import { EMBEDDER_FILE } from './models';
+import { dataDir } from './paths';
+import { addBenchRows } from '@/memory/bench-data';
 import { EMBED_DIMS, getDb } from '@/memory/db';
 
 type Log = (line: string) => void;
@@ -78,8 +85,29 @@ async function modelsAtOnce() {
   };
 }
 
+/** The made-up heard line with its recording (bench data, removed by recall-clear). */
+async function addHeardLine() {
+  const d = SidekickNative.getDeviceInfo();
+  const src = `${d.externalFilesDir ?? d.filesDir}/sk-test/sk-test-heard.wav`;
+  if (!SidekickNative.fileExists(src)) throw new Error('no sk-test-heard.wav');
+  const audioPath = `${dataDir()}/bench-heard-${Date.now()}.wav`;
+  if (!SidekickNative.copyFile(src, audioPath)) throw new Error('could not copy the recording');
+  const text = 'Tom said the plumber is coming on Tuesday at nine to fix the boiler.';
+  await addBenchRows([
+    { key: 'heard-plumber', kind: 'speech', at: Date.now() - 60 * 60_000, text, audioPath },
+  ]);
+  return { audioPath, text };
+}
+
 export async function runFlowsBench(log: Log, photo: string | null, only?: string): Promise<void> {
   const want = (step: string) => !only || only.split(',').includes(step);
+  if (only?.split(',').includes('heard')) {
+    try {
+      line(log, 'heard', { ok: true, ...(await addHeardLine()) });
+    } catch (e) {
+      line(log, 'heard', { ok: false, details: errorDetailsFor('flows heard', e) });
+    }
+  }
   if (want('db')) {
     try {
       const db = await getDb();
