@@ -9,6 +9,8 @@ import {
   parseControlReply,
   parseTurnReply,
   partialTranslation,
+  STT_DIRS,
+  sttEngine,
   turnPrompt,
 } from '@/engine/interpreter-logic';
 import { catalogSystem, DECIDE_TOOLS, lockSafe } from '@/engine/decide-logic';
@@ -30,9 +32,15 @@ describe('languages', () => {
     expect(languageFromName('Klingon')).toBeNull();
     expect(languageFromName('')).toBeNull();
   });
-  it('European languages use Parakeet v3, the others Whisper', () => {
+  it('European languages use Parakeet v3, Japanese Parakeet ja, Arabic Dolphin, the others Whisper', () => {
     expect(es.stt).toBe('parakeet-v3');
-    expect(ja.stt).toBe('whisper');
+    expect(ja.stt).toBe('parakeet-ja');
+    expect(interpretLanguage('ko')?.stt).toBe('whisper');
+    expect(sttEngine(ja)).toEqual({ kind: 'nemo_ctc', dir: STT_DIRS['parakeet-ja'] });
+    expect(sttEngine(es).kind).toBe('parakeet');
+    expect(sttEngine(interpretLanguage('ar')!)).toEqual({ kind: 'dolphin', dir: STT_DIRS.dolphin });
+    expect(sttEngine(interpretLanguage('ko')!).kind).toBe('whisper');
+    expect(sttEngine(interpretLanguage('en')!).kind).toBe('main');
     expect(new Set(INTERPRET_LANGUAGES.map((l) => l.code)).size).toBe(INTERPRET_LANGUAGES.length);
   });
 });

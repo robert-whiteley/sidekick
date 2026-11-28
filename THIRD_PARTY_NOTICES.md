@@ -4,25 +4,27 @@ Every model and library shipped with or downloaded by Sidekick, with its licence
 
 ## Models (downloaded at runtime)
 
-| Component                                                                    | Licence                                                                                                            |
-| ---------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
-| Gemma 4 E2B and E4B (`.litertlm`)                                            | Apache-2.0                                                                                                         |
-| EmbeddingGemma 2 Text Vision 440M (`.litertlm`)                              | Apache-2.0                                                                                                         |
-| Silero VAD v6.2.3                                                            | MIT                                                                                                                |
-| Parakeet TDT 0.6B v2 int8 (sherpa-onnx export)                               | CC BY 4.0                                                                                                          |
-| Parakeet TDT 0.6B v3 int8 (sherpa-onnx export; other languages, optional)    | CC BY 4.0                                                                                                          |
-| Whisper small int8 (OpenAI; sherpa-onnx export; interpreter, non-European)   | MIT                                                                                                                |
-| sherpa-onnx KWS zipformer (GigaSpeech)                                       | Apache-2.0                                                                                                         |
-| 3D-Speaker CAM++ (VoxCeleb)                                                  | Apache-2.0                                                                                                         |
-| PaddleOCR PP-OCRv6 small det + rec (PaddlePaddle ONNX exports)               | Apache-2.0                                                                                                         |
-| Kyutai Pocket TTS 100M (sherpa-onnx int8 export)                             | CC BY 4.0 (weights, © Kyutai), Apache-2.0 (ONNX export)                                                            |
-| Pocket TTS reference voice `bria.wav` (kyutai-labs/delayed-streams-modeling) | Apache-2.0                                                                                                         |
-| Smart Turn v3.2 (pipecat-ai/smart-turn-v3, fp32 ONNX)                        | BSD-2-Clause (© Daily)                                                                                             |
-| U²-Netp (photo backgrounds; ONNX file from the rembg project, which is MIT)  | Apache-2.0 (© Xuebin Qin et al.)                                                                                   |
-| MI-GAN (erase an object; the authors' ONNX pipeline, Picsart AI Research)    | MIT                                                                                                                |
-| Real-ESRGAN general x4v3 (upscale; ONNX export of the official weights)      | BSD-3-Clause (© Xintao Wang)                                                                                       |
-| SDXS-512 (make pictures, optional; 8-bit GGUF by concedo)                    | CreativeML Open RAIL++-M, with use restrictions; from DreamShaper and Stable Diffusion 1.5 (CreativeML OpenRAIL-M) |
-| TAESD (picture decoder, madebyollin)                                         | MIT                                                                                                                |
+| Component                                                                         | Licence                                                                                                            |
+| --------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| Gemma 4 E2B and E4B (`.litertlm`)                                                 | Apache-2.0                                                                                                         |
+| EmbeddingGemma 2 Text Vision 440M (`.litertlm`)                                   | Apache-2.0                                                                                                         |
+| Silero VAD v6.2.3                                                                 | MIT                                                                                                                |
+| Parakeet TDT 0.6B v2 int8 (sherpa-onnx export)                                    | CC BY 4.0                                                                                                          |
+| Parakeet TDT 0.6B v3 int8 (sherpa-onnx export; other languages, optional)         | CC BY 4.0                                                                                                          |
+| Parakeet TDT-CTC 0.6B ja int8 (NVIDIA; sherpa-onnx export; interpreter, Japanese) | CC BY 4.0                                                                                                          |
+| Dolphin small int8 (DataoceanAI; sherpa-onnx export; interpreter, Arabic)         | Apache-2.0                                                                                                         |
+| Whisper small int8 (OpenAI; sherpa-onnx export; interpreter, other languages)     | MIT                                                                                                                |
+| sherpa-onnx KWS zipformer (GigaSpeech)                                            | Apache-2.0                                                                                                         |
+| 3D-Speaker CAM++ (VoxCeleb)                                                       | Apache-2.0                                                                                                         |
+| PaddleOCR PP-OCRv6 small det + rec (PaddlePaddle ONNX exports)                    | Apache-2.0                                                                                                         |
+| Kyutai Pocket TTS 100M (sherpa-onnx int8 export)                                  | CC BY 4.0 (weights, © Kyutai), Apache-2.0 (ONNX export)                                                            |
+| Pocket TTS reference voice `bria.wav` (kyutai-labs/delayed-streams-modeling)      | Apache-2.0                                                                                                         |
+| Smart Turn v3.2 (pipecat-ai/smart-turn-v3, fp32 ONNX)                             | BSD-2-Clause (© Daily)                                                                                             |
+| U²-Netp (photo backgrounds; ONNX file from the rembg project, which is MIT)       | Apache-2.0 (© Xuebin Qin et al.)                                                                                   |
+| MI-GAN (erase an object; the authors' ONNX pipeline, Picsart AI Research)         | MIT                                                                                                                |
+| Real-ESRGAN general x4v3 (upscale; ONNX export of the official weights)           | BSD-3-Clause (© Xintao Wang)                                                                                       |
+| SDXS-512 (make pictures, optional; 8-bit GGUF by concedo)                         | CreativeML Open RAIL++-M, with use restrictions; from DreamShaper and Stable Diffusion 1.5 (CreativeML OpenRAIL-M) |
+| TAESD (picture decoder, madebyollin)                                              | MIT                                                                                                                |
 
 ## Data
 

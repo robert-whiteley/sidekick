@@ -792,7 +792,107 @@ WER % (CER for Japanese):
 | SenseVoice    | 9.1 | –    | –   | –    | –    | –    | 111.6 |
 
 Parakeet v3 for the European languages, Whisper small for the rest. Japanese is not verified:
-every model failed on Kokoro's Japanese voice, which points at the made-up audio.
+every model failed on Kokoro's Japanese voice, which points at the made-up audio. (Confirmed and
+replaced on 28 Nov, next section.)
+
+### Speech for Japanese and the other languages (laptop, 28 Nov)
+
+**Why the phone heard nonsense in Japanese.** The Japanese clips played to the phone came from
+`gen_audio.py`. It used the sherpa-onnx Kokoro build, which reads Japanese through espeak-ng and
+gives kanji their Chinese readings, so the phone was played something that wasn't Japanese. That
+is also why every model scored 63–112% above. `gen_audio.py` now speaks Japanese with Kokoro's
+own Japanese front end (misaki + pyopenjtalk, five voices). On that audio Whisper small hears the
+phone-test line right: 「20分くらいですが、この時間は道がとても混んでいます」, clean, with room
+echo and with babble.
+
+**What is measured.**
+
+- 40 made-up Japanese lines: the 10 bench turns plus 30 in `hear-ja.json`.
+- Real read speech: the first 60 sentences of the FLEURS test set (CC BY 4.0) in Japanese, Arabic
+  and the five European languages.
+- Each set three ways: clean; "room" (a small laptop speaker, about 0.5 s of room echo, fan noise
+  at 25 dB SNR, a quiet capture, like the phone test); "noisy" (room plus four other people
+  talking, at 10 dB) (`degrade.py`).
+- Scoring:
+  - Japanese is scored on characters, with numbers counted the same in either form (20分 = 二十分).
+    "Reading" errors also count 煙草 / たばこ as the same.
+  - Arabic ignores short vowels and alef / yeh / teh marbuta spellings.
+- sherpa-onnx 2.0.3 (the app's runtime), 4 threads, one model per process.
+
+**Japanese, characters wrong %** (made-up lines / FLEURS; clean · room · noisy):
+
+| Model (licence)                          | Made-up lines       | FLEURS                 | s per line, made-up | Download | Peak RSS |
+| ---------------------------------------- | ------------------- | ---------------------- | ------------------- | -------- | -------- |
+| Whisper small (MIT), before              | 4.0 · 4.6 · 12.7    | 16.4 · 22.9 · 37.0     | 1.11                | 375 MB   | 0.9 GB   |
+| **Parakeet TDT-CTC 0.6B ja (CC BY 4.0)** | **4.5 · 4.1 · 9.1** | **10.5 · 11.1 · 14.6** | **0.28**            | 656 MB   | 0.9 GB   |
+| ReazonSpeech k2 v2 (Apache-2.0)          | 11.2 · 11.8 · 13.7  | 11.3 · 11.9 · 17.7     | 0.3                 | 153 MB   | 0.5 GB   |
+| Dolphin small (Apache-2.0)               | 11.4 · 7.5 · 13.2   | 21.7 · 16.3 · 24.4     | 0.4                 | 250 MB   | 0.5 GB   |
+| Dolphin base (Apache-2.0)                | 11.8 · 10.4 · 17.2  | 19.2 · 23.5 · 40.3     | 0.2                 | 104 MB   | 0.3 GB   |
+| Whisper large-v3 turbo int8 (MIT)        | 5.4 · 6.0 · 2.5     | – · – · 17.1           | 4.7                 | 1,036 MB | 2.1 GB   |
+
+- On readings, Parakeet ja's made-up lines go to 4.2 · 3.8 · 5.5. Most of its slips are kana for
+  kanji (おみず, おたばこ), which keep the meaning.
+- Whisper small's noisy errors change the meaning. 領収書はご入用ですか came out as Chinese
+  characters (「又是手話國民有的思考」), and 現金だけ as 元気だけ.
+- ReazonSpeech dropped the first sentence of most two-sentence lines.
+- Whisper turbo is the most accurate in babble, but it is 17× slower than Parakeet ja on the
+  laptop and needs over 2 GB, which is too much next to Gemma on a Pixel 5.
+- Leaving Whisper to detect the language itself gave the same errors (4.0 / 12.7) and was slower,
+  so it stays told the language.
+- sherpa-onnx's Whisper decodes greedily only, with no beam search or temperature fallback, so
+  those can't be turned on in the app.
+- Push-to-talk passes the whole clip, with no VAD cut. The bench clips have 0.25 s of silence
+  before and 0.5 s after, and that was not varied.
+
+**Japanese now uses Parakeet ja.** It is the most accurate on real speech in all three
+conditions, ties Whisper small on the made-up lines, and is 4× faster. Its memory is about the
+same. It downloads 656 MB once, against Whisper small's 375 MB.
+
+**Arabic, words wrong %** (FLEURS, clean · room · noisy; no made-up Arabic audio):
+
+| Model                 | FLEURS                 | s per line | RTF  | Download | Peak RSS |
+| --------------------- | ---------------------- | ---------- | ---- | -------- | -------- |
+| Whisper small, before | 31.3 · 46.1 · 62.3     | 4.66       | 0.47 | 375 MB   | 1.4 GB   |
+| **Dolphin small**     | **28.4 · 37.5 · 59.1** | **0.52**   | 0.05 | 250 MB   | 0.8 GB   |
+| Dolphin base          | 47.9 · 60.6 · 80.3     | 0.6        | 0.06 | 104 MB   | 0.5 GB   |
+
+**Arabic now uses Dolphin small.** It is better in all three conditions and 9× faster (FLEURS
+sentences are 8–15 s long). Both models are still weak in babble.
+
+**European languages, words wrong %** (Parakeet v3 / Whisper small):
+
+| Language   | Made-up: clean · room · noisy          | FLEURS clean | FLEURS room | FLEURS noisy |
+| ---------- | -------------------------------------- | ------------ | ----------- | ------------ |
+| English    | 2.0 · 2.4 · 4.1 / 2.4 · 4.1 · 3.7      | –            | –           | –            |
+| German     | 0.0 · 15.0 · 29.9 / 7.5 · 12.1 · 29.0  | 9.7 / 11.4   | 19.7 / –    | 94.1 / 60.0  |
+| Spanish    | 5.5 · 3.6 · 6.4 / 4.5 · 5.5 · 7.3      | 5.5 / 7.4    | 8.8 / –     | 46.8 / 37.0  |
+| French     | 4.9 · 4.1 · 12.2 / 6.5 · 9.8 · 15.4    | 12.6 / 18.7  | 28.3 / –    | 76.3 / 60.3  |
+| Italian    | 11.8 · 10.8 · 12.7 / 8.8 · 20.6 · 20.6 | 7.1 / 10.6   | 8.3 / –     | 20.3 / 30.3  |
+| Portuguese | 8.7 · 9.6 · 16.3 / 11.5 · 13.5 · 21.2  | 9.8 / 11.6   | 16.8 / –    | 43.7 / 43.3  |
+
+Parakeet v3 stays.
+
+- It is better in quiet and with room echo in every European language, and 2–3× faster.
+- **Its weak spot is babble.** With four other voices at 10 dB it often writes English instead of
+  the language spoken ("Well, it's the best time of Hong Kong" for a German sentence), because it
+  can't be told the language. German suffers most (94% wrong; Whisper small 60%).
+- Fixing that needs a model that can be told the language, or a language check after it (see
+  docs/decisions/0006). Not done here.
+
+**Ruled out:**
+
+- SenseVoice and Paraformer: the FunASR model licence says "provided for reference and learning
+  purposes only" and says nothing about commercial use.
+- Moonshine's Japanese, Arabic and Korean models: they need registration, "Powered by Moonshine
+  AI" shown in the app, and the licence ends above USD 1M yearly revenue.
+- Canary: no Japanese.
+- kotoba-whisper: built on Whisper large's encoder, so it is as slow as turbo.
+- Not tried: the ReazonSpeech dataset itself. Its terms, Japanese Copyright Act article 30-4
+  only, bind people who use the dataset; the models trained on it ship under CC BY 4.0 or
+  Apache-2.0.
+
+**Not measured:** both new models on the phone (speed, memory next to Gemma, over the air), and
+Dolphin for the other Whisper languages (Chinese, Korean and the rest stay on Whisper small).
 
 ### Owner talking to Sidekick mid-conversation (laptop, 27 Nov)
 
@@ -932,10 +1032,13 @@ Android's contacts permission prompt, left unanswered when the phone work stoppe
 
 ### Still weak / not measured
 
-- Japanese out loud (Whisper small), the third stop line, the phone voices with the fix above,
+- Japanese out loud (now Parakeet ja; the earlier Japanese clips weren't Japanese, see
+  "Speech for Japanese"), the third stop line, the phone voices with the fix above,
   and German / Japanese voices once installed.
-- Whisper small on the phone (speed and memory while hearing a language).
-- A real speaker of the language (only made-up TTS speech so far).
+- Whisper small, Parakeet ja and Dolphin small on the phone (speed and memory while hearing a
+  language).
+- Parakeet v3 in babble: it drifts into English (laptop, 28 Nov).
+- A real speaker in conversation (FLEURS is real read speech; the rest is made-up TTS).
 - The interpreter screen on a phone, and everything on iPhone (Apple speech, voices; the iOS
   code was not compiled here).
 - A turn of ~5 s is usable but slow; Bergamot is the faster fallback if it feels too slow.

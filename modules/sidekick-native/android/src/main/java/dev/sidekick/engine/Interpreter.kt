@@ -5,7 +5,9 @@ import android.content.Intent
 import android.speech.tts.TextToSpeech
 import android.util.Log
 import com.k2fsa.sherpa.onnx.FeatureConfig
+import com.k2fsa.sherpa.onnx.OfflineDolphinModelConfig
 import com.k2fsa.sherpa.onnx.OfflineModelConfig
+import com.k2fsa.sherpa.onnx.OfflineNemoEncDecCtcModelConfig
 import com.k2fsa.sherpa.onnx.OfflineRecognizer
 import com.k2fsa.sherpa.onnx.OfflineRecognizerConfig
 import com.k2fsa.sherpa.onnx.OfflineTransducerModelConfig
@@ -17,16 +19,20 @@ import java.util.concurrent.TimeUnit
 
 /**
  * Speech-to-text for the interpreter (src/engine/interpreter.ts): the other person's language is
- * heard by Parakeet v3 (25 European languages) or Whisper small (told the language), loaded on
- * demand and released when the conversation ends. When Listen already runs Parakeet v3, that
- * copy is used instead of loading a second one.
+ * heard by Parakeet v3 (25 European languages), Parakeet ja (a NeMo CTC model, Japanese), Dolphin
+ * small (a CTC model, Arabic) or Whisper small (told the language), loaded on demand and released
+ * when the conversation ends. When Listen already runs Parakeet v3, that copy is used instead of
+ * loading a second one.
  */
 object InterpretAsr {
   private const val TAG = "SidekickInterpret"
   private var rec: OfflineRecognizer? = null
   private var key: String? = null
 
-  /** [kind] "parakeet" or "whisper"; [dir] the model folder; [language] ISO 639-1 (Whisper). */
+  /**
+   * [kind] "parakeet", "nemo_ctc", "dolphin" or "whisper"; [dir] the model folder; [language]
+   * ISO 639-1 (Whisper).
+   */
   @Synchronized
   fun transcribe(ctx: Context, kind: String, dir: String, language: String, audio: FloatArray): String {
     val models = Speech.modelsDir(ctx)
@@ -69,6 +75,19 @@ object InterpretAsr {
             ),
           tokens = "$d/$size-tokens.txt",
           modelType = "whisper",
+          numThreads = 4,
+        )
+      } else if (kind == "dolphin") {
+        OfflineModelConfig(
+          dolphin = OfflineDolphinModelConfig(model = "$d/model.int8.onnx"),
+          tokens = "$d/tokens.txt",
+          numThreads = 4,
+        )
+      } else if (kind == "nemo_ctc") {
+        OfflineModelConfig(
+          nemo = OfflineNemoEncDecCtcModelConfig(model = "$d/model.int8.onnx"),
+          modelType = "nemo_ctc",
+          tokens = "$d/tokens.txt",
           numThreads = 4,
         )
       } else {
