@@ -132,14 +132,32 @@ describe('claude-guard: edits', () => {
     [`${root}/docs/SPEC.md`, 'ok'],
     ['/elsewhere/CLAUDE.md', 'ok'],
     [`${root}/.claude/memory/x.md`, 'deny'],
-    [`${claudeHome}/CLAUDE.md`, 'ask'],
-    [`${claudeHome}/projects/p/memory/MEMORY.md`, 'ask'],
+    [`${claudeHome}/CLAUDE.md`, 'deny'],
+    [`${claudeHome}/projects/p/memory/MEMORY.md`, 'deny'],
     [`${claudeHome}/settings.json`, 'ok'],
   ] as [string, Result][])('%s → %s', (p, want) =>
     expect(run({ tool_name: 'Edit', tool_input: { file_path: p } }, lockHeld, claudeHome)).toBe(
       want,
     ),
   );
+});
+
+describe('claude-guard: a note for later sessions carries its reason', () => {
+  const write = (content: string) =>
+    run({ tool_name: 'Write', tool_input: { file_path: `${claudeHome}/CLAUDE.md`, content } });
+  it('is blocked without a reason and allowed with one, never asking the owner', () => {
+    expect(write('- Answer briefly.')).toBe('deny');
+    expect(write('- Answer briefly.\nNot a script because:')).toBe('deny');
+    expect(
+      write('- Answer briefly.\nNot a script because: a style choice no check can judge'),
+    ).toBe('ok');
+  });
+  it('stays blocked in the repo, reason or not', () => {
+    const content = 'Not a script because: a style choice no check can judge';
+    expect(
+      run({ tool_name: 'Write', tool_input: { file_path: `${root}/CLAUDE.md`, content } }),
+    ).toBe('deny');
+  });
 });
 
 describe('claude-guard: notes written from the shell', () => {
@@ -150,7 +168,8 @@ describe('claude-guard: notes written from the shell', () => {
     ['echo x | tee docs/CLAUDE.md', 'deny'],
     ['cp /tmp/x .claude/rules/a.md', 'deny'],
     ['cat > CLAUDE.md <<EOF\nrule\nEOF', 'deny'],
-    [`echo x > ${claudeHome}/projects/p/memory/a.md`, 'ask'],
+    [`echo x > ${claudeHome}/projects/p/memory/a.md`, 'deny'],
+    [`echo 'Not a script because: it is a taste choice' >> ${claudeHome}/CLAUDE.md`, 'ok'],
     ['echo "> CLAUDE.md" > /dev/null', 'ok'],
     ['git commit -m "no CLAUDE.md > here"', 'ok'],
     ['echo x > docs/SPEC.md', 'ok'],
