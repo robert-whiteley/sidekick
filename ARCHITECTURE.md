@@ -128,13 +128,17 @@ there).
 | `release.yml`      | store builds for both stores from one commit                                                                                                                                                                                                                                                                                                                                                                                                  | manual, owner's OK                                     |
 
 The emulator flows drive the real UI with `adb` (`input`, `uiautomator dump`, share intents) and
-read the app's log. The made-up test files come from `scripts/android-test-files.py`; the heard
+read the app's log. They run side by side, one emulator job per group (the decide bench in three
+parts, `part=k/n`), each first_run included, from a booted-emulator snapshot kept in the cache. The
+APK is cached under a hash of everything that goes into it, so a change to the flow scripts alone
+never rebuilds it; the iPhone Simulator run keeps its app the same way. On a laptop emulator that
+is already set up, `SET_UP=1 scripts/android-emu.sh run <flow>` skips first_run. The made-up test files come from `scripts/android-test-files.py`; the heard
 line behind the play-button flow is bench data (`run=flows&only=heard`, removed by
 `run=recall-clear`). Left for a real phone: speed, memory beside Gemma on a real 4–8 GB phone, heat
 and battery, real microphones and voices (wake word, barge-in, the owner's voice), the camera, the
 GPU and NPU backends, and store-signed builds. The SessionStart hook (`scripts/session-start.sh`)
-never fails a session: it fast-forwards main, installs the packages in a cloud container, and runs
-the silent store check when something is outstanding.
+never fails a session: it fast-forwards main, installs the packages in a cloud container, says
+"Disk low" under 15 GB free, and runs the silent store check when something is outstanding.
 
 ## Security
 

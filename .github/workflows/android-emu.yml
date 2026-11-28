@@ -1,25 +1,24 @@
 name: Android emulator checks
-# The Android flows without a phone: builds this commit for the x86_64 emulator on a free GitHub
-# runner (public repo, standard ubuntu-latest with KVM), boots an Android emulator, gives the app
-# the chat model and memory search, and drives the real app with scripts/android-emu.sh: first
-# run, the interpreter-not-open reply, a pasted table, every file type, a recording's play button,
-# settings by voice (Approve), the offline queue, folder search, the send queue with Stop, and
-# the DELETE sheet. Gemma runs on the emulator's CPU, so a full run takes an hour or two.
-# Logs, screen texts and screenshots are kept as the "android-emu-logs" artefact.
-#   gh workflow run android-emu.yml [-f flows="pasted_table file_types"] [-f apk_run=<run id>]
-# or push a branch named android-emu/<anything>. apk_run reuses the APK of an earlier run (no
-# build); first_run always runs first, since the other flows need a set-up app.
+# The Android flows without a phone, on free GitHub runners (public repo, standard ubuntu-latest
+# with KVM): an x86_64 build of this commit on an Android emulator, Gemma on the emulator's CPU,
+# the real app driven by scripts/android-emu.sh. The flows run side by side, one job per group,
+# each on its own emulator; logs, screen texts and screenshots are kept per group as the
+# "android-emu-<group>" artefacts.
+#   gh workflow run android-emu.yml [-f flows="pasted_table file_types"] [-f apk_run_id=<run id>]
+# or push a branch named android-emu/<anything>. The APK is built once per app change: it is
+# cached under a hash of everything that goes into it, so a change to the flows alone never
+# rebuilds. apk_run_id takes the APK of an earlier run instead.
 on:
   push:
     branches: ['android-emu/**']
   workflow_dispatch:
     inputs:
       flows:
-        description: Flows to run after first_run, space-separated (empty runs all)
+        description: Flows to run after first_run, space-separated, in one job (empty runs every group)
         type: string
         default: ''
-      apk_run:
-        description: Reuse the APK from this earlier run of this workflow (empty builds one)
+      apk_run_id:
+        description: Take the APK from this earlier run of this workflow (empty uses the cache or builds)
         type: string
         default: ''
 permissions:
@@ -29,8 +28,50 @@ concurrency:
   group: android-emu-${{ github.ref }}
   cancel-in-progress: true
 jobs:
+  plan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      key: ${{ steps.key.outputs.key }}
+      built: ${{ steps.apk.outputs.cache-hit }}
+      groups: ${{ steps.groups.outputs.groups }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # Everything that goes into the APK (the app's code and assets, the native module, the
+      # config plugins, packages, the bench cases the app carries); not the tests, docs or scripts.
+      - id: key
+        run: echo "key=emu-apk-${{ hashFiles('src/**', 'modules/**', 'plugins/**', 'bench/**', 'assets/**', 'app.json', 'package.json', 'package-lock.json', 'index.js', 'tsconfig.json', '.nvmrc') }}" >> "$GITHUB_OUTPUT"
+      - id: apk
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: apk/app-release.apk
+          key: ${{ steps.key.outputs.key }}
+          lookup-only: true
+      - id: groups
+        env:
+          FLOWS: ${{ inputs.flows }}
+        run: |
+          # Groups of about the same length (the decide bench in three parts), so the wall time
+          # is one group's, not the sum.
+          python3 - >> "$GITHUB_OUTPUT" <<'EOF'
+          import json, os
+          flows = os.environ.get('FLOWS', '').split()
+          if flows:
+              groups = [{'name': 'chosen', 'flows': ' '.join(flows), 'part': ''}]
+          else:
+              groups = [{'name': n, 'flows': f, 'part': ''} for n, f in [
+                  ('chat', 'interpreter_closed pasted_table settings_by_voice delete_confirm recording_play'),
+                  ('files', 'file_types'),
+                  ('online', 'web_no offline_queue'),
+                  ('search', 'folder_search send_queue'),
+                  ('screens', 'screens'),
+              ]] + [{'name': f'decide-{k}', 'flows': 'decide', 'part': f'{k}/3'} for k in (1, 2, 3)]
+          print('groups=' + json.dumps(groups))
+          EOF
+
   build:
-    if: ${{ !inputs.apk_run }}
+    needs: plan
+    if: needs.plan.outputs.built != 'true' && !inputs.apk_run_id
     runs-on: ubuntu-latest
     timeout-minutes: 60
     steps:
@@ -50,40 +91,57 @@ jobs:
       # the model at a usable speed; ARM code under translation would be far too slow.
       - run: ./gradlew assembleRelease --no-daemon -PreactNativeArchitectures=x86_64
         working-directory: android
+      - run: mkdir -p apk && cp android/app/build/outputs/apk/release/app-release.apk apk/
+      - uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: apk/app-release.apk
+          key: ${{ needs.plan.outputs.key }}
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: sidekick-emu-apk
-          path: android/app/build/outputs/apk/release/app-release.apk
+          path: apk/app-release.apk
           retention-days: 7
 
-  emulator:
-    needs: build
-    if: always() && (needs.build.result == 'success' || needs.build.result == 'skipped')
+  flows:
+    needs: [plan, build]
+    if: always() && needs.plan.result == 'success' && (needs.build.result == 'success' || needs.build.result == 'skipped')
+    name: flows (${{ matrix.name }})
     runs-on: ubuntu-latest
-    timeout-minutes: 240
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.plan.outputs.groups) }}
     env:
       LOGS: ${{ github.workspace }}/logs
       FILES: ${{ github.workspace }}/test-files
       MODELS: ${{ github.workspace }}/../emu-models
-      FLOWS: ${{ inputs.flows }}
+      FLOWS: ${{ matrix.flows }}
+      DECIDE_PART: ${{ matrix.part }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version-file: .nvmrc
-      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+      - if: inputs.apk_run_id
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: sidekick-emu-apk
           path: apk
-          run-id: ${{ inputs.apk_run || github.run_id }}
+          run-id: ${{ inputs.apk_run_id }}
           github-token: ${{ github.token }}
+      - if: ${{ !inputs.apk_run_id }}
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: apk/app-release.apk
+          key: ${{ needs.plan.outputs.key }}
+          fail-on-cache-miss: true
       - name: KVM for the emulator
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
-          df -h / | tail -1
-      # Restored and saved as two steps, so the models are kept even when a flow fails.
+      # Restored and saved as separate steps, so they are kept even when a flow fails.
       - id: models-cache
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
@@ -92,11 +150,42 @@ jobs:
       - name: Models
         # The same download and checksum check as the iPhone Simulator run.
         run: scripts/ios-sim.sh models "$MODELS"
-      - if: steps.models-cache.outputs.cache-hit != 'true'
+      - if: steps.models-cache.outputs.cache-hit != 'true' && (matrix.name == 'chat' || matrix.name == 'chosen')
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ github.workspace }}/../emu-models
           key: emu-models-${{ hashFiles('src/engine/models.ts') }}
+      # A booted emulator snapshot, made once and kept, so each job boots in about a minute.
+      - id: avd-cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.android/avd/*
+            ~/.android/adb*
+          key: emu-avd-35-google_apis-x86_64-pixel_6-v1
+      - name: Emulator snapshot
+        if: steps.avd-cache.outputs.cache-hit != 'true'
+        uses: ReactiveCircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          cores: 4
+          ram-size: 8192M
+          heap-size: 512M
+          disk-size: 16G
+          force-avd-creation: false
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
+          disable-animations: false
+          script: echo "Booted once for the snapshot."
+      - if: steps.avd-cache.outputs.cache-hit != 'true' && (matrix.name == 'chat' || matrix.name == 'chosen')
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.android/avd/*
+            ~/.android/adb*
+          key: emu-avd-35-google_apis-x86_64-pixel_6-v1
       - name: Emulator, flows
         uses: ReactiveCircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0
         with:
@@ -108,16 +197,18 @@ jobs:
           ram-size: 8192M
           heap-size: 512M
           disk-size: 16G
-          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none
+          force-avd-creation: false
+          emulator-options: -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
           disable-animations: true
           script: |
+            du -sh ~/.android/avd 2>/dev/null || true
             scripts/android-emu.sh setup apk/app-release.apk "$MODELS"
             scripts/android-emu.sh run $FLOWS
       - name: Results
         if: always()
         run: |
           {
-            echo '### Android emulator flows'
+            echo "### Android emulator flows: ${{ matrix.name }}"
             echo '```'
             cat "$LOGS/results.txt" 2>/dev/null || echo 'no results'
             echo '```'
@@ -125,6 +216,6 @@ jobs:
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
         with:
-          name: android-emu-logs
+          name: android-emu-${{ matrix.name }}
           path: logs/
           retention-days: 14

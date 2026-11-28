@@ -54,14 +54,41 @@ jobs:
           restore-keys: ios-sim-models-
       - run: brew install ccache
       - run: npm ci
+      # A Debug build fetches its JS from Metro, so the app itself changes only with the native
+      # side: it is kept under a hash of that and built again only when it changes.
+      - id: app-cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ios/build/Build/Products/Debug-iphonesimulator/Sidekick.app
+          key: ios-sim-app-${{ hashFiles('modules/**', 'plugins/**', 'app-intents/**', 'assets/**', 'app.json', 'package-lock.json', 'scripts/ios-sim.sh') }}
       - name: Build this commit
+        if: steps.app-cache.outputs.cache-hit != 'true'
         run: scripts/ios-sim.sh build .
-      - name: Build the older commit
+      - if: steps.app-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ios/build/Build/Products/Debug-iphonesimulator/Sidekick.app
+          key: ios-sim-app-${{ hashFiles('modules/**', 'plugins/**', 'app-intents/**', 'assets/**', 'app.json', 'package-lock.json', 'scripts/ios-sim.sh') }}
+      - name: The older commit
         if: env.UPGRADE_FROM != ''
         run: |
           git worktree add "$RUNNER_TEMP/old" "$UPGRADE_FROM"
           (cd "$RUNNER_TEMP/old" && npm ci)
-          scripts/ios-sim.sh build "$RUNNER_TEMP/old"
+      # The older commit's app never changes: built once and kept.
+      - id: old-app-cache
+        if: env.UPGRADE_FROM != ''
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/old/ios/build/Build/Products/Debug-iphonesimulator/Sidekick.app
+          key: ios-sim-old-app-${{ env.UPGRADE_FROM }}
+      - name: Build the older commit
+        if: env.UPGRADE_FROM != '' && steps.old-app-cache.outputs.cache-hit != 'true'
+        run: scripts/ios-sim.sh build "$RUNNER_TEMP/old"
+      - if: env.UPGRADE_FROM != '' && steps.old-app-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/old/ios/build/Build/Products/Debug-iphonesimulator/Sidekick.app
+          key: ios-sim-old-app-${{ env.UPGRADE_FROM }}
       - name: Models
         run: scripts/ios-sim.sh models "$MODELS"
       - name: Boot a simulator

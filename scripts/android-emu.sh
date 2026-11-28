@@ -60,16 +60,23 @@ wait_for() {
     sleep 3
   done
 }
-# not_responding: a slow emulator sometimes shows "<app> isn't responding" (often the launcher
-# while it boots); Wait lets it carry on, as a user would.
+# not_responding: a slow emulator sometimes shows "<app> isn't responding", most often the
+# launcher while it boots, again and again. Sidekick gets Wait (as a user would give it); any
+# other app is closed, so the dialog stops coming back and Sidekick can come to the front.
 not_responding() {
-  local c
+  local c what
   grep -q 'isn.t responding' "$DUMP" 2>/dev/null || return 0
-  note "dismissed: $(python3 "$UI" texts "$DUMP" | head -1)"
-  c=$(python3 "$UI" find "$DUMP" '^Wait$') || return 0
+  what=$(python3 "$UI" texts "$DUMP" | grep -m1 'isn.t responding')
+  if [[ $what == Sidekick* ]]; then
+    c=$(python3 "$UI" find "$DUMP" '^Wait$') || return 0
+  else
+    c=$(python3 "$UI" find "$DUMP" '^Close app$') || return 0
+  fi
+  note "not responding: $what"
   # shellcheck disable=SC2086
   A shell input tap $c
   sleep 2
+  [[ $what == Sidekick* ]] || A shell am start -n "$PKG/.MainActivity" >/dev/null 2>&1
 }
 wait_gone() {
   local end=$((SECONDS + ${2:-60}))
@@ -400,7 +407,8 @@ flow_decide() {
   # bench doesn't finish; the score is for reading, as on a phone.
   local n
   n=$(grep -ac '\[bench\] decide done' "$LOGS/app.log")
-  bench 'run=decide&variant=app'
+  # DECIDE_PART=k/n: one of n parts of the bench, for jobs side by side (src/engine/bench-part.ts).
+  bench "run=decide&variant=app${DECIDE_PART:+&part=$DECIDE_PART}"
   local end=$((SECONDS + 7000))
   until [ "$(grep -ac '\[bench\] decide done' "$LOGS/app.log")" -gt "$n" ]; do
     logged 'decide failed' && { note 'the decide bench failed'; return 1; }
@@ -430,9 +438,10 @@ case "${1:-}" in
     ;;
   run)
     shift
-    # first_run always comes first: the other flows need a set-up app.
+    # first_run always comes first: the other flows need a set-up app (SET_UP=1: the app on this
+    # emulator is set up already, as on a laptop emulator used before).
     [ $# -gt 0 ] || set -- "${FLOWS[@]:1}"
-    [ "$1" = first_run ] || set -- first_run "$@"
+    [ "$1" = first_run ] || [ "${SET_UP:-}" = 1 ] || set -- first_run "$@"
     A logcat -c
     A logcat -v time ReactNativeJS:V AndroidRuntime:E '*:S' >"$LOGS/app.log" 2>&1 &
     applog=$!
