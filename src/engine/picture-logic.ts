@@ -1,7 +1,7 @@
 /**
  * Making pictures on the phone, pure parts: the content rule Google Play requires, which phones
  * get it, the replies, and the report draft. The model chooses the make_picture tool itself
- * (tools-logic.ts; offered once the model is downloaded, decide.ts). Tested in
+ * (tools-logic.ts; always offered, decide.ts, so the reply can say what is missing). Tested in
  * __tests__/picture-test.ts. The drawing is ImageGen.kt (SDXS-512 through stable-diffusion.cpp);
  * the licence and policy reasons are in ADR 0006.
  */
@@ -31,7 +31,7 @@ export function pictureCheckAllows(reply: string): boolean {
   return !!m && m[1].toLowerCase() === 'no';
 }
 
-export type PictureOffer = { offer: boolean; note?: string };
+export type PictureOffer = { offer: boolean; note?: string; why?: 'iphone' | 'cpu' | 'ram' };
 
 /**
  * Who gets "Make pictures": Android phones whose CPU the library is built for (64-bit ARM with
@@ -43,10 +43,10 @@ export function pictureOffer(p: {
   ramMb: number;
   cpuOk: boolean;
 }): PictureOffer {
-  if (p.platform !== 'android') return { offer: false, note: 'Not on iPhone yet.' };
-  if (!p.cpuOk) return { offer: false, note: "This phone's processor can't run it." };
+  if (p.platform !== 'android') return { offer: false, note: 'Not on iPhone yet.', why: 'iphone' };
+  if (!p.cpuOk) return { offer: false, note: "This phone's processor can't run it.", why: 'cpu' };
   if (p.ramMb > 0 && p.ramMb < 3500)
-    return { offer: false, note: 'Needs a phone with 4 GB of memory or more.' };
+    return { offer: false, note: 'Needs a phone with 4 GB of memory or more.', why: 'ram' };
   if (p.ramMb > 0 && p.ramMb < 5500)
     return { offer: true, note: 'Slow on this phone: about a minute or more per picture.' };
   return { offer: true };
@@ -67,8 +67,21 @@ export function picturePrompt(described: string, question: string): string {
   return d.slice(0, 300);
 }
 
-export const PICTURE_NOT_HERE = "Making pictures isn't on iPhone yet.";
+export const PICTURE_NOT_HERE =
+  "Sorry, I can't make pictures on iPhone yet. Only the Android app can draw them for now.";
 export const PICTURE_NO_CPU = "This phone's processor can't make pictures, sorry.";
+export const PICTURE_LOW_RAM =
+  "Sorry, I can't make pictures on this phone: it needs 4 GB of memory or more.";
+
+/**
+ * The reply when this phone can't make pictures at all (pictureOffer says no), else null: the
+ * iPhone, an older processor or too little memory. Said plainly instead of a web search.
+ */
+export function pictureUnavailable(offer: PictureOffer): string | null {
+  if (offer.offer) return null;
+  if (offer.why === 'ram') return PICTURE_LOW_RAM;
+  return offer.why === 'cpu' ? PICTURE_NO_CPU : PICTURE_NOT_HERE;
+}
 export const PICTURE_GET =
   'Making pictures is an optional download (0.7 GB, on Wi-Fi). Get it under Settings → Assistant → Make pictures.';
 export const PICTURE_BLOCKED =

@@ -71,7 +71,7 @@ export async function runPictureBench(log: Log, dir: string): Promise<void> {
   let n = 0;
   for (const [q, want] of PICTURE_CASES) {
     const t0 = Date.now();
-    const d = await decideRequest(q, { pictures: true }).catch(() => null);
+    const d = await decideRequest(q).catch(() => null);
     const fill =
       d?.decision.kind === 'do' && d.decision.tool === 'make_picture'
         ? await fillTool(q, 'make_picture').catch(() => null)

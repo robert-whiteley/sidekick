@@ -37,6 +37,7 @@ import { runResearchBench } from '@/engine/research-bench';
 import { EMBED_DIMS } from '@/memory/db';
 import { cosine } from '@/memory/voices';
 import { runBackgroundBench, runDecideBench, runThinkingBench } from '@/engine/decide-bench';
+import { runFlowsBench } from '@/engine/flows-bench';
 
 /** The speed-test photo, bundled with the app (no download). */
 async function benchPhoto(): Promise<string | null> {
@@ -129,7 +130,7 @@ export default function BenchScreen() {
 
   // Answers, routing and recall bench (src/engine/answers-bench.ts): JSON lines on logcat.
   // Started by deep link too: sidekick://bench?run=answers|recall-load|recall|recall-search|
-  // recall-clear|facts|research|photo-edit|decide|thinking|background [&only=<id prefixes>]
+  // recall-clear|facts|research|photo-edit|decide|thinking|background|flows [&only=<id prefixes>]
   // [&size=<rows>] [&variant=<decide variant or thinking budget>] (src/engine/decide-bench.ts).
   const quiet = (line: string) => {
     console.log(line);
@@ -158,6 +159,8 @@ export default function BenchScreen() {
         await runPhotoEditBench(quiet, device.externalFilesDir ?? device.filesDir);
       else if (what === 'facts') await runFactsBench(quiet);
       else if (what === 'interpreter') await runInterpreterBench(quiet, only);
+      else if (what === 'flows')
+        await runFlowsBench(quiet, await benchPhoto().catch(() => null), only);
       quiet(`[bench] ${what} done`);
     });
   const params = useLocalSearchParams<{

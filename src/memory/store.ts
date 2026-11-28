@@ -982,11 +982,17 @@ const MOMENT_SELECT =
   "SELECT m.*, COALESCE(s.name, s.description, 'Person ' || s.label_no) AS name, s.is_owner FROM moments m LEFT JOIN speakers s ON s.id = m.speaker_id";
 
 /** Hybrid search: meaning (vectors) + exact words (FTS5), narrowed by time words in the question. */
-export async function searchMemory(question: string, k = 8, now = new Date()): Promise<Moment[]> {
+export async function searchMemory(
+  question: string,
+  k = 8,
+  now = new Date(),
+  opts: { words?: boolean } = {},
+): Promise<Moment[]> {
   const db = await getDb();
   const win = timeWindow(question, now);
   const lists: number[][] = [];
-  if (isDownloaded(EMBEDDER_FILE)) {
+  // words: exact words only (FTS5), without loading the memory-search model (see assistant.ts).
+  if (!opts.words && isDownloaded(EMBEDDER_FILE)) {
     try {
       // The embedder is loaded for the question anyway: first catch up on memories still waiting
       // for an idle-time batch, so every memory is searchable by meaning, not only by words.

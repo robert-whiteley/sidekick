@@ -15,7 +15,6 @@ import {
   PICTURE_BLOCKED,
   PICTURE_FAILED,
   PICTURE_GET,
-  PICTURE_NO_CPU,
   PICTURE_NOT_HERE,
   PICTURE_STOPPED,
   PICTURE_CHECK_SYSTEM,
@@ -25,6 +24,7 @@ import {
   picturePrompt,
   pictureReply,
   pictureStatus,
+  pictureUnavailable,
 } from './picture-logic';
 
 export type PictureResult = {
@@ -153,7 +153,8 @@ export async function makePicture(
     ...extra,
   });
   if (!SidekickNative.pictureMake) return res(PICTURE_NOT_HERE);
-  if (!cpuOk()) return res(PICTURE_NO_CPU);
+  const cant = pictureUnavailable(pictureAvailability());
+  if (cant) return res(cant);
   if (!pictureFilesReady()) return res(PICTURE_GET, { needsDownload: true });
   if (running) return res('Already making a picture; one at a time.');
   running = true;

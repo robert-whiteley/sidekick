@@ -15,8 +15,10 @@ import {
 
 /**
  * The decision for [question]. What is offered follows the app's state, never the words: "draft"
- * (send or cancel) only while a draft waits, "edit_photo" only with a photo, "make_picture" only once
- * the picture model is downloaded. A lookup is offered even with online lookup off:
+ * (send or cancel) only while a draft waits, "edit_photo" only with a photo, and the request says when
+ * a photo comes with it. "make_picture" is always
+ * offered: without the picture model (or on iPhone) its answer says so and offers the download, so
+ * a drawing request is never sent to a web search instead. A lookup is offered even with online lookup off:
  * then the answer is offline and the chat offers a web search in the browser instead.
  */
 export async function decideRequest(
@@ -24,19 +26,15 @@ export async function decideRequest(
   opts: {
     draftOpen?: boolean;
     photo?: boolean;
-    pictures?: boolean;
     /** The chat's last exchange, when recent: a short reply ("yes", "and in French?") is read with it. */
     previous?: { q: string; a: string };
   } = {},
 ): Promise<{ decision: Decision; ms: number; reply: string }> {
   const t0 = Date.now();
   const tools = DECIDE_TOOLS.filter(
-    (t) =>
-      (t.name !== 'draft' || opts.draftOpen) &&
-      (t.name !== 'edit_photo' || opts.photo) &&
-      (t.name !== 'make_picture' || opts.pictures),
+    (t) => (t.name !== 'draft' || opts.draftOpen) && (t.name !== 'edit_photo' || opts.photo),
   );
-  const { text } = await askLlm(decidePrompt(question, opts.previous), null, () => {}, {
+  const { text } = await askLlm(decidePrompt(question, opts.previous, opts.photo), null, () => {}, {
     system: catalogSystem(tools),
     maxTokens: 5,
     scratch: true,

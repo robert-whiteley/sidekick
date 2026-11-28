@@ -113,7 +113,8 @@ export function catalogSystem(tools: ToolSpec[] = DECIDE_TOOLS, lookup = true): 
   return (
     'You sort requests to a phone assistant. Reply with one word only.\n' +
     'answer: a question, a chat, advice, or a request to write, explain or plan something; also ' +
-    'questions about what I saw, heard, said or noted, and recaps.\n' +
+    'questions about what I saw, heard, said or noted, recaps, and questions about a photo that ' +
+    'comes with the request.\n' +
     (lookup
       ? 'lookup: needs current facts from the internet (prices, scores, recent events).\n' +
         'news: the latest news or headlines, in general or on a topic.\n'
@@ -128,15 +129,21 @@ export function catalogSystem(tools: ToolSpec[] = DECIDE_TOOLS, lookup = true): 
 /**
  * The sorter's prompt: the request, after the chat's last exchange when there was a recent one,
  * so a reply such as "yes" to "I can look that up" is sorted by what it answers (the model reads
- * it; the earlier exchange is clipped so the pass stays short).
+ * it; the earlier exchange is clipped so the pass stays short). A photo taken or shared with it is
+ * said, from the app's state: without it "What is this?" read as a question about what is playing.
  */
-export function decidePrompt(question: string, previous?: { q: string; a: string }): string {
-  if (!previous) return `Request: ${question}`;
+export function decidePrompt(
+  question: string,
+  previous?: { q: string; a: string },
+  photo = false,
+): string {
+  const line = photo ? `Request (with a photo): ${question}` : `Request: ${question}`;
+  if (!previous) return line;
   const clip = (t: string, n: number) => (t.length > n ? `${t.slice(0, n)}…` : t);
   return (
     `Earlier, for context only: I asked "${clip(previous.q, 200)}" and you replied ` +
     `"${clip(previous.a, 240)}"
-Request: ${question}`
+${line}`
   );
 }
 

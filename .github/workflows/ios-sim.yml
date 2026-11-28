@@ -1,0 +1,97 @@
+name: iPhone simulator checks
+# The iPhone flows without an iPhone or a Mac: builds the app for the iOS Simulator on a free
+# GitHub macOS runner (public repo), then runs scripts/ios-sim.sh:
+#   fresh    - a phone that never had Sidekick: first run, database created, then the in-app flows
+#              check (src/engine/flows-bench.ts): the picture request and a photo question
+#   upgrade  - the older build first (its database), then this one installed over it, as an
+#              App Store update would; the database must open
+# Device and Metro logs, summaries and screenshots are kept as the "ios-sim-logs" artefact.
+# Slow (two app builds, a 3 GB model download), so it runs only when started:
+#   gh workflow run ios-sim.yml [-f upgrade_from=<commit>]
+# or by pushing a branch named ios-sim/<anything> (to try it before it is on main).
+on:
+  push:
+    branches: ['ios-sim/**']
+  workflow_dispatch:
+    inputs:
+      upgrade_from:
+        description: Older commit installed first for the upgrade check (empty skips it)
+        type: string
+        default: dcc6ec6
+permissions:
+  contents: read
+concurrency:
+  group: ios-sim-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  simulator:
+    runs-on: macos-26
+    timeout-minutes: 240
+    env:
+      LOGS: ${{ github.workspace }}/logs
+      MODELS: ${{ github.workspace }}/../sim-models
+      UPGRADE_FROM: ${{ github.event_name == 'push' && 'dcc6ec6' || inputs.upgrade_from }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/Library/Caches/ccache
+          key: ios-sim-ccache-${{ github.run_id }}
+          restore-keys: |
+            ios-sim-ccache-
+            ios-ccache-
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ github.workspace }}/../sim-models
+          key: ios-sim-models-${{ hashFiles('src/engine/models.ts') }}
+          restore-keys: ios-sim-models-
+      - run: brew install ccache
+      - run: npm ci
+      - name: Build this commit
+        run: scripts/ios-sim.sh build .
+      - name: Build the older commit
+        if: env.UPGRADE_FROM != ''
+        run: |
+          git worktree add "$RUNNER_TEMP/old" "$UPGRADE_FROM"
+          (cd "$RUNNER_TEMP/old" && npm ci)
+          scripts/ios-sim.sh build "$RUNNER_TEMP/old"
+      - name: Models
+        run: scripts/ios-sim.sh models "$MODELS"
+      - name: Boot a simulator
+        run: scripts/ios-sim.sh boot
+      - name: Fresh install, first run, flows
+        run: |
+          scripts/ios-sim.sh reset
+          scripts/ios-sim.sh launch . fresh "$MODELS" 'run=flows' 2400
+      - name: Upgrade from the older build
+        if: env.UPGRADE_FROM != ''
+        run: |
+          scripts/ios-sim.sh reset
+          scripts/ios-sim.sh launch "$RUNNER_TEMP/old" old "$MODELS" '' 120
+          scripts/ios-sim.sh launch . upgraded "$MODELS" 'run=flows&only=db' 300
+      - name: Results
+        if: always()
+        run: |
+          cat "$LOGS"/*-summary.log 2>/dev/null || true
+          # The older build's own errors are what the upgrade check starts from (build 4 made an
+          # unreadable file on a fresh install); only this build's logs count.
+          if grep -hE 'not a database|database is locked|SQL (execution|prepare)' "$LOGS"/fresh-summary.log "$LOGS"/upgraded-summary.log; then
+            echo "::error::database errors in the logs"; exit 1
+          fi
+          if grep -h '\[flows\]' "$LOGS"/*-summary.log | grep -q '"ok":false'; then
+            echo "::error::a flows step failed"; exit 1
+          fi
+          grep -hq '\[flows\] {"step":"db","ok":true' "$LOGS"/fresh-summary.log || {
+            echo "::error::no database result from the fresh run"; exit 1; }
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: ios-sim-logs
+          path: logs/
+          retention-days: 14

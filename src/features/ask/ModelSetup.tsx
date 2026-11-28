@@ -4,7 +4,8 @@ import { View } from 'react-native';
 import SidekickNative from '../../../modules/sidekick-native';
 import { downloadFile, isDownloaded } from '@/engine/downloads';
 import { allRequiredFiles } from '@/engine/llm-candidates';
-import { AppText, Button, makeStyles, ProgressBar, radius, space } from '@/ui';
+import { errorDetailsFor } from '@/engine/error-details';
+import { AppText, Button, ErrorDetailsButton, makeStyles, ProgressBar, radius, space } from '@/ui';
 
 /** First run: fetch the AI model once. After this Sidekick never needs the internet. */
 export function ModelSetup({ onReady }: { onReady: () => void }) {
@@ -18,6 +19,7 @@ export function ModelSetup({ onReady }: { onReady: () => void }) {
   const [fraction, setFraction] = useState(0);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [errorObj, setErrorObj] = useState<unknown>(null);
 
   const start = async () => {
     setBusy(true);
@@ -31,6 +33,7 @@ export function ModelSetup({ onReady }: { onReady: () => void }) {
       }
       onReady();
     } catch (e) {
+      setErrorObj(e);
       setError(e instanceof Error ? e.message : String(e));
     } finally {
       setBusy(false);
@@ -53,7 +56,12 @@ export function ModelSetup({ onReady }: { onReady: () => void }) {
       ) : (
         <Button title="Download" variant="filled" block onPress={() => void start()} />
       )}
-      {error ? <AppText tone="danger">{error}</AppText> : null}
+      {error ? (
+        <>
+          <AppText tone="danger">{error}</AppText>
+          <ErrorDetailsButton details={() => errorDetailsFor('model download', errorObj)} />
+        </>
+      ) : null}
     </View>
   );
 }

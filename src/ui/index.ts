@@ -3,6 +3,7 @@ export { Button, ButtonRow, type ButtonVariant, TextButton } from './Button';
 export { ChoiceRow, PickerRow } from './ChoiceRow';
 export { choiceChips, daysLabel, hoursLabel, type Option } from './choice-logic';
 export { DialogHost, showDialog } from './Dialog';
+export { ErrorDetailsButton } from './ErrorDetailsButton';
 export { Icon, type IconName } from './Icon';
 export { IconButton } from './IconButton';
 export { Card, Divider, Page, Paragraph, Section, TextField } from './Layout';
