@@ -28,7 +28,13 @@ jest.mock('@/engine/llm', () => ({
 }));
 
 // eslint-disable-next-line import/first
-import { askWithLookup, fetchJson, type LookupDeps, searchWeb } from '@/web/lookup';
+import {
+  askWithLookup,
+  fetchJson,
+  type LookupDeps,
+  onServerReachedAgain,
+  searchWeb,
+} from '@/web/lookup';
 
 describe('query building', () => {
   test('strips question words, polite lead-ins and known names', () => {
@@ -276,6 +282,23 @@ describe('fetch and orchestration', () => {
       { json, text: async () => null },
     );
     expect(r.map((x) => x.title)).toEqual(['Eiffel Tower']);
+  });
+
+  test('a server reached after a failed request wakes what waits for the internet, once', async () => {
+    const woken = jest.fn();
+    const off = onServerReachedAgain(woken);
+    const ok = (async () => ({ ok: true, json: async () => ({}) })) as unknown as typeof fetch;
+    const down = (async () => {
+      throw new Error('network blocked');
+    }) as unknown as typeof fetch;
+    await fetchJson('https://example.org/a', 4000, ok);
+    expect(woken).not.toHaveBeenCalled(); // never failed: nothing came back
+    await fetchJson('https://example.org/b', 4000, down);
+    await fetchJson('https://example.org/c', 4000, down);
+    await fetchJson('https://example.org/d', 4000, ok);
+    await fetchJson('https://example.org/e', 4000, ok);
+    expect(woken).toHaveBeenCalledTimes(1);
+    off();
   });
 
   test('fetchJson times out and sends the app User-Agent', async () => {

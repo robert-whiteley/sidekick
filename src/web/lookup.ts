@@ -51,6 +51,33 @@ const net = { reached: 0, failed: 0 };
 /** The counts now, to tell afterwards whether some steps reached any server at all. */
 export const netCounts = () => ({ ...net });
 
+/** The last request never reached a server. */
+let lastFailed = false;
+const reachedAgain = new Set<() => void>();
+
+/**
+ * [fn] runs when a request reaches a server after one that couldn't. Sidekick's own network can
+ * come back while Android says online all along (a firewall app, Data Saver), with no network
+ * change to wake what waits for the internet (phone check, 28 Nov: queued research kept waiting
+ * while a lookup worked). Returns the unsubscribe.
+ */
+export function onServerReachedAgain(fn: () => void): () => void {
+  reachedAgain.add(fn);
+  return () => reachedAgain.delete(fn);
+}
+
+function noteFailed() {
+  net.failed++;
+  lastFailed = true;
+}
+
+function noteReached() {
+  net.reached++;
+  if (!lastFailed) return;
+  lastFailed = false;
+  for (const fn of reachedAgain) fn();
+}
+
 /** GET JSON with a timeout; any failure is null (the answer then stays offline). */
 export async function fetchJson(
   url: string,
@@ -74,11 +101,11 @@ export async function fetchJson(
       },
       { deadline: Date.now() + timeoutMs - REQUEST_ROOM_MS },
     ).catch((e: unknown) => {
-      net.failed++;
+      noteFailed();
       throw e;
     });
     if (!res) return null; // over the Wikimedia budget for now: no result, nothing sent
-    net.reached++;
+    noteReached();
     if (!res.ok) return null;
     return await res.json();
   } catch {
@@ -113,11 +140,11 @@ export async function fetchText(
       },
       { deadline: Date.now() + timeoutMs - REQUEST_ROOM_MS },
     ).catch((e: unknown) => {
-      net.failed++;
+      noteFailed();
       throw e;
     });
     if (!res) return null;
-    net.reached++;
+    noteReached();
     if (!res.ok || (res.url && !res.url.startsWith('https://'))) return null;
     if (Number(res.headers?.get?.('content-length') ?? 0) > MAX_FEED_BYTES) return null;
     const text = await res.text();
