@@ -56,8 +56,20 @@ wait_for() {
   local end=$((SECONDS + ${2:-$SLOW}))
   until has "$1"; do
     [ $SECONDS -ge $end ] && { note "timed out waiting for /$1/"; return 1; }
+    not_responding
     sleep 3
   done
+}
+# not_responding: a slow emulator sometimes shows "<app> isn't responding" (often the launcher
+# while it boots); Wait lets it carry on, as a user would.
+not_responding() {
+  local c
+  grep -q 'isn.t responding' "$DUMP" 2>/dev/null || return 0
+  note "dismissed: $(python3 "$UI" texts "$DUMP" | head -1)"
+  c=$(python3 "$UI" find "$DUMP" '^Wait$') || return 0
+  # shellcheck disable=SC2086
+  A shell input tap $c
+  sleep 2
 }
 wait_gone() {
   local end=$((SECONDS + ${2:-60}))
@@ -150,9 +162,13 @@ FLOWS=(first_run interpreter_closed pasted_table file_types recording_play setti
   web_no offline_queue folder_search send_queue delete_confirm screens decide)
 
 flow_first_run() {
-  A shell monkey -p "$PKG" -c android.intent.category.LAUNCHER 1 >/dev/null 2>&1
-  # The rest of the first-run downloads (speech, photo text) come from the internet here.
-  wait_for 'Getting Sidekick ready|Ask Sidekick' 120 || return 1
+  local i
+  for i in 1 2 3; do
+    A shell monkey -p "$PKG" -c android.intent.category.LAUNCHER 1 >/dev/null 2>&1
+    # The rest of the first-run downloads (speech, photo text) come from the internet here.
+    wait_for 'Getting Sidekick ready|Ask Sidekick' 120 && break
+    [ $i = 3 ] && return 1
+  done
   shot first_run_setup
   # Some emulator boots come up on mobile data, not Wi-Fi: then the app asks first, as on a phone.
   sleep 5
