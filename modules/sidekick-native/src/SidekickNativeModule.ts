@@ -275,6 +275,11 @@ declare class SidekickNativeModule extends NativeModule<SidekickNativeModuleEven
   /** Drops the last turn sent with `undoable` from the chat; false when there is none. */
   llmUndoLast(): boolean;
   llmIsLoaded(): boolean;
+  /**
+   * Whether the chat model and the memory-search model can't be in memory together now (small
+   * phone, or little memory left). Missing on builds before it (residency.ts uses the RAM rule).
+   */
+  modelsMustBeAlone?(): boolean;
   llmUnload(): Promise<void>;
   /** Android: whether the user allowed Sidekick's notification listener in system settings. */
   notificationAccessGranted(): boolean;

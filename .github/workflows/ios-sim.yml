@@ -2,7 +2,8 @@ name: iPhone simulator checks
 # The iPhone flows without an iPhone or a Mac: builds the app for the iOS Simulator on a free
 # GitHub macOS runner (public repo), then runs scripts/ios-sim.sh:
 #   fresh    - a phone that never had Sidekick: first run, database created, then the in-app flows
-#              check (src/engine/flows-bench.ts): the picture request and a photo question
+#              check (src/engine/flows-bench.ts): the picture request, a photo question, and
+#              model loads, unloads and memory vectors all at once
 #   upgrade  - the older build first (its database), then this one installed over it, as an
 #              App Store update would; the database must open
 # Device and Metro logs, summaries and screenshots are kept as the "ios-sim-logs" artefact.
@@ -89,6 +90,13 @@ jobs:
           fi
           grep -hq '\[flows\] {"step":"db","ok":true' "$LOGS"/fresh-summary.log || {
             echo "::error::no database result from the fresh run"; exit 1; }
+          # Loads, unloads and vectors at once must all finish (one model change at a time).
+          grep -hq '\[flows\] {"step":"models","ok":true' "$LOGS"/fresh-summary.log || {
+            echo "::error::the models step did not finish"; exit 1; }
+          # The Simulator has room for both models, so a photo question never reloads the chat model.
+          if grep -h '\[flows\] {"step":"photo"' "$LOGS"/fresh-summary.log | grep -q 'Loading the model'; then
+            echo "::error::the photo question reloaded the chat model"; exit 1
+          fi
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
         with:

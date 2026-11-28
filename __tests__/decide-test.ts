@@ -41,6 +41,11 @@ describe('the sorter reply', () => {
     expect(parseClassify('Lookup.')).toEqual({ kind: 'lookup' });
     expect(parseClassify('news')).toEqual({ kind: 'lookup', news: true });
     expect(parseClassify('banana')).toEqual({ kind: 'answer' });
+    // An answer from the owner's memories (searched by meaning even on a small phone).
+    expect(parseClassify('memory')).toEqual({ kind: 'answer', memory: true });
+    expect(parseClassify('Memory_search')).toEqual({ kind: 'answer', memory: true });
+    expect(catalogSystem()).toMatch(/^memory: a question about my own life/m);
+    expect(decisionLabel({ kind: 'answer', memory: true })).toBe('answer');
     // A tool's main choice instead of its name (the sorter said "upscale" on the phone).
     expect(parseClassify('upscale')).toEqual({ kind: 'do', tool: 'edit_photo' });
     expect(parseClassify('torch')).toEqual({ kind: 'do', tool: 'phone_setting' });

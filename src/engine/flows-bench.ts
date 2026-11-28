@@ -5,16 +5,20 @@
  * - db: the encrypted memory database opens (first run, or over an older build's file);
  * - picture: "Make a picture of a lighthouse at sunset" is answered as a picture request (on the
  *   iPhone: plainly "not on iPhone yet"), never a web search;
- * - photo: "What is this?" with a photo, with each status line and when the first words came.
+ * - photo: "What is this?" with a photo, with each status line and when the first words came;
+ * - models: chat-model loads, unloads and memory vectors all at once (each change waits its turn
+ *   natively, so this must finish without errors).
  * Off the record: nothing is kept. Downloads the chat model and the embedder if missing.
  * `only=db,picture` runs just those steps.
  */
 import SidekickNative from '../../modules/sidekick-native';
 import { answer } from './assistant';
-import { downloadFile, isDownloaded } from './downloads';
+import { downloadFile, isDownloaded, modelPath } from './downloads';
 import { errorDetailsFor } from './error-details';
 import { allRequiredFiles } from './llm-candidates';
-import { getDb } from '@/memory/db';
+import { ensureLlm } from './llm';
+import { EMBEDDER_FILE } from './models';
+import { EMBED_DIMS, getDb } from '@/memory/db';
 
 type Log = (line: string) => void;
 
@@ -49,6 +53,31 @@ async function timedAnswer(question: string, photo: string | null) {
   };
 }
 
+/** Loads, unloads and vectors at once; each call's outcome, and what is loaded afterwards. */
+async function modelsAtOnce() {
+  const t0 = Date.now();
+  const vec = () =>
+    SidekickNative.embed(modelPath(EMBEDDER_FILE), ['where did I leave my keys'], EMBED_DIMS);
+  const calls: [string, () => Promise<unknown>][] = [
+    ['llm', () => ensureLlm()],
+    ['vec', vec],
+    ['vec', vec],
+    ['llm-unload', () => SidekickNative.llmUnload()],
+    ['embed-unload', () => SidekickNative.embedUnload()],
+    ['llm', () => ensureLlm()],
+    ['vec', vec],
+  ];
+  const settled = await Promise.allSettled(calls.map(([, run]) => run()));
+  return {
+    ms: Date.now() - t0,
+    failed: settled.flatMap((r, i) =>
+      r.status === 'rejected' ? [`${calls[i][0]}: ${String(r.reason).slice(0, 120)}`] : [],
+    ),
+    alone: SidekickNative.modelsMustBeAlone?.() ?? null,
+    llmLoaded: SidekickNative.llmIsLoaded(),
+  };
+}
+
 export async function runFlowsBench(log: Log, photo: string | null, only?: string): Promise<void> {
   const want = (step: string) => !only || only.split(',').includes(step);
   if (want('db')) {
@@ -60,7 +89,7 @@ export async function runFlowsBench(log: Log, photo: string | null, only?: strin
       line(log, 'db', { ok: false, details: errorDetailsFor('flows db', e) });
     }
   }
-  if (!want('picture') && !want('photo')) return;
+  if (!want('picture') && !want('photo') && !want('models')) return;
 
   const { soc } = SidekickNative.getDeviceInfo();
   for (const f of allRequiredFiles(soc).filter((x) => !isDownloaded(x))) {
@@ -86,6 +115,15 @@ export async function runFlowsBench(log: Log, photo: string | null, only?: strin
       line(log, step, { ok: true, ...(await timedAnswer(q, p)) });
     } catch (e) {
       line(log, step, { ok: false, details: errorDetailsFor(`flows ${step}`, e) });
+    }
+  }
+
+  if (want('models')) {
+    try {
+      const r = await modelsAtOnce();
+      line(log, 'models', { ok: r.failed.length === 0, ...r });
+    } catch (e) {
+      line(log, 'models', { ok: false, details: errorDetailsFor('flows models', e) });
     }
   }
 }

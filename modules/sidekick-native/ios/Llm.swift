@@ -42,8 +42,103 @@ enum MemoryBudget {
 
   static func mustBeAlone() -> Bool {
     if totalMb < 6 * 1024 { return true }
-    return os_proc_available_memory() < 1_500 * 1024 * 1024
+    // 0 means no memory limit to report (the Simulator): the RAM rule alone decides. Read as "no
+    // room", it unloaded the chat model for every question there.
+    let available = os_proc_available_memory()
+    return available > 0 && available < 1_500 * 1024 * 1024
   }
+}
+
+/// One change at a time to which big models are in memory (load the chat model, load the embedder,
+/// unload either). Actors let another call in at every await, so without this a chat-model load
+/// and an embedder load could each find the other not loaded yet and both end up in memory.
+/// Answers and vectors don't wait here; an unload waits for the work using that model instead.
+actor ModelGate {
+  static let shared = ModelGate()
+  private var held = false
+  private var waiting: [CheckedContinuation<Void, Never>] = []
+
+  private func lock() async {
+    if !held {
+      held = true
+      return
+    }
+    await withCheckedContinuation { (c: CheckedContinuation<Void, Never>) in waiting.append(c) }
+  }
+
+  private func unlock() {
+    if waiting.isEmpty { held = false } else { waiting.removeFirst().resume() }
+  }
+
+  /// Runs [body] as the only model change in progress (first come, first served).
+  static func change<T>(_ body: () async throws -> T) async throws -> T {
+    await shared.lock()
+    do {
+      let r = try await body()
+      await shared.unlock()
+      return r
+    } catch {
+      await shared.unlock()
+      throw error
+    }
+  }
+}
+
+/// The JS module's entry points for the two big models, each change through [ModelGate].
+enum Models {
+  static func loadLlm(_ candidates: [[String: String]]) async throws -> [String: Any] {
+    try await ModelGate.change { try await Llm.shared.load(candidates) }
+  }
+
+  static func unloadLlm() async {
+    _ = try? await ModelGate.change { await Llm.shared.unload() }
+  }
+
+  static func unloadEmbedder() async {
+    _ = try? await ModelGate.change { await Embedder.shared.unload() }
+  }
+
+  static func embed(_ modelPath: String, _ texts: [String], _ dims: Int) async throws -> [[Double]] {
+    try await withEmbedder(modelPath) { try await Embedder.shared.embedIfLoaded(modelPath, texts, dims) }
+  }
+
+  static func embedImages(_ modelPath: String, _ photos: [String], _ dims: Int) async throws -> [[Double]] {
+    try await withEmbedder(modelPath) {
+      try await Embedder.shared.embedImagesIfLoaded(modelPath, photos, dims)
+    }
+  }
+
+  /// Loads the embedder (a change), then uses it; if a chat-model load unloaded it in between, again.
+  private static func withEmbedder(
+    _ modelPath: String, _ use: () async throws -> [[Double]]?
+  ) async throws -> [[Double]] {
+    for _ in 0..<3 {
+      try await ModelGate.change { try await Embedder.shared.ensureLoaded(modelPath) }
+      if let r = try await use() { return r }
+    }
+    throw NSError(
+      domain: "Sidekick", code: 4,
+      userInfo: [NSLocalizedDescriptionKey: "The memory search model was unloaded while in use."])
+  }
+}
+
+/// Counts the work using one model, so an unload can wait until it is done.
+struct InUse {
+  private(set) var count = 0
+  private var idle: [CheckedContinuation<Void, Never>] = []
+
+  mutating func begin() { count += 1 }
+
+  mutating func end() {
+    count -= 1
+    if count == 0 {
+      let w = idle
+      idle = []
+      for c in w { c.resume() }
+    }
+  }
+
+  mutating func waitingForIdle(_ c: CheckedContinuation<Void, Never>) { idle.append(c) }
 }
 
 struct LlmTuning {
@@ -69,6 +164,10 @@ actor Llm {
   private var beforeOffRecord = false
   private var system: String?
   private var offRecordSystem: String?
+  /// Answers and prepares running now; an unload stops the answer and waits for them.
+  private var inUse = InUse()
+  /// An unload is waiting: nothing new starts on the engine being freed.
+  private var closing = false
   var tuning = LlmTuning()
 
   func setTuning(_ t: LlmTuning) {
@@ -88,8 +187,9 @@ actor Llm {
     }
   }
 
+  /// Call through Models.loadLlm (one model change at a time).
   func load(_ candidates: [[String: String]]) async throws -> [String: Any] {
-    unload()
+    await unload()
     if MemoryBudget.mustBeAlone() { await Embedder.shared.unload() }
     ExperimentalFlags.optIntoExperimentalAPIs()
     ExperimentalFlags.enableBenchmark = true
@@ -159,7 +259,9 @@ actor Llm {
   }
 
   func prepare(_ system: String?) async -> Bool {
-    guard let e = engine else { return false }
+    guard !closing, let e = engine else { return false }
+    inUse.begin()
+    defer { inUse.end() }
     // Never replaces a chat that already has turns (its history is the conversation).
     if chat == nil || (chatUnused && self.system != system) {
       chat = try? await fresh(e, system)
@@ -173,9 +275,11 @@ actor Llm {
     prompt: String, imagePath: String?, opts: [String: Any],
     onText: @escaping (String) -> Void
   ) async throws -> [String: Any] {
-    guard let e = engine else {
+    guard !closing, let e = engine else {
       throw NSError(domain: "Sidekick", code: 3, userInfo: [NSLocalizedDescriptionKey: "Model not loaded"])
     }
+    inUse.begin()
+    defer { inUse.end() }
     let keepHistory = opts["keepHistory"] as? Bool ?? false
     let scratch = opts["scratch"] as? Bool ?? false
     let undoable = opts["undoable"] as? Bool ?? false
@@ -253,7 +357,15 @@ actor Llm {
     return true
   }
 
-  func unload() {
+  /// Stops an answer being written and waits until nothing uses the engine, then frees it: freed
+  /// while an answer still ran, the model stayed in memory beside the next one. Call through
+  /// Models.unloadLlm, or inside a model change.
+  func unload() async {
+    closing = true
+    while inUse.count > 0 {
+      LlmState.shared.cancel()
+      await withCheckedContinuation { (c: CheckedContinuation<Void, Never>) in inUse.waitingForIdle(c) }
+    }
     before = nil
     offRecord = nil
     chat = nil
@@ -262,6 +374,7 @@ actor Llm {
     engine = nil
     loadedInfo = nil
     LlmState.shared.loaded = false
+    closing = false
   }
 }
 
@@ -270,10 +383,13 @@ actor Embedder {
   static let shared = Embedder()
   private var engine: EmbeddingEngine?
   private var path: String?
+  private var inUse = InUse()
+  private var closing = false
 
-  private func load(_ modelPath: String) async throws -> EmbeddingEngine {
-    if let e = engine, path == modelPath { return e }
-    unload()
+  /// Call inside a model change (Models.embed does).
+  func ensureLoaded(_ modelPath: String) async throws {
+    if engine != nil, path == modelPath { return }
+    await unload()
     if MemoryBudget.mustBeAlone() { await Llm.shared.unload() }
     let cache = Files.root.appendingPathComponent("embed-cache", isDirectory: true)
     try? FileManager.default.createDirectory(at: cache, withIntermediateDirectories: true)
@@ -283,11 +399,13 @@ actor Embedder {
     try await e.initialize()
     engine = e
     path = modelPath
-    return e
   }
 
-  func embed(_ modelPath: String, _ texts: [String], _ dims: Int) async throws -> [[Double]] {
-    let e = try await load(modelPath)
+  /// Vectors for [texts], or nil when the model isn't loaded (unloaded since ensureLoaded).
+  func embedIfLoaded(_ modelPath: String, _ texts: [String], _ dims: Int) async throws -> [[Double]]? {
+    guard !closing, let e = engine, path == modelPath else { return nil }
+    inUse.begin()
+    defer { inUse.end() }
     let opts = EmbeddingOptions(normalize: true, outputSize: dims)
     var out: [[Double]] = []
     for t in texts {
@@ -297,8 +415,12 @@ actor Embedder {
     return out
   }
 
-  func embedImages(_ modelPath: String, _ photos: [String], _ dims: Int) async throws -> [[Double]] {
-    let e = try await load(modelPath)
+  func embedImagesIfLoaded(_ modelPath: String, _ photos: [String], _ dims: Int) async throws
+    -> [[Double]]?
+  {
+    guard !closing, let e = engine, path == modelPath else { return nil }
+    inUse.begin()
+    defer { inUse.end() }
     let opts = EmbeddingOptions(normalize: true, outputSize: dims)
     var out: [[Double]] = []
     for p in photos {
@@ -310,8 +432,15 @@ actor Embedder {
     return out
   }
 
-  func unload() {
+  /// Waits for vectors being made, then frees the model. Call through Models.unloadEmbedder, or
+  /// inside a model change.
+  func unload() async {
+    closing = true
+    while inUse.count > 0 {
+      await withCheckedContinuation { (c: CheckedContinuation<Void, Never>) in inUse.waitingForIdle(c) }
+    }
     engine = nil
     path = nil
+    closing = false
   }
 }

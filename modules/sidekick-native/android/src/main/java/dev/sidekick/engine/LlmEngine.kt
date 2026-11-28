@@ -517,5 +517,5 @@ fun LlmEngine.ensureLoadedFromLastRun(ctx: Context): Boolean {
       ?: return false
   val cands =
     saved.lines().mapNotNull { l -> l.split("|", limit = 2).takeIf { it.size == 2 }?.let { LlmCandidate(it[1], it[0]) } }
-  return runCatching { load(cands) }.isSuccess
+  return runCatching { loadChatModel(ctx, this, cands) }.isSuccess
 }

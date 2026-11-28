@@ -108,7 +108,7 @@ public class SidekickNativeModule: Module {
     AsyncFunction("llmLoad") { (candidates: [[String: String]], promise: Promise) in
       Task {
         do {
-          promise.resolve(try await Llm.shared.load(candidates))
+          promise.resolve(try await Models.loadLlm(candidates))
         } catch {
           promise.reject("ERR_LLM", error.localizedDescription)
         }
@@ -132,6 +132,9 @@ public class SidekickNativeModule: Module {
     }
 
     Function("llmIsLoaded") { () -> Bool in LlmState.shared.loaded }
+
+    // Whether the chat model and the embedder can't be in memory together now (MemoryBudget).
+    Function("modelsMustBeAlone") { () -> Bool in MemoryBudget.mustBeAlone() }
 
     Function("llmSetTuning") { (t: [String: Any]) in
       var tuning = LlmTuning()
@@ -164,7 +167,7 @@ public class SidekickNativeModule: Module {
 
     AsyncFunction("llmUnload") { (promise: Promise) in
       Task {
-        await Llm.shared.unload()
+        await Models.unloadLlm()
         promise.resolve(nil)
       }
     }
@@ -173,7 +176,7 @@ public class SidekickNativeModule: Module {
     AsyncFunction("embed") { (modelPath: String, texts: [String], dims: Int, promise: Promise) in
       Task {
         do {
-          promise.resolve(try await Embedder.shared.embed(modelPath, texts, dims))
+          promise.resolve(try await Models.embed(modelPath, texts, dims))
         } catch {
           promise.reject("ERR_EMBED", error.localizedDescription)
         }
@@ -183,7 +186,7 @@ public class SidekickNativeModule: Module {
     AsyncFunction("embedImages") { (modelPath: String, photos: [String], dims: Int, promise: Promise) in
       Task {
         do {
-          promise.resolve(try await Embedder.shared.embedImages(modelPath, photos, dims))
+          promise.resolve(try await Models.embedImages(modelPath, photos, dims))
         } catch {
           promise.reject("ERR_EMBED", error.localizedDescription)
         }
@@ -199,7 +202,7 @@ public class SidekickNativeModule: Module {
 
     AsyncFunction("embedUnload") { (promise: Promise) in
       Task {
-        await Embedder.shared.unload()
+        await Models.unloadEmbedder()
         promise.resolve(nil)
       }
     }
