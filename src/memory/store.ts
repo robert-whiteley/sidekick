@@ -15,6 +15,7 @@ import { appendSeen, captureText } from './photo-text';
 import { OCR_FOUND, OCR_NO_TEXT, readPendingPhotoText, readTextOf } from './photo-ocr';
 import {
   embedDocument,
+  embedFitting,
   embedderChanged,
   embedQuery,
   ftsQuery,
@@ -944,12 +945,11 @@ async function embedPendingNow(
   );
   if (!r.rows.length) return photos;
   const t0 = Date.now();
-  const vecs = await SidekickNative.embed(
-    modelPath(EMBEDDER_FILE),
+  const vecs = await embedFitting(
+    (texts) => SidekickNative.embed(modelPath(EMBEDDER_FILE), texts, EMBED_DIMS),
     r.rows.map((x) =>
       embedDocument(x.place ? `${x.text as string} (in ${x.place as string})` : (x.text as string)),
     ),
-    EMBED_DIMS,
   );
   await db.transaction(async (tx) => {
     for (let i = 0; i < r.rows.length; i++) {

@@ -70,6 +70,39 @@ export function wantsCameraNow(q: string): boolean {
 export const embedQuery = (q: string) => `task: search result | query: ${q}`;
 export const embedDocument = (t: string) => `title: none | text: ${t}`;
 
+const TOO_LONG = /sequence length \((\d+)\) exceeds maximum supported signature length \((\d+)\)/;
+
+/**
+ * Vectors for [texts], shortening any the embedder can't take: EmbeddingGemma reads at most 1024
+ * tokens, and one longer memory failed its whole batch, every time, so no new memory got a vector
+ * and search by meaning failed with it (phone check, 28 Nov: "1877 exceeds 1024"). A long text
+ * keeps its start, cut in proportion to how far over it is.
+ */
+export async function embedFitting(
+  embed: (texts: string[]) => Promise<number[][]>,
+  texts: string[],
+): Promise<number[][]> {
+  try {
+    return await embed(texts);
+  } catch (e) {
+    if (!TOO_LONG.test(String(e))) throw e;
+  }
+  const out: number[][] = [];
+  for (let t of texts) {
+    for (;;) {
+      try {
+        out.push((await embed([t]))[0]);
+        break;
+      } catch (e) {
+        const m = TOO_LONG.exec(String(e));
+        if (!m || t.length < 100) throw e;
+        t = t.slice(0, Math.floor((t.length * 0.9 * Number(m[2])) / Number(m[1])));
+      }
+    }
+  }
+  return out;
+}
+
 /** Stored vectors came from a different embedder file than the current one: re-embed them. */
 export const embedderChanged = (stored: string | null, current: string) => stored !== current;
 
