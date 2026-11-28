@@ -2,7 +2,7 @@
 
 1. Use Node from `.nvmrc`, then `npm install` (it turns on the commit hook in `.githooks/`).
 2. Expo changes every SDK: check the docs for the SDK in `package.json` (`https://docs.expo.dev/versions/v<major>.0.0/`). Prefer Expo modules over third-party libraries.
-3. Logic changes need tests. Native changes need a development build and a check on a phone; say what ran on a device and what was only built.
+3. Logic changes need tests. Native changes need a development build and a check on a phone; say what ran on a device and what was only built. Most app flows can be checked without a phone or a Mac on free hosted runners: `node scripts/checks.mjs run android-emu` (Android emulator) or `node scripts/checks.mjs run ios-sim` (iPhone Simulator); `node scripts/checks.mjs` lists every check and `node scripts/checks.mjs log <run id>` shows what failed ("Checks" in ARCHITECTURE.md).
 4. Significant decisions get an ADR in `docs/decisions/`; ideas left out or rejected go in ADR 0006 (check it before proposing one).
 5. Contributions are accepted under Apache-2.0 (the project's licence).
 
