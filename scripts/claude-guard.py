@@ -287,10 +287,14 @@ def check_phone_shell(w):
 
 
 def check_command(cmd, cwd, roots):
+    check_written(redirect_targets(cmd), cwd)
     todo = segments(cmd)
     while todo:
         w = todo.pop(0)
         todo.extend(inner_shells(w))
+        if prog(w) in ('bash', 'sh', 'zsh', 'dash') and '-c' in w and w.index('-c') + 1 < len(w):
+            check_written(redirect_targets(w[w.index('-c') + 1]), cwd)
+        check_written(write_targets(cmd, w), cwd)
         p = prog(w)
         if p in ('bash', 'sh', 'zsh', 'dash', 'source', '.') and len(w) > 1 and not w[1].startswith('-'):
             todo.append(w[1:])  # bash scripts/release.sh ...
@@ -323,16 +327,72 @@ def project_root_of(path):
     return None
 
 
+NOTE_FIX = ('make it a check script, a test or a hook that runs silently instead; if it truly '
+            'cannot be one, tell the owner why and let them decide')
+
+
+def claude_home():
+    return os.path.realpath(os.path.expanduser(os.environ.get('CLAUDE_CONFIG_DIR') or '~/.claude'))
+
+
+def check_instruction_file(path):
+    """Notes Claude would load in later sessions (rule files, Claude's memory): never written by Claude."""
+    path = os.path.realpath(path)
+    home = claude_home()
+    if path.startswith(home + '/'):
+        rel = os.path.relpath(path, home)
+        if re.match(r'^projects/[^/]+/memory/', rel) or rel in RULE_FILES or rel.startswith('rules/'):
+            ask(f"Writes Claude's own notes ({rel}): {NOTE_FIX}.")
+        return
+    if not project_root_of(path):
+        return  # outside the app (e.g. the owner's own files)
+    if os.path.basename(path) in RULE_FILES or re.search(r'(^|/)\.(claude|cursor)/(rules|memory)/', path):
+        deny(f'No auto-loaded rule files here: {NOTE_FIX}.')
+
+
+def write_targets(cmd, w):
+    """Files a simple command writes: tee, cp, mv, install, ln, touch (redirections are found separately)."""
+    p = prog(w)
+    args = [a for a in w[1:] if not a.startswith('-')]
+    if p in ('tee', 'touch'):
+        return args
+    if p in ('cp', 'mv', 'install', 'ln') and len(args) >= 2:
+        return [args[-1]]
+    return []
+
+
+def redirect_targets(cmd):
+    cmd = HEREDOC.sub(lambda m: m.group(0).split('\n', 1)[0], cmd)
+    try:
+        lex = shlex.shlex(cmd, posix=False, punctuation_chars='();<>|&\n')
+        lex.whitespace = ' \t\r'
+        lex.whitespace_split = True
+        toks = list(lex)
+    except ValueError:
+        return []
+    out = []
+    for i, t in enumerate(toks[:-1]):
+        if t in ('>', '>>', '>|', '&>', '&>>') or re.fullmatch(r'\d?>>?', t):
+            nxt = toks[i + 1].strip('\'"')
+            if not re.match(r'^&?\d$', nxt) and nxt != '/dev/null':
+                out.append(nxt)
+    return out
+
+
+def check_written(targets, cwd):
+    for t in targets:
+        if any(c in t for c in '$`'):
+            continue  # variables: can't tell statically
+        check_instruction_file(os.path.join(cwd, os.path.expanduser(t)))
+
+
 def check_edit(path):
     if not path:
         return
+    check_instruction_file(path)
     root = project_root_of(path)
     if not root:
-        return  # outside the app (e.g. the owner's own files)
-    base = os.path.basename(path)
-    if base in RULE_FILES or re.search(r'(^|/)\.(claude|cursor)/rules/', path):
-        deny('No auto-loaded rule files here: make the rule a check script or a hook, or a note '
-             'in a product doc.')
+        return
     rel = os.path.relpath(path, root)
     if rel.split(os.sep)[0] in ('ios', 'android'):
         deny(f'{rel.split(os.sep)[0]}/ is generated (prebuild): change app.json or a config '
