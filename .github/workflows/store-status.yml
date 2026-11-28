@@ -57,10 +57,13 @@ jobs:
           GOOGLE_SERVICE_ACCOUNT_KEY_PATH="$key" node scripts/store-status.mjs --show > state.json || true
           rm -f "$key"
           [ -s state.json ] || echo '{}' > state.json
+          # Plain lines, not JSON: lines of the Play key's JSON ("{", "}") are masked in logs.
           {
-            echo '```json'
-            cat state.json
-            echo '```'
+            node -e '
+              const s = JSON.parse(require("fs").readFileSync("state.json", "utf8"));
+              if (s.apple) console.log(`App Store: version ${s.apple.version}; newest TestFlight build ${s.apple.build}`);
+              for (const [t, rs] of Object.entries(s.play ?? {})) console.log(`Google Play ${t}: ${rs.join("; ")}`);
+              if (!s.apple && !s.play) console.log("No store could be reached.");'
             [ -n "$ASC_KEY_ID" ] || echo 'App Store: no ASC_KEY_ID / ASC_ISSUER_ID / ASC_KEY_P8 secrets, so only Google Play is shown.'
           } | tee -a "$GITHUB_STEP_SUMMARY"
           node -e '
