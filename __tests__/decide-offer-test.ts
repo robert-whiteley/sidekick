@@ -33,3 +33,15 @@ test('erase and upscale come only with a photo (as edit_photo ops)', async () =>
   const withPhoto = await systemFor({ photo: true });
   expect(withPhoto).toMatch(/^edit_photo: .*erase .*upscale/m);
 });
+
+test('the sorter is told when a photo comes with the request (from app state, not the words)', async () => {
+  mockAsk.mockClear();
+  await decideRequest('What is this?', { photo: true });
+  expect(mockAsk.mock.calls[0][0]).toBe('Request (with a photo): What is this?');
+  expect((mockAsk.mock.calls[0][3] as { system: string }).system).toMatch(
+    /questions about a photo that comes with the request/,
+  );
+  mockAsk.mockClear();
+  await decideRequest('What is this?');
+  expect(mockAsk.mock.calls[0][0]).toBe('Request: What is this?');
+});

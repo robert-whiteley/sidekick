@@ -113,7 +113,8 @@ export function catalogSystem(tools: ToolSpec[] = DECIDE_TOOLS, lookup = true): 
   return (
     'You sort requests to a phone assistant. Reply with one word only.\n' +
     'answer: a question, a chat, advice, or a request to write, explain or plan something; also ' +
-    'questions about what I saw, heard, said or noted, and recaps.\n' +
+    'questions about what I saw, heard, said or noted, recaps, and questions about a photo that ' +
+    'comes with the request.\n' +
     (lookup
       ? 'lookup: needs current facts from the internet (prices, scores, recent events).\n' +
         'news: the latest news or headlines, in general or on a topic.\n'
@@ -123,6 +124,15 @@ export function catalogSystem(tools: ToolSpec[] = DECIDE_TOOLS, lookup = true): 
     '\nPick a tool only when I want the phone to do that now; talking about a thing is answer. ' +
     'Asking you to text, call or email me myself is answer (you reply here).'
   );
+}
+
+/**
+ * The request as the sorter reads it. A photo taken or shared with it is said, from the app's
+ * state: without it "What is this?" read as a question about what is playing (the media tool), and
+ * a photo question on the iPhone Simulator was answered "That isn't possible on this phone yet."
+ */
+export function requestLine(question: string, photo = false): string {
+  return photo ? `Request (with a photo): ${question}` : `Request: ${question}`;
 }
 
 /** The sorter's one word → a decision. A tool name inside it ("stop_listening") counts. */

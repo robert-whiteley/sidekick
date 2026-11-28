@@ -5,11 +5,18 @@
  * only its own words and one word of reply (median 1.7 s on the Pixel 5; docs/BENCH.md).
  */
 import { askLlm } from './llm';
-import { catalogSystem, DECIDE_TOOLS, parseClassify, type Decision } from './decide-logic';
+import {
+  catalogSystem,
+  DECIDE_TOOLS,
+  parseClassify,
+  requestLine,
+  type Decision,
+} from './decide-logic';
 
 /**
  * The decision for [question]. What is offered follows the app's state, never the words: "draft"
- * (send or cancel) only while a draft waits, "edit_photo" only with a photo. "make_picture" is always
+ * (send or cancel) only while a draft waits, "edit_photo" only with a photo, and the request says when
+ * a photo comes with it. "make_picture" is always
  * offered: without the picture model (or on iPhone) its answer says so and offers the download, so
  * a drawing request is never sent to a web search instead. A lookup is offered even with online lookup off:
  * then the answer is offline and the chat offers a web search in the browser instead.
@@ -22,7 +29,7 @@ export async function decideRequest(
   const tools = DECIDE_TOOLS.filter(
     (t) => (t.name !== 'draft' || opts.draftOpen) && (t.name !== 'edit_photo' || opts.photo),
   );
-  const { text } = await askLlm(`Request: ${question}`, null, () => {}, {
+  const { text } = await askLlm(requestLine(question, opts.photo), null, () => {}, {
     system: catalogSystem(tools),
     maxTokens: 5,
     scratch: true,

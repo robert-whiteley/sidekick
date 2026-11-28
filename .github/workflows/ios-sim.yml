@@ -79,7 +79,9 @@ jobs:
         if: always()
         run: |
           cat "$LOGS"/*-summary.log 2>/dev/null || true
-          if grep -hE 'not a database|database is locked|SQL (execution|prepare)' "$LOGS"/*-summary.log; then
+          # The older build's own errors are what the upgrade check starts from (build 4 made an
+          # unreadable file on a fresh install); only this build's logs count.
+          if grep -hE 'not a database|database is locked|SQL (execution|prepare)' "$LOGS"/fresh-summary.log "$LOGS"/upgraded-summary.log; then
             echo "::error::database errors in the logs"; exit 1
           fi
           if grep -h '\[flows\]' "$LOGS"/*-summary.log | grep -q '"ok":false'; then
