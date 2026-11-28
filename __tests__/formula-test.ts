@@ -105,6 +105,8 @@ test('a new column from a first-row formula is filled down, as in a spreadsheet'
     '0.250',
     '0.063',
   ]);
+  // [F2]: no column has that name, so it is the cell F2 (the model wrote "=[B2]*0.20").
+  expect(addColumn(ctx, 'VAT', '=[F2]*0.2').values).toEqual([0.02, 0.04, 0.9, 0.25, 0.4, 2.598]);
   // A constant is the same in every row.
   expect(addColumn(ctx, 'One', '1').values).toEqual([1, 1, 1, 1, 1, 1]);
 });

@@ -2092,13 +2092,52 @@ export type FormulaResult = { value: Value; formula: string };
 
 /** Works out [formula] on [ctx]'s sheets. Throws FormulaError with a plain reason. */
 export function runFormula(formula: string, ctx: FormulaContext): Value {
-  return evaluateTree(
+  return evaluateTree(parseFor(formula, ctx), ctx);
+}
+
+/** [formula] parsed for [ctx]'s workbook. */
+function parseFor(formula: string, ctx: FormulaContext): Node {
+  return cellsInBrackets(
     parseFormula(
       formula,
       ctx.sheets.map((x) => x.name),
     ),
     ctx,
   );
+}
+
+/**
+ * "[B2]" where no column has that name: the cell B2 (the model wrote "=[B2]*0.20" for a VAT
+ * column, phone check 28 Nov). A real column of that name still wins.
+ */
+function cellsInBrackets(n: Node, ctx: FormulaContext): Node {
+  switch (n.k) {
+    case 'col': {
+      const cell = CELL.exec(n.name);
+      if (!cell) return n;
+      const i = n.sheet
+        ? ctx.sheets.findIndex((x) => x.name.toLowerCase() === n.sheet!.toLowerCase())
+        : ctx.sheet;
+      if (i < 0 || findColumn(tableOf(ctx.sheets[i]), n.name) >= 0) return n;
+      return {
+        k: 'cell',
+        col: colIndex(cell[1]),
+        row: Number(cell[2]) - 1,
+        sheet: n.sheet,
+        rowFixed: /\$\d/.test(n.name),
+      };
+    }
+    case 'call':
+      return { ...n, args: n.args.map((a) => cellsInBrackets(a, ctx)) };
+    case 'un':
+      return { ...n, a: cellsInBrackets(n.a, ctx) };
+    case 'bin':
+      return { ...n, a: cellsInBrackets(n.a, ctx), b: cellsInBrackets(n.b, ctx) };
+    case 'array':
+      return { ...n, rows: n.rows.map((r) => r.map((x) => cellsInBrackets(x, ctx))) };
+    default:
+      return n;
+  }
 }
 
 function evaluateTree(tree: Node, ctx: FormulaContext): Value {
@@ -2202,10 +2241,7 @@ export function addColumn(
   name: string,
   formula: string,
 ): { sheet: Sheet; col: number; values: Scalar[] } {
-  const tree = parseFormula(
-    formula,
-    ctx.sheets.map((x) => x.name),
-  );
+  const tree = parseFor(formula, ctx);
   const v = evaluateTree(tree, ctx);
   const sheet = ctx.sheets[ctx.sheet];
   const t = tableOf(sheet);
