@@ -102,9 +102,17 @@ const OPS = [
   '}',
 ];
 
-function tokenize(src: string): Tok[] {
+/**
+ * [sheets]: the workbook's sheet names. One written without quotes before "!" is read even when
+ * it has characters a bare name can't ("sk-test-runs!B2:B5" for a shared sk-test-runs.csv: the
+ * model wrote that, and it failed as "sk is not a column").
+ */
+function tokenize(src: string, sheets: string[] = []): Tok[] {
   const out: Tok[] = [];
   let i = 0;
+  const named = sheets
+    .filter((n) => n && !/^[A-Za-z_][A-Za-z0-9_.]*$/.test(n))
+    .sort((x, y) => y.length - x.length);
   const s = src.trim().replace(/^=/, '').replace(/[“”]/g, '"').replace(/[‘’]/g, "'");
   while (i < s.length) {
     const c = s[i];
@@ -144,6 +152,14 @@ function tokenize(src: string): Tok[] {
         throw new FormulaError("a 'sheet name' must be followed by !");
       out.push({ t: 'sheet', v: s.slice(i + 1, end) });
       i = end + 2;
+      continue;
+    }
+    const sheet = named.find(
+      (n) => s[i + n.length] === '!' && s.slice(i, i + n.length).toLowerCase() === n.toLowerCase(),
+    );
+    if (sheet) {
+      out.push({ t: 'sheet', v: sheet });
+      i += sheet.length + 1;
       continue;
     }
     const num = /^(\d+(\.\d*)?|\.\d+)([eE][-+]?\d+)?/.exec(s.slice(i));
@@ -363,9 +379,9 @@ class Parser {
   }
 }
 
-export function parseFormula(src: string): Node {
+export function parseFormula(src: string, sheets: string[] = []): Node {
   if (src.length > FORMULA_LIMITS.length) throw new FormulaError('the formula is too long');
-  const toks = tokenize(src);
+  const toks = tokenize(src, sheets);
   if (!toks.length) throw new FormulaError('the formula is empty');
   return new Parser(toks).parse();
 }
@@ -2070,7 +2086,10 @@ export type FormulaResult = { value: Value; formula: string };
 
 /** Works out [formula] on [ctx]'s sheets. Throws FormulaError with a plain reason. */
 export function runFormula(formula: string, ctx: FormulaContext): Value {
-  const tree = parseFormula(formula);
+  const tree = parseFormula(
+    formula,
+    ctx.sheets.map((x) => x.name),
+  );
   const env: Env = {
     ctx,
     tables: new Map(),

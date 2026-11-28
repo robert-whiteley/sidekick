@@ -109,3 +109,16 @@ test('plain errors for mistakes', () => {
     FORMULA_LIMITS.steps = steps;
   }
 });
+
+test('a sheet name with a hyphen or a space works without quotes (a shared file-name.csv)', () => {
+  // The model wrote "sk-test-runs!B2:B5" for a shared sk-test-runs.csv (phone check, 28 Nov).
+  const runs = csvSheet('Date,Distance km\n2026-11-02,5.2\n2026-11-23,10.1', 'my-runs', false);
+  const two = [runs, csvSheet('A\n1\n2', 'Old data', false)];
+  const r = (f: string) => resultText(runFormula(f, { sheets: two, sheet: 0, now }));
+  expect(r('MAX(my-runs!B2:B3)')).toBe('10.1');
+  expect(r('=MAX(MY-RUNS![Distance km])')).toBe('10.1');
+  expect(r('SUM(Old data!A2:A3)')).toBe('3');
+  expect(r("SUM('Old data'!A2:A3)")).toBe('3');
+  // A minus between names is still a minus when no sheet has that name.
+  expect(run('[Qty]-[Qty]')).not.toBe('');
+});
