@@ -10,6 +10,7 @@ import {
   resultError,
   resultText,
   runFormula,
+  splitFormulas,
 } from '@/files/formula';
 import { csvSheet } from '@/files/sheet';
 
@@ -140,4 +141,15 @@ test('a sheet name with a hyphen or a space works without quotes (a shared file-
   expect(r("SUM('Old data'!A2:A3)")).toBe('3');
   // A minus between names is still a minus when no sheet has that name.
   expect(run('[Qty]-[Qty]')).not.toBe('');
+});
+
+test('several formulas split only at a top-level ";"', () => {
+  expect(splitFormulas('=SUM(C:C) ; SUMIF(A:A, "Red", C:C);')).toEqual([
+    '=SUM(C:C)',
+    'SUMIF(A:A, "Red", C:C)',
+  ]);
+  // Inside brackets, quotes and braces a ";" stays: arguments, text and array rows.
+  expect(splitFormulas('=SUMIF(A:A; "a;b"; C:C)')).toEqual(['=SUMIF(A:A; "a;b"; C:C)']);
+  expect(splitFormulas("=SUM({1,2;3,4}) + 'x;y'!A1")).toEqual(["=SUM({1,2;3,4}) + 'x;y'!A1"]);
+  expect(splitFormulas('=[Net; price]*2')).toEqual(['=[Net; price]*2']);
 });

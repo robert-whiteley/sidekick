@@ -2091,6 +2091,32 @@ export const FUNCTION_NAMES = [...Object.keys(FUNCS), ...Object.keys(LAZY)].sort
 export type FormulaResult = { value: Value; formula: string };
 
 /** Works out [formula] on [ctx]'s sheets. Throws FormulaError with a plain reason. */
+/**
+ * The formulas in [src]: a question in two parts ("the total, and per team") came back as
+ * "=SUM(C:C) ; SUMIF(A:A, \"Red\", C:C) ; …" (emulator check, 28 Nov). Split at a ";" that is
+ * outside brackets, quotes and braces (inside them it separates arguments or array rows).
+ */
+export function splitFormulas(src: string): string[] {
+  const parts: string[] = [];
+  let depth = 0;
+  let quote = '';
+  let start = 0;
+  for (let i = 0; i < src.length; i++) {
+    const c = src[i];
+    if (quote) {
+      if (c === quote) quote = '';
+    } else if (c === '"' || c === "'") quote = c;
+    else if (c === '(' || c === '[' || c === '{') depth++;
+    else if (c === ')' || c === ']' || c === '}') depth = Math.max(0, depth - 1);
+    else if (c === ';' && depth === 0) {
+      parts.push(src.slice(start, i));
+      start = i + 1;
+    }
+  }
+  parts.push(src.slice(start));
+  return parts.map((p) => p.trim()).filter((p) => p && p !== '=');
+}
+
 export function runFormula(formula: string, ctx: FormulaContext): Value {
   return evaluateTree(parseFor(formula, ctx), ctx);
 }
