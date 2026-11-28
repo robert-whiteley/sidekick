@@ -5,7 +5,7 @@ import SidekickNative from '../../modules/sidekick-native';
 import { downloadFile, isDownloaded, wifiOnlyDownloads } from './downloads';
 import { setRequiredSpeechFiles } from './llm-candidates';
 import { interpretLanguage } from './interpreter-logic';
-import { type SpeechModelId, speechModelFor } from './language-logic';
+import { type SpeechModelId, speechModelFor, speechModelNotice } from './language-logic';
 import { MODEL_FILES, type ModelFile, SPEECH_FILES, speechToTextFile } from './models';
 import { notices } from './notices';
 import { modelsDir } from './paths';
@@ -47,6 +47,9 @@ export function speechModelsReady(): boolean {
   const base = SPEECH_FILES.filter((f) => f !== MODEL_FILES.speechToText);
   return base.every(isDownloaded) && downloadedStt().length > 0;
 }
+
+/** The speech build the last notice was about (kv, kept across restarts). */
+const NOTICED_KEY = 'language.speechNoticed';
 
 let applied: string | null = null;
 let fetching: Promise<void> | null = null;
@@ -97,13 +100,8 @@ async function switchSpeechModel(model: SpeechModelId) {
   } catch (e) {
     console.log(`[language] couldn't delete the unused speech model: ${String(e)}`);
   }
-  notices.post({
-    key: 'language.speech',
-    kind: 'info',
-    text:
-      model === 'parakeet-v3'
-        ? 'Sidekick now understands 25 languages around you and translates them into English'
-        : 'Sidekick listens in English only again',
-    href: '/settings/assistant',
-  });
+  const text = speechModelNotice(model, SidekickNative.kvGet(NOTICED_KEY) ?? null);
+  SidekickNative.kvSet(NOTICED_KEY, model);
+  if (text)
+    notices.post({ key: 'language.speech', kind: 'info', text, href: '/settings/assistant' });
 }

@@ -269,17 +269,48 @@ export function cleanModelQuery(text: string, knownNames: string[]): string | nu
  * own life, where a web search wouldn't help).
  */
 // A third word, ME, for questions about the user: with only WEB or NO, Gemma said WEB for every
-// "what did I do..." answer that couldn't say (0 of 8 made-up cases right; 8 of 8 with ME).
+// "what did I do..." answer that couldn't say (0 of 8 made-up cases right; 8 of 8 with ME). NO
+// comes first: with ME first, an answered "Why is the sky blue?" still got WEB. Questions the
+// sorter already put in memory skip the check (webOfferCheckWanted). Made-up cases through the
+// sorter and the check, laptop: 16/16, 10/13 and 12/15 (was 16/16, 9/13, 12/15).
 export const WEB_OFFER_SYSTEM =
-  'You check an answer from an offline assistant. Reply with one word only: ME if the question ' +
-  'is about the user or people they know (what they did, said, have, planned or saved); NO if ' +
-  'the answer gives what was asked; WEB if it does not give the public facts asked for and a ' +
+  'You check an answer from an offline assistant. Reply with one word only: NO if the answer ' +
+  'gives what was asked; ME if the question is about the user or people they know (what they ' +
+  'did, said, have, planned or saved); WEB if it does not give the public facts asked for and a ' +
   'web search could find them.';
 
 export const WEB_OFFER_MAX_TOKENS = 3;
 
+/**
+ * Whether the check runs after an offline answer: lookup off, the sorter didn't already want a
+ * lookup (that answer shows the link anyway) or say the answer is in the owner's memories (no
+ * web search knows their life), no photo, nothing queued for later, not a routine, not stopped,
+ * and some answer to check.
+ */
+export function webOfferCheckWanted(s: {
+  lookupOn: boolean;
+  lookupWanted: boolean;
+  memoryWanted?: boolean;
+  photo: boolean;
+  queuedOffline: boolean;
+  routine: boolean;
+  stopped: boolean;
+  text: string;
+}): boolean {
+  return (
+    !s.lookupOn &&
+    !s.lookupWanted &&
+    !s.memoryWanted &&
+    !s.photo &&
+    !s.queuedOffline &&
+    !s.routine &&
+    !s.stopped &&
+    !!s.text.trim()
+  );
+}
+
 export function webOfferPrompt(question: string, answer: string): string {
-  return `Question: ${question.trim().slice(0, 400)}\nAnswer: ${answer.trim().slice(0, 600)}\n\nME, NO or WEB:`;
+  return `Question: ${question.trim().slice(0, 400)}\nAnswer: ${answer.trim().slice(0, 600)}\n\nNO, ME or WEB:`;
 }
 
 /** The check's reply: only WEB (any case, possibly with punctuation) offers the link; ME and NO don't. */

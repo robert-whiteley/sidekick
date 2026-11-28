@@ -14,6 +14,7 @@ import * as Sharing from 'expo-sharing';
 import { readDeviceFile } from '@/files/device';
 import { extOf, fileType } from '@/files/kinds';
 import { csvSheet, type Sheet, sheetSummary, sheetText, toCsv } from '@/files/sheet';
+import { toXlsx } from '@/files/xlsx-write';
 import { DESCRIBE_PROMPT, parseDescription } from '@/memory/photo-text';
 import { addSharedFile, readPdf } from '@/memory/sources';
 import { clipText, type WebSource } from '@/web/lookup-logic';
@@ -41,6 +42,7 @@ import {
   partPrompt,
   recordingReadyLine,
   SHEET_SUMMARY_QUESTION,
+  sheetSaveAs,
   TRANSCRIPT_QUESTION,
   transcriptText,
   videoText,
@@ -137,6 +139,7 @@ export async function fileAttachment(
           text: r.text,
           partial: r.truncated,
           typeLabel,
+          fileType: r.type,
           sheets: r.sheets,
           summary: r.summary,
         };
@@ -626,16 +629,20 @@ async function answerVideo(
   return { ...r, update: frameNotes !== a.frameNotes ? { frameNotes, frames: [] } : undefined };
 }
 
-/** A spreadsheet with a new column, as a CSV file handed to the share sheet (save or send it). */
-export async function shareSheetCsv(a: Attachment): Promise<boolean> {
-  const sheet = a.sheets?.[0];
-  if (!sheet) return false;
+/**
+ * A spreadsheet with a new column, handed to the share sheet (save or send it): an Excel or
+ * OpenDocument workbook as an Excel workbook with all its sheets, a CSV or pasted table as CSV.
+ */
+export async function shareSheet(a: Attachment): Promise<boolean> {
+  const sheets = a.sheets ?? [];
+  if (!sheets.length) return false;
+  const as = sheetSaveAs(a.fileType);
   const base = a.name.replace(/\.[^.]+$/, '') || 'sheet';
-  const file = new File(Paths.cache, `${base} (changed).csv`);
+  const file = new File(Paths.cache, `${base} (changed).${as.ext}`);
   if (file.exists) file.delete();
   file.create();
-  file.write(toCsv(sheet));
+  file.write(as.ext === 'xlsx' ? toXlsx(sheets) : toCsv(sheets[0]));
   if (!(await Sharing.isAvailableAsync())) return false;
-  await Sharing.shareAsync(file.uri, { mimeType: 'text/csv', dialogTitle: `Save ${base}` });
+  await Sharing.shareAsync(file.uri, { mimeType: as.mime, dialogTitle: `Save ${base}` });
   return true;
 }

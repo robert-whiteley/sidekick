@@ -2,12 +2,22 @@ import {
   detectLanguage,
   parseTranslations,
   speechModelFor,
+  speechModelNotice,
   splitTranslation,
   TRANSLATION_MARK,
   translationPrompt,
   withTranslation,
 } from '@/engine/language-logic';
 import { SYSTEM_PROMPT } from '@/engine/prompts';
+
+test('the speech build is announced only when it changed, never on a fresh install', () => {
+  expect(speechModelNotice('parakeet-v2', null)).toBeNull(); // fresh install
+  expect(speechModelNotice('parakeet-v2', 'parakeet-v2')).toBeNull(); // a restart
+  expect(speechModelNotice('parakeet-v3', 'parakeet-v3')).toBeNull();
+  expect(speechModelNotice('parakeet-v3', 'parakeet-v2')).toMatch(/25 languages/);
+  expect(speechModelNotice('parakeet-v3', null)).toMatch(/25 languages/);
+  expect(speechModelNotice('parakeet-v2', 'parakeet-v3')).toMatch(/English only again/);
+});
 
 test('English speech model unless other languages are wanted', () => {
   expect(speechModelFor(false)).toBe('parakeet-v2');

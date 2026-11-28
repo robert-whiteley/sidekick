@@ -18,6 +18,18 @@ export function speechModelFor(understandOthers: boolean): SpeechModelId {
   return understandOthers ? 'parakeet-v3' : 'parakeet-v2';
 }
 
+/**
+ * The notice after the speech build was switched to [model], or null: only when it changed from
+ * the build last told about ([last], kept across restarts). A fresh install starts on v2 without
+ * a word; before, every start posted "listens in English only again" (nothing had changed).
+ */
+export function speechModelNotice(model: SpeechModelId, last: string | null): string | null {
+  if (model === last || (last === null && model === 'parakeet-v2')) return null;
+  return model === 'parakeet-v3'
+    ? 'Sidekick now understands 25 languages around you and translates them into English'
+    : 'Sidekick listens in English only again';
+}
+
 /** Languages Parakeet v3 hears (ISO 639-1), with their English names. */
 export const SPEECH_LANGUAGES: { code: string; name: string }[] = [
   { code: 'en', name: 'English' },

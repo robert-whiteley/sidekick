@@ -193,3 +193,17 @@ describe('decidePrompt', () => {
     expect(p.length).toBeLessThan(560);
   });
 });
+
+// The sorter's prompt after PR 64 (laptop, the app's Gemma, all 202 bench items, classify only:
+// 170 -> 176). Its near-miss items flipped on small wording changes; these are the lines that
+// moved them back: "explain how GPS works" or "a good recipe" picked research, "what is an alarm
+// clock" picked alarm, and "set an alarm" picked reminder, whose line named alarms.
+test('the sorter keeps research for a research request and talk about a tool as an answer', () => {
+  const sys = catalogSystem();
+  expect(sys).toMatch(/^research: only when I ask you to research a topic/m);
+  expect(sys).toMatch(/^answer: .*about what a tool below does \(what it is or how it works\)/m);
+  expect(sys).toMatch(
+    /phone tool that does what I ask \(only when I want the phone to do that now\)/,
+  );
+  expect(sys).not.toMatch(/^reminder: .*alarm/m);
+});

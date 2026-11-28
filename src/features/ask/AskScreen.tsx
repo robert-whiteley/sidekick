@@ -171,7 +171,7 @@ import {
   pickAttachment,
   recordingStatus,
   resumeRecordings,
-  shareSheetCsv,
+  shareSheet,
   watchRecordings,
 } from '@/engine/shared-doc';
 import type { Attachment } from '@/engine/shared-doc-logic';
@@ -1455,7 +1455,7 @@ export function AskScreen({
               onAsk={(q) => void ask(q)}
               onClose={closeAttachment}
               onSave={() =>
-                void shareSheetCsv(attachment).catch((e) => {
+                void shareSheet(attachment).catch((e) => {
                   console.log(`[sheet] save failed: ${String(e)}`);
                   setStatus("Couldn't save the sheet.");
                 })

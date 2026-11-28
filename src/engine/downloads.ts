@@ -46,6 +46,15 @@ export function isDownloaded(f: ModelFile): boolean {
   return SidekickNative.fileExists(modelPath(f));
 }
 
+/**
+ * The system download waits for a network it may use (DownloadManager PAUSED_WAITING_FOR_NETWORK
+ * 2, PAUSED_QUEUED_FOR_WIFI 3). Not "pending" (queued behind the other files, which the system
+ * runs a few at a time) or a retry: those showed "Waiting for Wi-Fi…" while on Wi-Fi.
+ */
+export function waitsForNetwork(status: string, reason: number): boolean {
+  return status === 'paused' && (reason === 2 || reason === 3);
+}
+
 /** What to do after the system download stops: resume it ourselves a few times, then give up. */
 export function afterSystemDownload(
   status: 'done' | 'failed',
@@ -88,8 +97,7 @@ export async function downloadFile(
     }
     const st = SidekickNative.downloadStatus(id);
     const total = st.total > 0 ? st.total : f.bytes;
-    // Paused/pending = the system is waiting for a network it may use (e.g. Wi-Fi).
-    const waiting = st.status === 'paused' || st.status === 'pending';
+    const waiting = waitsForNetwork(st.status, st.reason);
     onProgress(formatProgress(st.bytes, total), Math.min(1, st.bytes / total), waiting);
     if (st.status === 'failed' || st.status === 'done') {
       status = st.status;
