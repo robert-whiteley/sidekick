@@ -23,6 +23,19 @@ function stub(...replies: string[]) {
   return { ask, prompts };
 }
 
+test('a question in parts: each formula worked out and shown with its result', async () => {
+  // The model wrote "=SUM(C:C) ; SUMIF(…) ; …" for "the total, and per customer" (28 Nov).
+  const { ask } = stub(
+    '{"formula": "=SUM(C:C) ; SUMIF(B:B, \\"Ann\\", C:C) ; SUMIF(B:B, \\"Bob\\", C:C)"}',
+  );
+  const r = await answerSheetQuestion('The total, and for each customer?', sheets, 0, ask);
+  expect(r).toEqual({
+    kind: 'answer',
+    text: '35.3 (=SUM(C:C))\n15.1 (=SUMIF(B:B, "Ann", C:C))\n20.2 (=SUMIF(B:B, "Bob", C:C))',
+    formula: '=SUM(C:C); =SUMIF(B:B, "Ann", C:C); =SUMIF(B:B, "Bob", C:C)',
+  });
+});
+
 test('the tool shows the sheet and its columns', () => {
   const t = sheetTool(sheets);
   expect(t.name).toBe('query_sheet');

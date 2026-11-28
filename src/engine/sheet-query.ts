@@ -1,7 +1,8 @@
 /**
  * Questions about an attached spreadsheet: the model writes one Excel formula (the query_sheet
  * tool, tools-logic.ts), code works it out exactly (src/files/formula.ts) and the answer shows
- * the formula used. A formula that can't be read or worked out is asked for once more with the
+ * the formula used (a question in parts may get several, separated by ";": each is shown with
+ * its result). A formula that can't be read or worked out is asked for once more with the
  * reason. "Add a column" returns the changed sheet, which can be saved as CSV. The model call is
  * passed in, so this is tested without one (__tests__/sheet-query-test.ts).
  */
@@ -12,6 +13,7 @@ import {
   resultError,
   resultText,
   runFormula,
+  splitFormulas,
 } from '@/files/formula';
 import { formatValue, type Sheet, sheetSummary } from '@/files/sheet';
 import {
@@ -90,15 +92,32 @@ export async function answerSheetQuestion(
           );
           return { kind: 'answer', text, formula: asFormula(formula), sheets: changed };
         }
-        const value = runFormula(formula, ctx);
-        const err = resultError(value);
-        if (err) last = { formula, error: `the formula gives ${err}` };
-        else
-          return {
-            kind: 'answer',
-            text: sheetAnswerText(resultText(value), formula, label),
-            formula: asFormula(formula),
-          };
+        const parts = splitFormulas(formula);
+        if (parts.length > 1) {
+          // Several formulas for a question in parts: each result with its own formula.
+          const values = parts.map((f) => runFormula(f, ctx));
+          const bad = values.findIndex((v) => resultError(v));
+          if (bad >= 0)
+            last = { formula, error: `${asFormula(parts[bad])} gives ${resultError(values[bad])}` };
+          else {
+            const lines = values.map((v, i) => `${resultText(v)} (${asFormula(parts[i])})`);
+            return {
+              kind: 'answer',
+              text: `${label ? `${label}:\n` : ''}${lines.join('\n')}`,
+              formula: parts.map(asFormula).join('; '),
+            };
+          }
+        } else {
+          const value = runFormula(formula, ctx);
+          const err = resultError(value);
+          if (err) last = { formula, error: `the formula gives ${err}` };
+          else
+            return {
+              kind: 'answer',
+              text: sheetAnswerText(resultText(value), formula, label),
+              formula: asFormula(formula),
+            };
+        }
       } catch (e) {
         if (!(e instanceof FormulaError)) throw e;
         last = { formula, error: e.message };
