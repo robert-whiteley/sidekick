@@ -294,8 +294,10 @@ object MicLoop {
           bargedIn = true
           Voice.stop()
           turns.bargedIn(nowMs)
-          runCatching { Engines.llm(ctx).cancel() }
+          // The app hears of it before the answer's model pass ends, so the cancelled pass reads
+          // as stopped (kept, and owed to the next question), not as a failure.
           emit("onBargeIn", emptyMap())
+          runCatching { Engines.llm(ctx).cancel() }
         }
         // A spoken question is coming: after the wake word, or a reply in a conversation.
         val questionMode = ptt == null && (nowMs <= awaitingQuestionUntil || inConversation)

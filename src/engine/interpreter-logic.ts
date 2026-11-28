@@ -224,6 +224,31 @@ export function turnPrompt(
   );
 }
 
+/** What the interpreter tool does, asked in the chat (tools.ts). */
+export type InterpreterControl =
+  { kind: 'say'; text: string } | { kind: 'open'; language: string } | { kind: 'stop' };
+
+export const INTERPRETER_NOT_OPEN =
+  "The interpreter isn't open. To start it, ask me to help you talk with someone and say their language.";
+
+/**
+ * Stop, or switch the other person's language, asked in the chat ([active]: a session is open).
+ * With none open, a named language opens it (the model read it as wanted); otherwise the reply
+ * says plainly that there is nothing to stop or switch.
+ */
+export function interpreterControl(
+  active: boolean,
+  stop: boolean,
+  language: string,
+): InterpreterControl {
+  const l = language.trim();
+  if (!active)
+    return !stop && l ? { kind: 'open', language: l } : { kind: 'say', text: INTERPRETER_NOT_OPEN };
+  if (stop) return { kind: 'stop' };
+  if (!l) return { kind: 'say', text: 'Which language does the other person speak?' };
+  return { kind: 'open', language: l };
+}
+
 export type ControlReply = { kind: 'stop' } | { kind: 'switch'; language: string } | null;
 
 /**

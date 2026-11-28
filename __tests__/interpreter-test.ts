@@ -4,7 +4,9 @@ import {
   endConfirmed,
   androidSpeech,
   INTERPRET_LANGUAGES,
+  INTERPRETER_NOT_OPEN,
   interpretLanguage,
+  interpreterControl,
   languageFromName,
   parseControlReply,
   parseTurnReply,
@@ -14,7 +16,7 @@ import {
   turnPrompt,
 } from '@/engine/interpreter-logic';
 import { catalogSystem, DECIDE_TOOLS, lockSafe } from '@/engine/decide-logic';
-import { toolByName } from '@/engine/tools-logic';
+import { NOT_IN_ROUTINES, toolByName } from '@/engine/tools-logic';
 
 const en = interpretLanguage('en')!;
 const es = interpretLanguage('es')!;
@@ -160,5 +162,37 @@ describe('androidSpeech', () => {
     ];
     expect(androidSpeech(es, voices)).toEqual({ language: 'es', voice: 'es-es-x-eea-local' });
     expect(androidSpeech(ja, voices)).toEqual({ language: 'ja' });
+  });
+});
+
+describe('the interpreter tool, asked in the chat', () => {
+  it('is offered to the sorter, never to routines or a locked phone', () => {
+    const t = toolByName('interpreter')!;
+    expect(DECIDE_TOOLS).toContain(t);
+    expect(t.args.stop?.type).toBe('boolean');
+    expect(NOT_IN_ROUTINES.has('interpreter')).toBe(true);
+    expect(lockSafe('interpreter', { stop: true })).toBe(false);
+  });
+  it('with no session open, says so plainly (stop, or switch without a language)', () => {
+    expect(interpreterControl(false, true, '')).toEqual({
+      kind: 'say',
+      text: INTERPRETER_NOT_OPEN,
+    });
+    expect(interpreterControl(false, false, '')).toEqual({
+      kind: 'say',
+      text: INTERPRETER_NOT_OPEN,
+    });
+    expect(INTERPRETER_NOT_OPEN).toMatch(/isn't open/);
+  });
+  it('with no session open and a language named, opens it', () => {
+    expect(interpreterControl(false, false, 'Spanish')).toEqual({
+      kind: 'open',
+      language: 'Spanish',
+    });
+  });
+  it('with a session open, stops it or switches the language', () => {
+    expect(interpreterControl(true, true, '')).toEqual({ kind: 'stop' });
+    expect(interpreterControl(true, false, 'French')).toEqual({ kind: 'open', language: 'French' });
+    expect(interpreterControl(true, false, ' ')).toMatchObject({ kind: 'say' });
   });
 });

@@ -4,7 +4,9 @@ import {
   isMicTap,
   mediaForAnswer,
   partialStatus,
+  NOT_HEARD_AFTER_BARGE,
   patchMessage,
+  quietAfterBargeIn,
   shouldSpeak,
   withoutOffRecord,
   type ChatMessage,
@@ -86,4 +88,23 @@ test('live words show while talking, trimmed to the last few', () => {
   expect(partialStatus('what time is it')).toBe('“what time is it…”');
   const long = Array.from({ length: 20 }, (_, i) => `w${i}`).join(' ');
   expect(partialStatus(long, 3)).toBe('“…w17 w18 w19…”');
+});
+
+describe('nothing heard after talking over an answer', () => {
+  const q: ChatMessage = { id: 'u1', role: 'user', text: 'time in Tokyo?', at: 1 };
+  it('fills the empty stopped answer with a plain line', () => {
+    const empty: ChatMessage = { id: 'a1', role: 'assistant', text: '', at: 1, stopped: true };
+    const out = quietAfterBargeIn([q, empty], 'a1', 5);
+    expect(out).toHaveLength(2);
+    expect(out[1].text).toBe(NOT_HEARD_AFTER_BARGE);
+  });
+  it('keeps a part-answer and adds the line after it', () => {
+    const part: ChatMessage = { id: 'a1', role: 'assistant', text: 'It is', at: 1, stopped: true };
+    const out = quietAfterBargeIn([q, part], 'a1', 5);
+    expect(out[1].text).toBe('It is');
+    expect(out[2]).toMatchObject({ role: 'assistant', text: NOT_HEARD_AFTER_BARGE });
+  });
+  it('with no answer to point at, still says it', () => {
+    expect(quietAfterBargeIn([], null, 5).at(-1)?.text).toBe(NOT_HEARD_AFTER_BARGE);
+  });
 });

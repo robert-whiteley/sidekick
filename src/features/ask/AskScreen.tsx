@@ -133,6 +133,8 @@ import {
   mediaForAnswer,
   partialStatus,
   patchMessage,
+  quietAfterBargeIn,
+  BARGE_WAIT_MS,
   shouldSpeak,
   withoutExchange,
   withoutOffRecord,
@@ -271,6 +273,30 @@ export function AskScreen({
   const owedRef = useRef<string[]>([]);
   /** The owner talked over the answer: what they say goes first. */
   const bargedRef = useRef(false);
+  /** The latest answer's bubble (the one a barge-in stops). */
+  const lastReplyRef = useRef<string | null>(null);
+  /**
+   * After a barge-in, waiting for what is said next: if no question comes (cut off, too short,
+   * not heard), the chat says so instead of leaving nothing.
+   */
+  const bargeWaitRef = useRef<{ timer: ReturnType<typeof setTimeout>; replyId: string | null }>(
+    null,
+  );
+  const bargeQuietRef = useRef<() => void>(() => {});
+  const clearBargeWait = useCallback(() => {
+    if (bargeWaitRef.current) clearTimeout(bargeWaitRef.current.timer);
+    bargeWaitRef.current = null;
+  }, []);
+  const armBargeWait = useCallback(
+    (replyId: string | null) => {
+      clearBargeWait();
+      bargeWaitRef.current = {
+        timer: setTimeout(() => bargeQuietRef.current(), BARGE_WAIT_MS),
+        replyId,
+      };
+    },
+    [clearBargeWait],
+  );
   const pumpRef = useRef<() => void>(() => {});
   const stopRef = useRef<(why: 'stop' | 'now') => void>(() => {});
   const [screen, setScreen] = useState<ScreenGrab | null>(null);
@@ -458,11 +484,18 @@ export function AskScreen({
       // The words so far, live while the user talks; the final text replaces them.
       SidekickNative.addListener('onPartialTranscript', (e) => {
         if (!busyRef.current || e.source === 'question') setStatus(partialStatus(e.text));
+        // Still talking after a barge-in: keep waiting for the question.
+        if (bargeWaitRef.current) armBargeWait(bargeWaitRef.current.replyId);
       }),
-      SidekickNative.addListener('onQuestion', (e) => askRef.current(e.text, e.followUp)),
+      SidekickNative.addListener('onQuestion', (e) => {
+        clearBargeWait();
+        askRef.current(e.text, e.followUp);
+      }),
       // Talking over the answer stops it (natively): what is said next is asked first.
       SidekickNative.addListener('onBargeIn', () => {
         setStatus('Listening…');
+        console.log(`[ask] barge-in${busyRef.current ? ' while answering' : ''}`);
+        armBargeWait(lastReplyRef.current);
         if (busyRef.current) {
           bargedRef.current = true;
           stopRef.current('now');
@@ -487,6 +520,7 @@ export function AskScreen({
       SidekickNative.addListener('onListenError', (e) =>
         setStatus(`Listening stopped: ${e.message}`),
       ),
+      { remove: clearBargeWait },
     ];
     const tick = async () => {
       if (busyRef.current) return;
@@ -526,7 +560,7 @@ export function AskScreen({
       appState.remove();
       clearInterval(timer);
     };
-  }, []);
+  }, [armBargeWait, clearBargeWait]);
 
   // The widget's Capture opens the camera for that one photo.
   const captureEntry = entry?.kind === 'capture';
@@ -578,6 +612,7 @@ export function AskScreen({
   // Also while answering: what is said then waits its turn like a typed message.
   const holdStart = async (free = false, maxMs = HANDS_FREE_MAX_MS) => {
     if (handsFree.current) return;
+    clearBargeWait();
     if (!(await askMicPermission())) {
       setStatus('Microphone permission is needed.');
       return;
@@ -820,6 +855,8 @@ export function AskScreen({
     from?: QueuedMessage,
   ) => {
     const typed = spoken === undefined && !again && !from;
+    // Something was asked after a barge-in: no "didn't catch that" for it.
+    clearBargeWait();
     const voiced = from ? from.spoken : spoken !== undefined;
     if (from) [followUp, offRecordNow] = [from.followUp, from.offRecord];
     // Editing a queued message: the new text takes its place in the queue.
@@ -910,6 +947,7 @@ export function AskScreen({
     const at = Date.now();
     const userId = `u${at}`;
     const replyId = `a${at}`;
+    lastReplyRef.current = replyId;
     if (replace) {
       // Out of the model's chat, the saved chat and memory before it is asked again.
       await forgetLastExchange(replace.reply.text, replace.reply.momentId).catch((e) =>
@@ -970,6 +1008,8 @@ export function AskScreen({
         setMessages((m) => patchMessage(m, userId, { media: shown }));
       }
       let answered = false;
+      let webOffered = false;
+      let shownFinal = false;
       // A slow step counts its seconds; nothing new for STALL_MS and the chat stops waiting
       // (answer-watch.ts).
       const watch = new AnswerWatch(Date.now());
@@ -997,6 +1037,12 @@ export function AskScreen({
         onFound: (media: ChatMedia[]) => setMessages((m) => patchMessage(m, replyId, { media })),
         routine: !!routine,
         voiceAnswer: speak,
+        // Lookup off and the answer couldn't give the facts: the browser link, under it.
+        onWebOffer: () => {
+          webOffered = true;
+          if (shownFinal && !imagePath && !grab)
+            setMessages((m) => patchMessage(m, replyId, { webAsk: { question: q } }));
+        },
       } as Parameters<typeof answerQuestion>[3];
       holdLiveCamera(true);
       const onAnswerText = (full: string) => {
@@ -1009,16 +1055,21 @@ export function AskScreen({
         setMessages((m) => patchMessage(m, replyId, { text: full }));
         sp.update(full);
       };
+      const aboutFile = (a: Attachment): Promise<Awaited<ReturnType<typeof answerQuestion>>> =>
+        answerShared(a, modelQ, onAnswerText, showStep, offRecordNow).then((x) => {
+          // A web page read once is kept for the next question about it; so are a video's
+          // pictures once looked at, and a column added to a sheet.
+          const page = x.page && a.kind === 'page' ? { text: x.page.text, name: x.page.title } : {};
+          if (x.page || x.update)
+            setAttachment((c) => (c?.at === a.at ? { ...c, ...page, ...x.update } : c));
+          return { ...x, usedPhoto: null, sources: [], ttftMs: 0, local: true };
+        });
+      // With a file attached the model still sorts the request first: "turn off spoken answers"
+      // changes the setting instead of being answered about the file.
       const answering: Promise<Awaited<ReturnType<typeof answerQuestion>>> = att
-        ? answerShared(att, modelQ, onAnswerText, showStep, offRecordNow).then((x) => {
-            // A web page read once is kept for the next question about it; so are a video's
-            // pictures once looked at, and a column added to a sheet.
-            const page =
-              x.page && att.kind === 'page' ? { text: x.page.text, name: x.page.title } : {};
-            if (x.page || x.update)
-              setAttachment((a) => (a?.at === att.at ? { ...a, ...page, ...x.update } : a));
-            return { ...x, usedPhoto: null, sources: [], ttftMs: 0, local: true };
-          })
+        ? answerQuestion(modelQ, null, onAnswerText, { ...opts, attached: true }).then((r) =>
+            r.notTool ? aboutFile(att) : r,
+          )
         : answerQuestion(
             grab ? screenQuestion(modelQ, grab) : modelQ,
             imagePath,
@@ -1073,7 +1124,7 @@ export function AskScreen({
           web: r.web ?? [],
           webAsk: r.browserQuery
             ? { question: q, query: r.browserQuery }
-            : r.webLink && !imagePath && !grab
+            : (r.webLink || webOffered) && !imagePath && !grab
               ? { question: q, query: r.webQuery }
               : { question: '' },
           media: mediaForAnswer(r as typeof r & { media?: ChatMedia[] }),
@@ -1085,6 +1136,7 @@ export function AskScreen({
           stopped,
         }),
       );
+      shownFinal = true;
       if (r.momentId != null) setMessages((m) => patchMessage(m, userId, { momentId: r.momentId }));
       if (!speak) conversation.current.answered(Date.now());
       setStatus('');
@@ -1094,7 +1146,9 @@ export function AskScreen({
       setSpeakingId(null);
       const stopped = stopReasonRef.current ? true : undefined;
       setMessages((m) => patchMessage(m, replyId, { pending: false, stopped }));
-      console.log(`[ask] failed: ${String(e)}`);
+      console.log(`[ask] ${stopped ? 'stopped' : 'failed'}: ${String(e)}`);
+      // Stopped (Stop, Send now, talking over it): the cancelled pass is no failure to report.
+      if (stopped) return;
       setStatus(`Something went wrong: ${e instanceof Error ? e.message : String(e)}`);
       setErrorDetails(() => () => errorDetailsFor('answer', e));
     } finally {
@@ -1113,6 +1167,22 @@ export function AskScreen({
       setPhase('idle');
       setTimeout(() => pumpRef.current(), 0);
     }
+  };
+
+  /**
+   * Nothing was asked after talking over the answer (the words were cut off or not heard): the
+   * chat says so plainly, instead of an empty stopped answer and no reply. Questions it stopped
+   * before a word stay owed and are answered with the next one.
+   */
+  const bargeQuiet = () => {
+    const wait = bargeWaitRef.current;
+    bargeWaitRef.current = null;
+    if (!wait || busyRef.current || queueRef.current.length) return;
+    console.log(
+      `[ask] barge-in: no question heard within ${BARGE_WAIT_MS / 1000} s; ${owedRef.current.length} owed`,
+    );
+    setMessages((m) => quietAfterBargeIn(m, wait.replyId, Date.now()));
+    setStatus('');
   };
 
   /** Idle: the next queued message is answered (one being edited waits). */
@@ -1207,6 +1277,7 @@ export function AskScreen({
     holdStartRef.current = (free, maxMs) => void holdStart(free, maxMs);
     pumpRef.current = pump;
     stopRef.current = stop;
+    bargeQuietRef.current = bargeQuiet;
   });
 
   // Capture from the widget: one photo, no voice note; the camera closes again after.

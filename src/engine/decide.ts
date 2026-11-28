@@ -26,6 +26,8 @@ export async function decideRequest(
   opts: {
     draftOpen?: boolean;
     photo?: boolean;
+    /** A file is attached in the chat (a question about it is an answer). */
+    file?: boolean;
     /** The chat's last exchange, when recent: a short reply ("yes", "and in French?") is read with it. */
     previous?: { q: string; a: string };
   } = {},
@@ -34,12 +36,17 @@ export async function decideRequest(
   const tools = DECIDE_TOOLS.filter(
     (t) => (t.name !== 'draft' || opts.draftOpen) && (t.name !== 'edit_photo' || opts.photo),
   );
-  const { text } = await askLlm(decidePrompt(question, opts.previous, opts.photo), null, () => {}, {
-    system: catalogSystem(tools),
-    maxTokens: 5,
-    scratch: true,
-    cacheSystem: true,
-  });
+  const { text } = await askLlm(
+    decidePrompt(question, opts.previous, opts.photo, opts.file),
+    null,
+    () => {},
+    {
+      system: catalogSystem(tools),
+      maxTokens: 5,
+      scratch: true,
+      cacheSystem: true,
+    },
+  );
   return {
     decision: parseClassify(text, tools),
     ms: Date.now() - t0,
