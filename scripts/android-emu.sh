@@ -154,6 +154,9 @@ flow_first_run() {
   # The rest of the first-run downloads (speech, photo text) come from the internet here.
   wait_for 'Getting Sidekick ready|Ask Sidekick' 120 || return 1
   shot first_run_setup
+  # Some emulator boots come up on mobile data, not Wi-Fi: then the app asks first, as on a phone.
+  sleep 5
+  has '^Download now$' && { note 'on mobile data: Download now'; tap '^Download now$'; }
   wait_for '^Ask Sidekick$' 2400 || return 1
   wait_for 'Remind me to call Mum at 6' 60 || return 1
   bench 'run=flows&only=db'
@@ -391,6 +394,7 @@ case "${1:-}" in
     apk=$2 models=$3
     A install -r -g "$apk" || exit 1
     A shell pm grant "$PKG" android.permission.POST_NOTIFICATIONS 2>/dev/null || true
+    A shell svc wifi enable 2>/dev/null || true
     A shell mkdir -p "$EXT/models" "$TEST"
     # The chat model and memory search as a finished download leaves them; the rest of the
     # first-run downloads come from the internet in first_run.

@@ -83,14 +83,20 @@ jobs:
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
           df -h / | tail -1
-      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      # Restored and saved as two steps, so the models are kept even when a flow fails.
+      - id: models-cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ${{ github.workspace }}/../emu-models
           key: emu-models-${{ hashFiles('src/engine/models.ts') }}
-          restore-keys: emu-models-
       - name: Models
         # The same download and checksum check as the iPhone Simulator run.
         run: scripts/ios-sim.sh models "$MODELS"
+      - if: steps.models-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ github.workspace }}/../emu-models
+          key: emu-models-${{ hashFiles('src/engine/models.ts') }}
       - name: Emulator, flows
         uses: ReactiveCircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0
         with:
