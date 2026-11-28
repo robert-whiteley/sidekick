@@ -8,7 +8,7 @@ import { decideRequest } from '@/engine/decide';
 const mockAsk = jest.fn(async (..._a: unknown[]) => ({ text: 'answer' }));
 jest.mock('@/engine/llm', () => ({ askLlm: (...a: unknown[]) => mockAsk(...a) }));
 
-const systemFor = async (opts: { draftOpen?: boolean; photo?: boolean }) => {
+const systemFor = async (opts: { draftOpen?: boolean; photo?: boolean; file?: boolean }) => {
   mockAsk.mockClear();
   await decideRequest('make the background white', opts);
   return (mockAsk.mock.calls[0][3] as { system: string }).system;
@@ -51,4 +51,11 @@ test('the sorter is told when a file is attached, so a setting request is still 
   await decideRequest('turn off spoken answers', { file: true });
   expect(mockAsk.mock.calls[0][0]).toBe('Request (with a file attached): turn off spoken answers');
   expect((mockAsk.mock.calls[0][3] as { system: string }).system).toMatch(/^app_setting: /m);
+});
+
+test('with a file attached, the phone search is not offered: the question is about that file', async () => {
+  expect(await systemFor({})).toMatch(/^find_on_phone: /m);
+  const withFile = await systemFor({ file: true });
+  expect(withFile).not.toMatch(/^find_on_phone: /m);
+  expect(withFile).toMatch(/^app_setting: /m);
 });
