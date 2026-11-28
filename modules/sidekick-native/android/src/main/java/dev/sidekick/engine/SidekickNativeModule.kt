@@ -94,9 +94,7 @@ class SidekickNativeModule : Module() {
 
     AsyncFunction("llmLoad") { candidates: List<LlmCandidateRecord> ->
       val cands = candidates.map { LlmCandidate(it.modelPath, it.backend) }
-      Embedder.unloadIfLowRam(context)
-      Ocr.unload()
-      val r = llm.load(cands)
+      val r = loadChatModel(context, llm, cands)
       llm.rememberLoad(context, cands, r)
       mapOf("modelPath" to r.modelPath, "backend" to r.backend, "initMs" to r.initMs, "failures" to r.failures)
     }
@@ -602,6 +600,9 @@ class SidekickNativeModule : Module() {
     Function("notificationsDrain") { NotificationCapture.drain(context) }
 
     Function("llmIsLoaded") { llm.loaded != null }
+
+    // Whether the chat model and the embedder can't be in memory together now (Residency).
+    Function("modelsMustBeAlone") { Embedder.mustBeAlone(context) }
 
     // Speed knobs for the bench; see LlmTuning for when each takes effect.
     Function("llmSetTuning") { t: LlmTuningRecord ->

@@ -1,7 +1,8 @@
 import SidekickNative from '../../modules/sidekick-native';
 import { batteryState, chargerFallingBehind } from '@/engine/battery';
 import { getSettings } from '@/engine/settings';
-import { LOW_RAM_MB, photoWorkAllowed, shouldEmbedNow } from './embed-policy';
+import { photoWorkAllowed, shouldEmbedNow } from './embed-policy';
+import { embedderEvictsChat } from '@/engine/residency';
 import { captionMode } from './photo-text';
 import { scheduleReclaim } from './reclaim';
 import { countPendingEmbeds, embedPending } from './store';
@@ -38,8 +39,7 @@ export async function embedWhenIdle(
   } catch {
     // Not available on this platform: treat as cool.
   }
-  const evictsLlm =
-    SidekickNative.getDeviceInfo().totalRamMb < LOW_RAM_MB && SidekickNative.llmIsLoaded();
+  const evictsLlm = embedderEvictsChat();
   if (!shouldEmbedNow({ pending, waitedMs: now - pendingSince, charging, lowPowerMode, evictsLlm }))
     return 0;
   const photos = photoWorkAllowed({

@@ -22,22 +22,33 @@ object Embedder {
   val isLoaded: Boolean
     get() = engine != null
 
-  @Synchronized
-  fun embed(ctx: Context, modelPath: String, texts: List<String>, dims: Int): List<FloatArray> {
-    val e = load(ctx, modelPath)
-    val opts = EmbeddingOptions(normalize = true, outputSize = dims)
-    return texts.map { e.computeEmbedding(listOf(InputData.Text(it)), opts).embedding }
-  }
+  fun embed(ctx: Context, modelPath: String, texts: List<String>, dims: Int): List<FloatArray> =
+    withLoaded(ctx, modelPath) { e ->
+      val opts = EmbeddingOptions(normalize = true, outputSize = dims)
+      texts.map { e.computeEmbedding(listOf(InputData.Text(it)), opts).embedding }
+    }
 
   /** Photo vectors (same space as [embed]); each photo is shrunk to [IMAGE_EDGE] px first. */
-  @Synchronized
-  fun embedImages(ctx: Context, modelPath: String, photoPaths: List<String>, dims: Int): List<FloatArray> {
-    val e = load(ctx, modelPath)
-    val opts = EmbeddingOptions(normalize = true, outputSize = dims)
-    return photoPaths.map { p ->
-      val small = ModelImage.prepare(p, IMAGE_EDGE, "embed-input.jpg")
-      e.computeEmbedding(listOf(InputData.Image(File(small).readBytes())), opts).embedding
+  fun embedImages(ctx: Context, modelPath: String, photoPaths: List<String>, dims: Int): List<FloatArray> =
+    withLoaded(ctx, modelPath) { e ->
+      val opts = EmbeddingOptions(normalize = true, outputSize = dims)
+      photoPaths.map { p ->
+        val small = ModelImage.prepare(p, IMAGE_EDGE, "embed-input.jpg")
+        e.computeEmbedding(listOf(InputData.Image(File(small).readBytes())), opts).embedding
+      }
     }
+
+  /**
+   * Loads the model as a model change ([Residency.change]), then uses it while holding this
+   * object's lock, so nothing unloads it mid-use. A chat-model load can unload it between the two
+   * steps; then it loads again. The change isn't held while vectors are made (photos take 10-80 s).
+   */
+  private fun <T> withLoaded(ctx: Context, modelPath: String, use: (EmbeddingEngine) -> T): T {
+    repeat(3) {
+      val e = Residency.change { synchronized(this) { load(ctx, modelPath) } }
+      synchronized(this) { if (engine === e) return use(e) }
+    }
+    throw IllegalStateException("The memory search model was unloaded while in use.")
   }
 
   /** The vision encoder rescales to its own patch grid; 512 px keeps decoding cheap. */
@@ -50,8 +61,10 @@ object Embedder {
     path = null
   }
 
-  /** Called before the chat model loads: on small or memory-short phones the two never stay together. */
-  @Synchronized
+  /**
+   * Called before the chat model loads (inside [Residency.change]): on small or memory-short phones
+   * the two never stay together. Waits for vectors being made only when it unloads.
+   */
   fun unloadIfLowRam(ctx: Context) {
     if (mustBeAlone(ctx)) unload()
   }
@@ -66,6 +79,7 @@ object Embedder {
     return Residency.alone(mem.totalMem / (1024 * 1024), mem.lowMemory)
   }
 
+  /** Inside [Residency.change] and this object's lock (see [withLoaded]). */
   private fun load(ctx: Context, modelPath: String): EmbeddingEngine {
     engine?.takeIf { path == modelPath }?.let { return it }
     unload()
@@ -81,8 +95,25 @@ object Embedder {
 
 }
 
-/** The residency rule, kept pure for tests. */
+/**
+ * The residency rule (pure, for tests), and one model change at a time: loading the chat model or
+ * the embedder, with the unload of the other that comes first on a small phone. Without it, a
+ * chat-model load could check for the embedder just before an embedder load checked for the chat
+ * model, and both stayed in memory. Always taken before either model's own lock, never inside one.
+ */
 object Residency {
   const val SMALL_PHONE_MB = 6 * 1024L
   fun alone(totalRamMb: Long, lowMemory: Boolean): Boolean = lowMemory || totalRamMb < SMALL_PHONE_MB
+
+  private val lock = Any()
+
+  fun <T> change(body: () -> T): T = synchronized(lock) { body() }
 }
+
+/** Loads the chat model as a model change: the embedder goes first on a small phone (and OCR). */
+fun loadChatModel(ctx: Context, llm: LlmEngine, candidates: List<LlmCandidate>): LlmLoadResult =
+  Residency.change {
+    Embedder.unloadIfLowRam(ctx)
+    Ocr.unload()
+    llm.load(candidates)
+  }

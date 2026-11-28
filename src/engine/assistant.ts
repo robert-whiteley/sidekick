@@ -53,7 +53,6 @@ import {
   searchMemory,
 } from '@/memory/store';
 import { asksAboutSomethingSeen } from '@/memory/search-logic';
-import { LOW_RAM_MB } from '@/memory/embed-policy';
 import { ocrPromptLine } from '@/memory/photo-text';
 import { photoTextOrNull } from './photo-ocr';
 import { memoryStatus } from './progress';
@@ -79,6 +78,8 @@ import { makePicture } from './picture';
 import { answerLocation } from './location';
 import { fillTool, resolveTimeWithModel, runTool, type RouteOutcome } from './tools';
 import { decideRequest } from './decide';
+import { embedderEvictsChat } from './residency';
+import { searchByMeaning } from './residency-logic';
 import { findOnPhone } from './phone-search';
 import { decisionLabel, lockSafe, type Decision } from './decide-logic';
 import { NOT_IN_ROUTINES } from './tools-logic';
@@ -147,20 +148,6 @@ let chatLoad = -1;
 /** The "Off the record" chat has been started (the model keeps its turns until it is left). */
 let offRecordStarted = false;
 let idleTimer: ReturnType<typeof setTimeout> | null = null;
-
-/**
- * A phone under 6 GB (iPhone 13 mini: 4 GB) never holds the chat model and the memory-search
- * model at once: embedding the question unloads the chat model, and the answer then waits for it
- * to load again (with a photo on the iPhone's CPU, over a minute in all). A photo question is
- * about the photo, so there its memory search uses exact words only and the chat model stays.
- */
-function embedderEvictsChat(): boolean {
-  try {
-    return SidekickNative.getDeviceInfo().totalRamMb < LOW_RAM_MB && SidekickNative.llmIsLoaded();
-  } catch {
-    return false;
-  }
-}
 
 function chatBudget(): number {
   const own = (getSettings() as { chatMemoryTokens?: number | null }).chatMemoryTokens;
@@ -548,6 +535,8 @@ export async function answer(
   // arguments the model then fills in for that tool alone and code checks (tools.ts).
   let lookupWanted = !!opts?.forceLookup;
   let newsWanted = false;
+  // Whether the model said the answer is in the owner's memories (undefined: no sorter ran).
+  let memoryWanted: boolean | undefined;
   if (!opts?.routed && !opts?.forceLookup) {
     // A spoken answer to the draft just read back ("yes", "change it to …"): only while one is
     // waiting, never from a routine run (its text isn't the user's reply).
@@ -562,7 +551,8 @@ export async function answer(
       photo: !!photoNow,
       file: !!opts?.attached,
     }).catch(() => ({ decision: { kind: 'answer' } as Decision, ms: 0, reply: '' }));
-    console.log(`[decide] ${decisionLabel(decision)} (${reply}) in ${ms} ms`);
+    const mem = decision.kind === 'answer' && decision.memory ? ' memory' : '';
+    console.log(`[decide] ${decisionLabel(decision)}${mem} (${reply}) in ${ms} ms`);
     // Phone locked (screen off, hands-free): nothing personal until it is unlocked. Routine and
     // back-online runs are the user's own standing requests: they answer into a notification.
     const locked = !opts?.routine && phoneLocked();
@@ -590,6 +580,9 @@ export async function answer(
     }
     lookupWanted = decision.kind === 'lookup';
     newsWanted = decision.kind === 'lookup' && !!decision.news;
+    // A tool that didn't run falls through to an answer without a view on memory.
+    memoryWanted =
+      decision.kind === 'do' ? undefined : decision.kind === 'answer' && !!decision.memory;
   }
 
   let sources: Moment[] = [];
@@ -599,7 +592,13 @@ export async function answer(
     [sources, facts] = await Promise.all([
       // A few extra candidates so a remembered photo can still be found below.
       searchMemory(question, photoNow ? MEMORY_LIMIT.photo : MEMORY_LIMIT.text + 2, new Date(), {
-        words: !!photoNow && embedderEvictsChat(),
+        // On a small phone, by meaning only when the model said the answer is in memory: the
+        // memory-search model would unload the chat model (residency-logic.ts).
+        words: !searchByMeaning({
+          evictsChat: embedderEvictsChat(),
+          photo: !!photoNow,
+          memory: memoryWanted,
+        }),
       }),
       savedFacts().then((f) =>
         pickFacts(

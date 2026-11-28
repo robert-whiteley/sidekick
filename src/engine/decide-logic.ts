@@ -56,7 +56,11 @@ export function decideHint(tools: ToolSpec[] = DECIDE_TOOLS): string {
 }
 
 export type Decision =
-  | { kind: 'answer' }
+  /**
+   * memory: the model said the answer is in the owner's saved memories ("memory"), so memory is
+   * searched by meaning even when that means swapping the chat model out on a small phone.
+   */
+  | { kind: 'answer'; memory?: boolean }
   /** news: headlines (news feeds are searched too). */
   | { kind: 'lookup'; news?: boolean }
   | { kind: 'do'; tool: string };
@@ -113,8 +117,9 @@ export function catalogSystem(tools: ToolSpec[] = DECIDE_TOOLS, lookup = true): 
   return (
     'You sort requests to a phone assistant. Reply with one word only.\n' +
     'answer: a question, a chat, advice, or a request to write, explain or plan something; also ' +
-    'questions about what I saw, heard, said or noted, recaps, and questions about a photo or ' +
-    'file that comes with the request.\n' +
+    'questions about a photo or file that comes with the request.\n' +
+    'memory: a question about my own life that my saved memories answer: what I saw, heard, said, ' +
+    'did or noted, people I know, where I left things, and recaps.\n' +
     (lookup
       ? 'lookup: needs current facts from the internet (prices, scores, recent events).\n' +
         'news: the latest news or headlines, in general or on a topic.\n'
@@ -156,6 +161,8 @@ ${line}`
 export function parseClassify(text: string, tools: ToolSpec[] = DECIDE_TOOLS): Decision {
   const w = /[a-z_]+/i.exec(text.trim())?.[0]?.toLowerCase() ?? '';
   if (w === 'lookup') return { kind: 'lookup' };
+  // "memory_search" (an app tool's name the model may reach for) counts too.
+  if (w === 'memory' || w === 'memory_search') return { kind: 'answer', memory: true };
   if (w === 'news') return { kind: 'lookup', news: true };
   if (tools.some((x) => x.name === w)) return { kind: 'do', tool: w };
   const inside = tools
