@@ -180,7 +180,14 @@ flow_first_run() {
   # Some emulator boots come up on mobile data, not Wi-Fi: then the app asks first, as on a phone.
   sleep 5
   has '^Download now$' && { note 'on mobile data: Download now'; tap '^Download now$'; }
-  wait_for '^Ask Sidekick$' 2400 || return 1
+  # The rest of the downloads take a few minutes on a runner; a download error fails at once.
+  local end=$((SECONDS + 600))
+  until has '^Ask Sidekick$'; do
+    grep -q 'could not be downloaded' "$DUMP" && { note "download failed: $(grep -o '[^"]*could not be downloaded[^"]*' "$DUMP" | head -1)"; return 1; }
+    [ $SECONDS -ge $end ] && { note 'first-run downloads not done after 10 minutes'; return 1; }
+    not_responding
+    sleep 5
+  done
   wait_for 'Remind me to call Mum at 6' 60 || return 1
   bench 'run=flows&only=db'
   wait_log '\[flows\] \{"step":"db","ok":true' 300 || return 1
@@ -268,10 +275,10 @@ flow_web_no() {
   local q fail=0 n l end
   for q in 'Who won the 2026 Tour de France?' 'What is 17 times 23?' 'What did I do yesterday?'; do
     n=$(grep -ac 'offline answer' "$LOGS/app.log")
-    l=$(grep -ac '\[decide\] lookup' "$LOGS/app.log")
+    l=$(grep -ac '\[decide\] answer' "$LOGS/app.log")
     ask "$q" || { fail=1; continue; }
-    if [ "$(grep -ac '\[decide\] lookup' "$LOGS/app.log")" -gt "$l" ]; then
-      note "$q: sent to the web, so no WEB/NO check"
+    if [ "$(grep -ac '\[decide\] answer' "$LOGS/app.log")" -le "$l" ]; then
+      note "$q: $(grep -ao '\[decide\] [a-z:_]*' "$LOGS/app.log" | tail -1), not the model's own answer, so no WEB/NO check"
       continue
     fi
     end=$((SECONDS + 120))
@@ -416,7 +423,9 @@ flow_decide() {
     sleep 20
   done
   grep -ao '\[decide\] {.*' "$LOGS/app.log" | cut -c10- >"$LOGS/decide.jsonl"
-  grep -ao '\[decide\] summary .*' "$LOGS/app.log" | tail -1 | tee -a "$LOGS/results.txt"
+  grep -ao '\[decide\] summary .*' "$LOGS/app.log" | tail -1 | sed 's/^\[decide\] summary //' |
+    python3 -c 'import json, sys; s = json.load(sys.stdin); print("decide %s: %d/%d right, %d ms each" % (sys.argv[1] or "all", s["ok"], s["scored"], s["avgMs"]))' "${DECIDE_PART:-}" |
+    tee -a "$LOGS/results.txt"
 }
 
 # ---------- commands ----------
@@ -426,6 +435,17 @@ case "${1:-}" in
     A install -r -g "$apk" || exit 1
     A shell pm grant "$PKG" android.permission.POST_NOTIFICATIONS 2>/dev/null || true
     A shell svc wifi enable 2>/dev/null || true
+    # The app's external folder must be made by Android for the app: one adb makes first can be
+    # out of the app's reach, so it sees none of the models pushed there and its downloads fail
+    # (EACCES). One start in airplane mode (nothing downloads) makes it; then the app is stopped.
+    A shell cmd connectivity airplane-mode enable
+    A shell am start -n "$PKG/.MainActivity" >/dev/null
+    end=$((SECONDS + 120))
+    until A shell ls -d "$EXT" >/dev/null 2>&1 || [ $SECONDS -ge $end ]; do sleep 2; done
+    sleep 3
+    A shell am force-stop "$PKG"
+    A shell cmd connectivity airplane-mode disable
+    A shell ls -ld "$EXT" || exit 1
     A shell mkdir -p "$EXT/models" "$TEST"
     # The chat model and memory search as a finished download leaves them; the rest of the
     # first-run downloads come from the internet in first_run.
@@ -464,7 +484,9 @@ case "${1:-}" in
       >"$LOGS/summary.log" || true
     fail=0
     grep -q '^FAIL' "$LOGS/results.txt" && fail=1
-    if grep -aE 'FATAL EXCEPTION|Fatal signal' "$LOGS/app.log" "$LOGS/logcat.log" | grep -a "$PKG\|FATAL" | head -5; then
+    # Only Sidekick's own crashes (uiautomator and system services crash on a busy emulator too).
+    if { grep -ahA2 'FATAL EXCEPTION' "$LOGS/logcat.log" | grep -a "Process: $PKG"
+      grep -ah 'Fatal signal' "$LOGS/logcat.log" | grep -a 'sidekick)'; } | head -5 | grep .; then
       echo "the app crashed" | tee -a "$LOGS/results.txt"
       fail=1
     fi
