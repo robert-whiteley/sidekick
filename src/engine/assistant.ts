@@ -18,6 +18,7 @@ import {
   setChatSystemSource,
 } from './llm';
 import {
+  type ChatState,
   chatSystem,
   compact,
   type CompactReason,
@@ -34,7 +35,7 @@ import { clearChatState, loadChatState, saveChatState } from '@/memory/chat-stat
 import { IPHONE, onIphone, platformText } from './platform-text';
 import { questionPart, SYSTEM_PROMPT, withAnswerStyle } from './prompts';
 import { keptFile } from '@/memory/media-files';
-import { speechClipFor } from './speech-clip';
+import { speechClipFor, usedSpeechClip } from './speech-clip';
 import type { Moment } from '@/memory/store';
 import { MEMORY_LIMIT, memoryContext, pickFacts } from './prompt-budget';
 import {
@@ -63,8 +64,8 @@ import { addFollowup, listFollowups } from '@/memory/followups';
 import { repeatLabel } from '@/memory/repeat-logic';
 import { personPromptContext } from '@/memory/people';
 import { queueOnline } from '@/engine/online-queue';
-import { answerAboutPage } from './shared-doc';
-import { firstUrl } from './shared-doc-logic';
+import { answerAboutPage, answerPastedTable } from './shared-doc';
+import { firstUrl, pastedTable } from './shared-doc-logic';
 import { askWithLookup, type WebSource } from '@/web/lookup';
 import { research } from '@/web/research';
 import { runPhotoEdit } from './photo-edit';
@@ -72,6 +73,7 @@ import { makePicture } from './picture';
 import { answerLocation } from './location';
 import { fillTool, resolveTimeWithModel, runTool, type RouteOutcome } from './tools';
 import { decideRequest } from './decide';
+import { findOnPhone } from './phone-search';
 import { decisionLabel, lockSafe, type Decision } from './decide-logic';
 import { NOT_IN_ROUTINES } from './tools-logic';
 import { forgetRanges } from '@/memory/time-range';
@@ -116,7 +118,8 @@ export type AnswerResult = {
   /** A picture made on the phone (shown with a Report button; picture.ts). */
   picture?: { prompt: string };
   /** A button under the answer that opens a screen in the app (e.g. the erase brush). */
-  link?: { label: string; href: string };
+  /** open: Android opens this original (a found photo or file) in the phone's own app. */
+  link?: { label: string; href: string; open?: string };
 };
 
 /**
@@ -160,17 +163,20 @@ function chatBudget(): number {
 
 /** The chat's instructions: the usual ones plus the user's "How Sidekick answers" text. */
 export const answerSystem = () => withAnswerStyle(SYSTEM_PROMPT, getSettings().answerStyle);
+/** The chat's instructions with the conversation so far, the owner's own text last. */
+const chatPrompt = (state: ChatState) =>
+  chatSystem(SYSTEM_PROMPT, state, getSettings().answerStyle);
 
 /** The one continuous conversation (loaded from the phone on first use). */
 export function conversation(): Conversation {
   if (!chat) {
     chat = new Conversation(loadChatState(), chatBudget());
-    prepareChat(chatSystem(answerSystem(), chat.state));
+    prepareChat(chatPrompt(chat.state));
   }
   return chat;
 }
 
-setChatSystemSource(() => chatSystem(answerSystem(), conversation().state));
+setChatSystemSource(() => chatPrompt(conversation().state));
 
 // New "How Sidekick answers" text: the model's chat starts again with it (from the summary and
 // the last turns, so nothing said is lost).
@@ -180,7 +186,7 @@ onSettingsChange((st) => {
   styleNow = st.answerStyle;
   if (!chat) return;
   chat.restart();
-  prepareChat(chatSystem(answerSystem(), chat.state));
+  prepareChat(chatPrompt(chat.state));
 });
 
 /** The running summary and recent turns (for a "what we talked about" view). */
@@ -204,7 +210,8 @@ export function compactChat(reason: CompactReason) {
       save: saveChatState,
       prepare: prepareChat,
     },
-    answerSystem(),
+    SYSTEM_PROMPT,
+    getSettings().answerStyle,
   );
 }
 
@@ -238,7 +245,7 @@ export async function forgetLastExchange(answerText: string, momentId?: number):
   const c = conversation();
   c.dropLast(answerText);
   saveChatState(c.state);
-  prepareChat(chatSystem(answerSystem(), c.state));
+  prepareChat(chatPrompt(c.state));
   lastQuestion = c.state.turns.at(-1)?.q;
   if (momentId != null) await deleteMoment(momentId);
 }
@@ -405,6 +412,20 @@ export async function answer(
           link: edit.link,
         };
       }
+      case 'find': {
+        // A photo or file the user allowed for phone search, found and read on the phone.
+        const r = await findOnPhone(question, o.req, onText, status);
+        return {
+          text: r.text,
+          usedPhoto: null,
+          sources: [],
+          ms: r.ms,
+          ttftMs: 0,
+          local: true,
+          media: r.photoPath ? [{ momentAt: 0, kind: 'photo', path: r.photoPath }] : undefined,
+          link: r.link,
+        };
+      }
       case 'picture': {
         // Drawn on the phone (picture.ts); kept in the chat history unless off the record.
         const r = await makePicture(question, o.prompt, status);
@@ -471,6 +492,14 @@ export async function answer(
     }
   }
 
+  // Cells pasted into the question (a bill, a list of figures): worked out exactly on them like
+  // an attached spreadsheet, not added up by the model.
+  const pasted = photoNow || opts?.routed ? null : pastedTable(question);
+  if (pasted) {
+    const r = await answerPastedTable(pasted, onText, status, offRecord);
+    return { text: r.text, usedPhoto: null, sources: [], ms: r.ms, ttftMs: 0 };
+  }
+
   // A link in the question ("summarise https://…"): that one page is read (Online on) and the
   // answer comes from it, with the page shown as the source; offline it waits (shared-doc.ts).
   const pageUrl = photoNow ? null : firstUrl(question);
@@ -501,7 +530,10 @@ export async function answer(
     const readBack = opts?.routine ? null : await answerReadBack(question).catch(() => null);
     if (readBack) return finishPlan(readBack);
     const draftOpen = !!drafts.latestOpen();
+    const chatNow = conversation();
+    const last = chatNow.state.turns.at(-1);
     const { decision, ms, reply } = await decideRequest(question, {
+      previous: last && chatNow.idleFor(Date.now()) < IDLE_COMPACT_MS ? last : undefined,
       draftOpen,
       photo: !!photoNow,
     }).catch(() => ({ decision: { kind: 'answer' } as Decision, ms: 0, reply: '' }));
@@ -612,7 +644,7 @@ export async function answer(
   const idleBefore = conv.compactReason(Date.now()) === 'idle';
   // The model's chat continues; a fresh one (first question, after a restart or a compaction)
   // starts from the running summary and the last turns.
-  const system = chatSystem(answerSystem(), conv.state);
+  const system = chatPrompt(conv.state);
   let keep = offRecord ? offRecordStarted : conv.keepHistory();
   let promptChars = 0;
   /** The question reached the model's chat (Stop before that leaves the chat untouched). */
@@ -691,6 +723,13 @@ export async function answer(
     onText(text);
   }
   lastQuestion = question;
+  // Stopped part-way: LiteRT-LM fails every later turn of a chat whose answer was cancelled
+  // ("Task cancelled" at once, phone check 28 Nov). The part-answer is kept below, and the next
+  // question starts a fresh chat from the summary and the kept turns, this one included.
+  if (answerStopped() && reachedModel) {
+    if (offRecord) offRecordStarted = false;
+    else conv.restart();
+  }
 
   // Off the record: nothing is kept, and the main conversation never hears of it.
   let momentId: number | undefined;
@@ -707,6 +746,15 @@ export async function answer(
             ? rememberPhotoQuestion(photoNow, question, text)
             : rememberExchange(question, text)
         ).catch(() => undefined)) ?? undefined;
+  }
+
+  // An answer drawn from a heard line: that line's recording, to play. The model says which
+  // line it used, if any (only lines that were in the prompt), after the answer is shown.
+  if (!recall?.media && !wantsRecording && opts?.onFound) {
+    const show = opts.onFound;
+    void usedSpeechClip(question, text, notes ? sources : [], askUsedClip).then(
+      (clip) => clip && show(clip),
+    );
   }
 
   return {
@@ -730,3 +778,7 @@ export async function answer(
         : undefined,
   };
 }
+
+/** The short throwaway check behind usedSpeechClip (speech-clip.ts). */
+const askUsedClip = (prompt: string, system: string) =>
+  askLlm(prompt, null, () => {}, { system, maxTokens: 3, scratch: true }).then((r) => r.text);

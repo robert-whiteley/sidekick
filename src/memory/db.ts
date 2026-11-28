@@ -72,6 +72,36 @@ const SCHEMA = [
   // Photo vectors from the same embedder (text and photos share one space). Text questions
   // search both tables; a photo is findable by what it shows before its text is read.
   vecTableSql('photos_vec'),
+  // Phone search (gallery.ts): photos the user allowed (Photos library, picked folders). Only the
+  // index lives here (date, place, the text read from the photo, a vector); the photo stays where
+  // it is. key: the library id or the picked file's URI; state: 0 to read, 1 read, 2 can't read.
+  `CREATE TABLE IF NOT EXISTS gallery (
+     id INTEGER PRIMARY KEY,
+     key TEXT NOT NULL UNIQUE,
+     origin TEXT NOT NULL,
+     name TEXT NOT NULL DEFAULT '',
+     at INTEGER NOT NULL,
+     ver TEXT NOT NULL DEFAULT '',
+     text TEXT NOT NULL DEFAULT '',
+     place TEXT,
+     lat REAL,
+     lon REAL,
+     state INTEGER NOT NULL DEFAULT 0
+   )`,
+  'CREATE INDEX IF NOT EXISTS gallery_at ON gallery(at)',
+  'CREATE INDEX IF NOT EXISTS gallery_state ON gallery(state, at)',
+  `CREATE VIRTUAL TABLE IF NOT EXISTS gallery_fts USING fts5(text, content='gallery', content_rowid='id')`,
+  `CREATE TRIGGER IF NOT EXISTS gallery_ai AFTER INSERT ON gallery BEGIN
+     INSERT INTO gallery_fts(rowid, text) VALUES (new.id, new.text);
+   END`,
+  `CREATE TRIGGER IF NOT EXISTS gallery_ad AFTER DELETE ON gallery BEGIN
+     INSERT INTO gallery_fts(gallery_fts, rowid, text) VALUES ('delete', old.id, old.text);
+   END`,
+  `CREATE TRIGGER IF NOT EXISTS gallery_au AFTER UPDATE OF text ON gallery BEGIN
+     INSERT INTO gallery_fts(gallery_fts, rowid, text) VALUES ('delete', old.id, old.text);
+     INSERT INTO gallery_fts(rowid, text) VALUES (new.id, new.text);
+   END`,
+  vecTableSql('gallery_vec'),
   // Small key/value store, e.g. which embedder file made the stored vectors.
   'CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)',
   // Things the user told Sidekick to remember (saved) or it guessed (suggested, needs approval).

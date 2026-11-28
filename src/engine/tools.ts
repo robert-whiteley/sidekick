@@ -43,6 +43,7 @@ import {
   timeInTool,
   type DateArgs,
 } from '@/integrations/compute';
+import type { FindRequest } from './phone-search';
 import { parseTimeRangeRules, rememberRange, type TimeRange } from '@/memory/time-range';
 
 /** What the assistant does with a routed request. */
@@ -67,7 +68,9 @@ export type RouteOutcome =
   | { kind: 'picture'; prompt: string }
   /** Translate [text] (empty: the text in the photo) into [to]: the assistant runs the model. */
   | { kind: 'translate'; text: string; to: string }
-  | { kind: 'recap'; req: RecapRequest };
+  | { kind: 'recap'; req: RecapRequest }
+  /** A photo or file the user allowed, found and read (phone-search.ts). */
+  | { kind: 'find'; req: FindRequest };
 
 export type RouteContext = {
   routine?: boolean;
@@ -135,6 +138,19 @@ export async function runTool(
       if (from !== undefined && from < to)
         rememberRange([question], { from, to, label: 'that time' });
       return { kind: 'answer' };
+    }
+    case 'find_on_phone': {
+      const type = str(a.type);
+      return {
+        kind: 'find',
+        req: {
+          what: str(a.what) || question,
+          type: type === 'photo' || type === 'file' ? type : 'any',
+          newest: a.newest === true,
+          from: a.from as number | undefined,
+          to: a.to as number | undefined,
+        },
+      };
     }
     case 'research':
       return { kind: 'research', topic: str(a.topic) || question, news: a.news === true };
@@ -324,6 +340,12 @@ export async function runTool(
       return command({ type: 'camera', on: a.on === true });
     case 'camera_setting':
       return command({ type: 'cameraSetting', change: cameraChangeFor(a, question) });
+    case 'app_setting': {
+      // Loaded on use: it reaches every part of the app the settings touch.
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const { appSettingTool } = require('./app-settings') as typeof import('./app-settings');
+      return { kind: 'reply', text: await appSettingTool(a) };
+    }
     case 'feedback':
       return runFeedback(str(a.text));
     case 'calculate':

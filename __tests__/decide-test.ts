@@ -1,5 +1,6 @@
 import {
   catalogSystem,
+  decidePrompt,
   DECIDE_TOOLS,
   decideHint,
   decisionLabel,
@@ -70,6 +71,14 @@ describe('the sorter prompt', () => {
     const off = catalogSystem(tools, false);
     expect(off).not.toMatch(/^lookup: /m);
     expect(off).not.toMatch(/^news: /m);
+  });
+});
+
+describe('the call line', () => {
+  it('says it is a phone call, so talking to someone face to face is not sent to it', () => {
+    // "Phone someone" made the sorter pick call for a shop assistant who speaks Japanese, and the
+    // call tool then asked for contacts access.
+    expect(catalogSystem()).toMatch(/^call: .*phone call/m);
   });
 });
 
@@ -156,5 +165,26 @@ describe('thinking hand-off marker', () => {
     // Seen on the phone: the marker, then the model's own working.
     expect(wantsThinking('THINK The user is asking a simple subtraction problem.')).toBe(true);
     expect(wantsThinking('Think of a number between 1 and 10.')).toBe(false);
+  });
+});
+
+describe('decidePrompt', () => {
+  it('is the request alone when there was no recent exchange', () => {
+    expect(decidePrompt('Set a timer for five minutes')).toBe(
+      'Request: Set a timer for five minutes',
+    );
+  });
+  it('puts a recent exchange before a short reply, so "yes" is read with what it answers', () => {
+    const p = decidePrompt('Yes', {
+      q: 'Is the museum in town open on Mondays?',
+      a: "I don't know its opening hours. I can look that up if you like.",
+    });
+    expect(p).toContain('I asked "Is the museum in town open on Mondays?"');
+    expect(p).toContain('I can look that up if you like.');
+    expect(p.endsWith('\nRequest: Yes')).toBe(true);
+  });
+  it('clips a long earlier exchange', () => {
+    const p = decidePrompt('ok', { q: 'q'.repeat(500), a: 'a'.repeat(900) });
+    expect(p.length).toBeLessThan(560);
   });
 });

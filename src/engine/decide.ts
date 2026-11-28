@@ -7,9 +7,9 @@
 import { askLlm } from './llm';
 import {
   catalogSystem,
+  decidePrompt,
   DECIDE_TOOLS,
   parseClassify,
-  requestLine,
   type Decision,
 } from './decide-logic';
 
@@ -23,13 +23,18 @@ import {
  */
 export async function decideRequest(
   question: string,
-  opts: { draftOpen?: boolean; photo?: boolean } = {},
+  opts: {
+    draftOpen?: boolean;
+    photo?: boolean;
+    /** The chat's last exchange, when recent: a short reply ("yes", "and in French?") is read with it. */
+    previous?: { q: string; a: string };
+  } = {},
 ): Promise<{ decision: Decision; ms: number; reply: string }> {
   const t0 = Date.now();
   const tools = DECIDE_TOOLS.filter(
     (t) => (t.name !== 'draft' || opts.draftOpen) && (t.name !== 'edit_photo' || opts.photo),
   );
-  const { text } = await askLlm(requestLine(question, opts.photo), null, () => {}, {
+  const { text } = await askLlm(decidePrompt(question, opts.previous, opts.photo), null, () => {}, {
     system: catalogSystem(tools),
     maxTokens: 5,
     scratch: true,

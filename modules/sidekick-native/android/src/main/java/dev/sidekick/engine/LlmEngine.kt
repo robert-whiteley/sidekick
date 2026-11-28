@@ -58,9 +58,16 @@ data class GenerateOptions(
 /** Image tokens per photo: on a Pixel 5, 140 answers in 18 s vs 28 s at the default and still reads sign text. */
 const val DEFAULT_VISUAL_TOKENS = 140
 
+/**
+ * CPU worker threads for the chat model. On the Pixel 5 (8 cores) 6 beat the library default on
+ * every measure in three speed runs (writing 8.1–8.4 vs 7.6–7.9 tok/s, first word 1.45 vs 1.75 s,
+ * load 6.7 vs 7.9 s) at the same memory; 2 were slowest (docs/BENCH.md, LiteRT-LM 0.20).
+ */
+val DEFAULT_CPU_THREADS: Int = minOf(6, Runtime.getRuntime().availableProcessors())
+
 data class LlmTuning(
   /** CPU backend worker threads. */
-  val threads: Int? = null,
+  val threads: Int? = DEFAULT_CPU_THREADS,
   /** Speculative decoding (multi-token prediction): "off", "on" or "adaptive". */
   val speculative: String? = null,
   /** Image tokens per photo (Gemma 4 supports e.g. 70, 140, 280, 560, 1120); fewer = faster read. */

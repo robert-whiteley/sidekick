@@ -2,23 +2,21 @@ import { useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
 import { AppState, Platform, View } from 'react-native';
 
+import { askToDelete } from '@/engine/delete-plans';
 import { getSettings, onSettingsChange, type Settings, updateSettings } from '@/engine/settings';
 import {
   addNote,
   clearContacts,
   countKind,
   deleteSource,
-  folderLabel,
   notificationAccessGranted,
   openNotificationAccess,
-  pickFolder,
-  removeFolder,
   requestCalendar,
   requestContacts,
   setNotificationCapture,
   syncNow,
 } from '@/memory/sources';
-import { Button, confirm, Row, Section, styles } from './ui';
+import { Button, NavRow, Row, Section, styles } from './ui';
 import { AppText, TextButton, TextField } from '@/ui';
 
 const isAndroid = Platform.OS === 'android';
@@ -146,55 +144,11 @@ export function SourcesSection({ onChanged }: { onChanged: () => void }) {
         </View>
       )}
 
-      <Row
-        label="Folders"
-        hint={`${isAndroid ? 'Text files (.txt, .md) and PDFs (first 30 pages; scans are read with on-device OCR)' : 'Text files (.txt, .md)'} in folders you pick; re-read every 15 minutes while Sidekick is open. ${counts.file} passages indexed.`}
-        value={s.sourceFolders}
-        onChange={(v) => {
-          updateSettings({ sourceFolders: v });
-          if (v && !s.folderUris.length)
-            void run('Adding folder', async () => {
-              if (await pickFolder()) await syncNow('folders');
-            });
-        }}
+      <NavRow
+        label="Folders and photos"
+        hint={`Folders, files and photos Sidekick may search, in Phone search. ${counts.file} passages read.`}
+        href="/settings/phone-search"
       />
-      {s.sourceFolders && (
-        <>
-          {s.folderUris.map((uri) => (
-            <View key={uri} style={styles.itemRow}>
-              <AppText style={styles.flex} numberOfLines={1}>
-                {folderLabel(uri)}
-              </AppText>
-              <TextButton
-                title="Remove"
-                onPress={() =>
-                  confirm(
-                    'Remove this folder?',
-                    'What Sidekick read from it is deleted. Your files are not touched.',
-                    () => run('Removing folder', () => removeFolder(uri)),
-                  )
-                }
-                accessibilityLabel={`Remove folder ${folderLabel(uri)}`}
-                danger
-              />
-            </View>
-          ))}
-          <Button
-            title="Add a folder"
-            onPress={() =>
-              void run('Adding folder', async () => {
-                if (await pickFolder()) await syncNow('folders');
-              })
-            }
-          />
-          {s.folderUris.length > 0 && (
-            <Button
-              title="Re-read folders now"
-              onPress={() => void run('Reading folders', () => syncNow('folders'))}
-            />
-          )}
-        </>
-      )}
 
       <Row
         label="Contacts"
@@ -255,14 +209,10 @@ export function DeleteBySource({ onChanged }: { onChanged: () => void }) {
           danger
           title={`Delete ${x.label}`}
           onPress={() =>
-            confirm(
-              `Delete ${x.label}?`,
-              'Everything Sidekick kept from this source is deleted and the source is turned off. The originals on your phone are not touched.',
-              async () => {
-                await deleteSource(x.id);
-                onChanged();
-              },
-            )
+            void askToDelete({ kind: 'source', source: x.id }, async () => {
+              await deleteSource(x.id);
+              onChanged();
+            })
           }
         />
       ))}

@@ -11,6 +11,8 @@
  * read-back, and the same prompt works on every backend and on the iPhone.
  */
 
+import { SETTING_IDS, SETTING_OPS } from './settings-registry';
+
 export type ArgType = 'string' | 'number' | 'boolean' | 'datetime';
 
 export type ArgSpec = {
@@ -127,7 +129,7 @@ export const TOOLS: ToolSpec[] = [
   PICTURE_TOOL,
   {
     name: 'memory_search',
-    desc: 'what I saw, heard, said, was told, or have in notes, calendar, contacts or files',
+    desc: 'what I saw, heard, said, was told, or have in notes, calendar or contacts',
     kind: 'answer',
     args: {
       query: s('what to look for'),
@@ -135,6 +137,20 @@ export const TOOLS: ToolSpec[] = [
       to: when('end'),
       person: s('who'),
       place: s('where'),
+    },
+  },
+  {
+    name: 'find_on_phone',
+    desc:
+      "find a photo, screenshot, document or file saved on the phone (the user's gallery and " +
+      'chosen folders) and say what it shows or says, e.g. the latest invoice and its total',
+    kind: 'info',
+    args: {
+      what: req('what to look for, in a few words'),
+      type: oneOf(['photo', 'file', 'any']),
+      newest: { type: 'boolean', desc: 'true if the latest or most recent one is wanted' },
+      from: when('start, if a time is meant'),
+      to: when('end'),
     },
   },
   {
@@ -176,7 +192,10 @@ export const TOOLS: ToolSpec[] = [
   },
   {
     name: 'call',
-    desc: 'phone someone',
+    // "Phone someone" alone made the sorter pick this for "I need to talk to a shop assistant who
+    // speaks Japanese", which then asked for contacts access (Gemma 4 E2B, 27 Nov). Saying it is a
+    // phone call fixed that (docs/BENCH.md).
+    desc: 'ring someone on the phone (a phone call)',
     kind: 'action',
     args: { to: req('person or number') },
   },
@@ -426,6 +445,24 @@ export const TOOLS: ToolSpec[] = [
     },
   },
   {
+    name: 'app_setting',
+    desc:
+      "say or change one of Sidekick's own settings (privacy, listening, online lookup, " +
+      'consent, app lock, keep periods, voices, connections, models, routines, your data), or ' +
+      'list a part of Settings. Not the phone’s own settings',
+    kind: 'action',
+    args: {
+      do: oneOf([...SETTING_OPS]),
+      setting: {
+        type: 'string',
+        values: [...SETTING_IDS, 'all'],
+        required: true,
+        desc: 'the setting meant; for list, any setting of that part',
+      },
+      value: s('the new value or the item, as said (e.g. on, 30 days, front, a name)'),
+    },
+  },
+  {
     name: 'missed',
     desc: 'short summary of my unread notifications (what I missed), by person and app',
     kind: 'info',
@@ -556,6 +593,7 @@ export const NOT_IN_ROUTINES = new Set([
   'listening',
   'camera',
   'camera_setting',
+  'app_setting',
   // A routine's text can carry outside words: never send, reply, call back, move or read copied text.
   'draft',
   'reply_message',

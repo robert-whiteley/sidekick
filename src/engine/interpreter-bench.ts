@@ -9,8 +9,7 @@
 import { Directory, File } from 'expo-file-system';
 
 import SidekickNative from '../../modules/sidekick-native';
-import { WHISPER_DIR } from './interpreter';
-import { interpretLanguage, TURN_MAX_TOKENS } from './interpreter-logic';
+import { interpretLanguage, sttEngine, TURN_MAX_TOKENS } from './interpreter-logic';
 import { askLlm } from './llm';
 
 type Log = (line: string) => void;
@@ -64,13 +63,7 @@ async function sttCases(dir: string, log: Log) {
     if (!(l instanceof Directory)) continue;
     const lang = interpretLanguage(l.name);
     if (!lang) continue;
-    const kind = lang.code === 'en' ? 'main' : lang.stt === 'whisper' ? 'whisper' : 'parakeet';
-    const modelDir =
-      kind === 'whisper'
-        ? WHISPER_DIR
-        : kind === 'parakeet'
-          ? 'sherpa-onnx-nemo-parakeet-tdt-0.6b-v3-int8'
-          : '';
+    const { kind, dir: modelDir } = sttEngine(lang);
     for (const w of l.list()) {
       if (!(w instanceof File) || !w.name.endsWith('.wav')) continue;
       const path = decodeURI(w.uri.replace(/^file:\/\//, ''));

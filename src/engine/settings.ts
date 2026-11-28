@@ -59,6 +59,18 @@ export type Settings = {
   sourceFolders: boolean;
   /** Folders the user picked (Storage Access Framework content:// URIs). */
   folderUris: string[];
+  /** Single files the user picked (Android's Downloads can't be picked as a folder). */
+  fileUris: string[];
+  /** Phone search of the Photos library (after the user grants all or only selected photos). */
+  sourceGallery: boolean;
+  /** Android: the photo folders picked for photo search (no Photos permission on Android). */
+  photoFolderUris: string[];
+  /** Phone search: stop reading photos and files for now (what's indexed stays searchable). */
+  searchPaused: boolean;
+  /** Phone search: read photos slowly on battery too (else only while charging). */
+  indexOnBattery: boolean;
+  /** Phone search: no reading on battery below this level (percent). */
+  indexMinBattery: number;
   sourceContacts: boolean;
   sourceCalendar: boolean;
   /** Android only: keep the text of notifications from other apps. */
@@ -171,6 +183,12 @@ export const DEFAULTS: Settings = {
   sourceNotes: false,
   sourceFolders: false,
   folderUris: [],
+  fileUris: [],
+  sourceGallery: false,
+  photoFolderUris: [],
+  searchPaused: false,
+  indexOnBattery: true,
+  indexMinBattery: 30,
   sourceContacts: false,
   sourceCalendar: false,
   sourceNotifications: false,

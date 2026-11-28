@@ -197,7 +197,12 @@ owner lines that are (or only look like) instructions to Sidekick.
 | `routing.ts`              | Sorter and translate-tool cases: does a conversation request start the interpreter?            |
 | `ts-resolve.mjs`          | Lets plain Node run the app's `.ts` files (imports without extensions), for `routing.ts`.      |
 | `gen_audio.py`            | Speaks the lines with offline TTS (16 kHz WAV) for the speech-to-text bench.                   |
-| `stt.py`                  | Words wrong (characters for Japanese) and time per line for Parakeet v3, Whisper, SenseVoice.  |
+| `hear-ja.json`            | 30 more made-up Japanese lines (driver, waiter, shop, pharmacy, hotel, station) for hearing.   |
+| `fleurs.py`               | First 60 clips per language of the FLEURS test split (real read speech), streamed.             |
+| `degrade.py`              | Speaker + room echo + fan noise ("room") and + babble at 10 dB ("noisy") copies of the audio.  |
+| `stt.py`                  | Words wrong (characters for Japanese), time and peak memory per line, per speech model.        |
+| `stt_norm.py`             | Text normalisation shared by `stt.py` and `score_stt.py` (numbers as kanji, Arabic marks).     |
+| `score_stt.py`            | Error %, Japanese reading error, lines half wrong, speed and memory per model, set, language.  |
 | `fetch.sh`, `fetch_mt.py` | Download the models (about 4.5 GB).                                                            |
 
 ```bash
@@ -206,8 +211,14 @@ node bench/interpreter/prompts.ts > cases.jsonl            # all languages; or: 
 python bench/interpreter/mt_gemma.py $D/gemma-4-E2B-it.litertlm cases.jsonl out.jsonl 6
 python bench/interpreter/mt_bergamot.py $D/mt cases.jsonl out_bergamot.jsonl
 python bench/interpreter/score.py out.jsonl out_bergamot.jsonl
-python bench/interpreter/gen_audio.py audio $D             # ~11 MB of WAVs, never committed
-python bench/interpreter/stt.py audio $D parakeet-v3,whisper-small es,fr,de,it,pt,ja 4 > stt.jsonl
+python bench/interpreter/gen_audio.py audio/lines $D       # ~15 MB of WAVs, never committed
+python bench/interpreter/fleurs.py audio/fleurs            # ~165 MB (16-bit), never committed
+python bench/interpreter/degrade.py audio/lines audio/deg-lines
+python bench/interpreter/degrade.py audio/fleurs audio/deg-fleurs
+for s in lines deg-lines/room deg-lines/noisy fleurs deg-fleurs/room deg-fleurs/noisy; do
+  python bench/interpreter/stt.py audio/$s $D parakeet-ja ja 4 $(echo $s | tr / -) >> stt.jsonl
+done                                                       # one model per process (memory)
+python bench/interpreter/score_stt.py stt.jsonl
 ```
 
 On the phone (needs the `bench-links` flag file below): push `cases.jsonl` and `audio/<lang>/` to
@@ -222,6 +233,11 @@ them. Delete the folder afterwards.
 | Tool / data                       | Licence                   | Use                              |
 | --------------------------------- | ------------------------- | -------------------------------- |
 | Kokoro v1.0 multi-lang (TTS)      | Apache-2.0                | Made-up speech (not German)      |
+| kokoro-onnx 0.6, misaki 0.9 (ja)  | MIT, Apache-2.0           | Kokoro's Japanese voices         |
+| pyopenjtalk, unidic-lite          | MIT / BSD-3-Clause        | Japanese readings (TTS, scoring) |
+| FLEURS test split (Google)        | CC BY 4.0                 | Real read speech, 7 languages    |
+| ReazonSpeech k2 v2, Whisper turbo | Apache-2.0, MIT           | Comparison only (not in the app) |
+| Dolphin base                      | Apache-2.0                | Comparison only (not in the app) |
 | Piper de_DE thorsten medium (TTS) | CC0 (voice), MIT (Piper)  | Made-up German speech            |
 | litert-lm 0.20 (Python)           | Apache-2.0                | Runs Gemma on the laptop         |
 | bergamot 0.4.5 (Python)           | MPL-2.0                   | Runs Firefox Translations models |

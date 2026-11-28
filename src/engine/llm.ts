@@ -205,6 +205,12 @@ async function generate(
   try {
     const stats = await SidekickNative.llmGenerate(id, prompt, imagePath, opts);
     return { text, stats };
+  } catch (e) {
+    // Stop or Send now while it writes: LiteRT-LM ends a cancelled pass with an error ("Task
+    // cancelled"), not as done. The answer keeps what it wrote, so it is shown, saved and
+    // remembered by the chat like any other (phone check, 27 Nov: the next question had lost it).
+    if (stopping) return { text, stats: NO_STATS };
+    throw e;
   } finally {
     sub.remove();
   }

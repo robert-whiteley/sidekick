@@ -22,6 +22,9 @@ jest.mock('@/engine/actions', () => ({
 }));
 jest.mock('@/memory/sources', () => ({ contactDetails: jest.fn() }));
 jest.mock('@/engine/quick-commands', () => ({ runParsedCommand: jest.fn() }));
+jest.mock('@/engine/app-settings', () => ({
+  appSettingTool: jest.fn(async () => 'Tap Approve to turn on online lookup.'),
+}));
 jest.mock('@/integrations/extras', () => ({ runExtra: jest.fn() }));
 jest.mock('@/integrations/phone-controls', () => ({ runControl: jest.fn() }));
 jest.mock('@/integrations/prefs', () => ({ isOn: jest.fn(() => true) }));
@@ -100,6 +103,30 @@ describe('running a tool', () => {
       null,
     );
   });
+  it('fills and runs app_setting: the model names the setting by id, any wording', async () => {
+    const ask = replies('{"do":"on","setting":"online_lookup"}');
+    const pick = await fillTool('let it look things up on the internet', 'app_setting', {
+      ask,
+      now: NOW,
+    });
+    expect(pick).toMatchObject({
+      tool: 'app_setting',
+      args: { do: 'on', setting: 'online_lookup' },
+    });
+    const out = await runTool('app_setting', pick!.args, 'q', quiet, NOW);
+    expect(out).toEqual({ kind: 'reply', text: 'Tap Approve to turn on online lookup.' });
+    const { appSettingTool } = jest.requireMock('@/engine/app-settings') as {
+      appSettingTool: jest.Mock;
+    };
+    expect(appSettingTool).toHaveBeenCalledWith({ do: 'on', setting: 'online_lookup' });
+  });
+  it('asks app_setting again when the model names a setting that does not exist', async () => {
+    const ask = replies('{"setting":"internet search"}', '{"do":"get","setting":"online_lookup"}');
+    const pick = await fillTool('is internet search on?', 'app_setting', { ask, now: NOW });
+    expect(ask).toHaveBeenCalledTimes(2);
+    expect(ask.mock.calls[1][0]).toMatch(/was refused: setting not one of/);
+    expect(pick?.args).toEqual({ do: 'get', setting: 'online_lookup' });
+  });
   it('runs an action through the normal draft path', async () => {
     const plan = { kind: 'reply', text: 'Timer set for 5 minutes.' };
     jest.mocked(planIntent).mockResolvedValue(plan as never);
@@ -123,6 +150,17 @@ describe('running a tool', () => {
     expect(await runTool('play_recording', {}, 'play me that bit again', quiet, NOW)).toEqual({
       kind: 'answer',
       recording: true,
+    });
+  });
+  it('sends a phone search to its handler with what, type, newest and time', async () => {
+    const args = { what: 'invoice from Acme', type: 'file', newest: true, from: 1, to: 2 };
+    expect(await runTool('find_on_phone', args, 'my latest Acme invoice', quiet, NOW)).toEqual({
+      kind: 'find',
+      req: { what: 'invoice from Acme', type: 'file', newest: true, from: 1, to: 2 },
+    });
+    expect(await runTool('find_on_phone', { what: 'x', type: 'video' }, 'q', quiet, NOW)).toEqual({
+      kind: 'find',
+      req: { what: 'x', type: 'any', newest: false },
     });
   });
   it('sends an info tool to its own handler as canonical words', async () => {

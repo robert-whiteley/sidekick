@@ -32,8 +32,8 @@ export type ChatMessage = {
   momentId?: number;
   /** A picture Sidekick drew: its description, for the Report button under it. */
   picture?: { prompt: string };
-  /** A button under the answer that opens a screen in the app. */
-  link?: { label: string; href: string };
+  /** A button under the answer that opens a screen in the app (open: a found original). */
+  link?: { label: string; href: string; open?: string };
 };
 
 /** The chat's last question and its answer, when Edit / Try again may replace them. */

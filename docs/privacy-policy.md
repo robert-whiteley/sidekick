@@ -12,6 +12,7 @@ Everything Sidekick sees, hears and remembers stays on your phone:
 - Photos, video and audio from the camera and microphone, and the transcripts and notes made from them.
 - People, places, to-dos, reminders and facts it remembers.
 - Contacts, calendar events and notifications it reads, if you allow it.
+- Photos, folders and files you allow it to search (Settings → Phone search, off until you turn it on): on iPhone your whole photo library or only the photos you choose, on Android only the photo folders you pick (such as Camera and Screenshots), and only the folders and files you pick. Sidekick reads them on the phone and keeps only an encrypted index (the date, the place, the words in a photo and a description of it as numbers); your photos and files stay where they are and are never changed or sent anywhere. Turning it off, or removing a folder, deletes what was read from it.
 - Where you have been, if you turn on location: places are kept as points on the phone and named using a list of towns built into the app.
 - Phone activity you allow it to read, such as step counts, which apps you used and for how long (screen time), and text you copy, if you ask about it.
 - Your texts (SMS) and call history, only if Sidekick is your phone's digital assistant and you allow it: read on the phone when you ask (or when a routine you made asks), never copied into Sidekick's memory and never sent anywhere. Texts you approve are sent from your phone like any text, through your mobile network.
@@ -47,6 +48,8 @@ Full app updates come through Google Play.
 Sidekick asks for each permission when you first use the feature that needs it. You can refuse or withdraw it in the app's Settings or in Android settings. The camera and microphone are only used while you have listening or the camera turned on, and Android shows its indicator whenever they are in use. Consent mode, which is on by default where the law requires everyone's agreement to record, keeps nothing of voices that haven't agreed.
 
 If you turn the live camera on, it keeps filming while your phone is locked, until you pause or stop it from the notification. You can turn this off in Settings → Camera & audio. Video and frames stay on the phone.
+
+Photos permission (iPhone only): asked only when you turn on photo search. You can allow all photos or only the ones you choose, and change it at any time in Settings → Phone search or the phone's settings. On Android, Sidekick does not ask for access to your photos: you pick the photo folders it may read with the phone's own folder picker. The place a photo was taken, when the photo has one, is named using the list of towns built into the app. Folders and files need no permission: you pick each one with the phone's own picker, and Sidekick sees only what you picked (it never asks for access to all files).
 
 If you turn on **Understand other languages around me** (off by default), lines heard in other languages are translated on the phone; nothing is sent over the network.
 

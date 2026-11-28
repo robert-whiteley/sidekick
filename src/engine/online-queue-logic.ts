@@ -60,6 +60,7 @@ export const TOOL_NET: Record<string, NetNeed> = {
   edit_photo: 'offline',
   make_picture: 'offline',
   memory_search: 'offline',
+  find_on_phone: 'offline',
   recap: 'offline',
   research: 'queue',
   message: 'app', // SMS works offline; chat apps send once they are online
@@ -97,6 +98,7 @@ export const TOOL_NET: Record<string, NetNeed> = {
   listening: 'offline',
   camera: 'offline',
   camera_setting: 'offline',
+  app_setting: 'offline',
   missed: 'offline',
   feedback: 'queue', // an email: the outbox
   calculate: 'offline',

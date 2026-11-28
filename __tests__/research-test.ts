@@ -331,6 +331,25 @@ describe('research()', () => {
     expect(r2.local).toBe(true);
   });
 
+  test('online by Android but no server reached: waits for the internet, not "nothing found"', async () => {
+    // Sidekick's network blocked (a firewall app, Data Saver, a dead Wi-Fi): it said "I couldn't
+    // find anything online" (phone check, 28 Nov).
+    const r = await research(
+      'Research tides',
+      () => {},
+      () => {},
+      deps({ search: async () => [], unreachable: () => true }),
+    );
+    expect(r.offline).toBe(true);
+    const found = await research(
+      'Research tides',
+      () => {},
+      () => {},
+      deps({ search: async () => [], unreachable: () => false }),
+    );
+    expect(found.offline).toBeUndefined();
+  });
+
   test('unusable plan falls back to the request words; names never sent', async () => {
     const d = deps({
       ask: jest.fn(async (p: string) => (p.includes('Plan web') ? 'no idea' : 'Report [1].')),
@@ -369,6 +388,8 @@ describe('research()', () => {
     );
     expect(d.search).toHaveBeenCalledTimes(1);
     expect(r.local).toBe(true);
+    // Not "nothing found": a stopped run has no words, and the chat marks it Stopped.
+    expect(r.text).toBe('');
   });
 });
 

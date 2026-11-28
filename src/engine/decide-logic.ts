@@ -127,12 +127,24 @@ export function catalogSystem(tools: ToolSpec[] = DECIDE_TOOLS, lookup = true): 
 }
 
 /**
- * The request as the sorter reads it. A photo taken or shared with it is said, from the app's
- * state: without it "What is this?" read as a question about what is playing (the media tool), and
- * a photo question on the iPhone Simulator was answered "That isn't possible on this phone yet."
+ * The sorter's prompt: the request, after the chat's last exchange when there was a recent one,
+ * so a reply such as "yes" to "I can look that up" is sorted by what it answers (the model reads
+ * it; the earlier exchange is clipped so the pass stays short). A photo taken or shared with it is
+ * said, from the app's state: without it "What is this?" read as a question about what is playing.
  */
-export function requestLine(question: string, photo = false): string {
-  return photo ? `Request (with a photo): ${question}` : `Request: ${question}`;
+export function decidePrompt(
+  question: string,
+  previous?: { q: string; a: string },
+  photo = false,
+): string {
+  const line = photo ? `Request (with a photo): ${question}` : `Request: ${question}`;
+  if (!previous) return line;
+  const clip = (t: string, n: number) => (t.length > n ? `${t.slice(0, n)}…` : t);
+  return (
+    `Earlier, for context only: I asked "${clip(previous.q, 200)}" and you replied ` +
+    `"${clip(previous.a, 240)}"
+${line}`
+  );
 }
 
 /** The sorter's one word → a decision. A tool name inside it ("stop_listening") counts. */

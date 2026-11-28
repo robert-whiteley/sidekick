@@ -4,6 +4,7 @@ import { View } from 'react-native';
 import type { NamedPlace } from '@/engine/location-logic';
 import { hasLocationPermission, refreshPlaces } from '@/engine/location-track';
 import { askLocationPermission } from '@/engine/places';
+import { askToDelete } from '@/engine/delete-plans';
 import { platformText } from '@/engine/platform-text';
 import { getSettings, type Settings, updateSettings } from '@/engine/settings';
 import {
@@ -13,7 +14,7 @@ import {
   renamePlace,
   trackSize,
 } from '@/memory/places-store';
-import { Button, confirm, Row, Section, styles } from './ui';
+import { Button, Row, Section, styles } from './ui';
 import { AppText, TextButton, TextField } from '@/ui';
 
 /** Location memory: the switch, the permission, places you named, and deleting the history. */
@@ -106,14 +107,10 @@ export function LocationSection() {
         title="Delete location history"
         danger
         onPress={() =>
-          confirm(
-            'Delete location history?',
-            'Deletes every remembered position and the town names on your memories. Your named places stay.',
-            async () => {
-              await clearTrack();
-              load();
-            },
-          )
+          void askToDelete({ kind: 'locationHistory' }, async () => {
+            await clearTrack();
+            load();
+          })
         }
       />
     </Section>

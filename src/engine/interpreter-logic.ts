@@ -12,7 +12,31 @@
  */
 
 /** Which on-device speech-to-text hears a language (Android). iPhone: Apple's on-device Speech. */
-export type InterpretStt = 'parakeet-v3' | 'whisper';
+export type InterpretStt = 'parakeet-v3' | 'parakeet-ja' | 'dolphin' | 'whisper';
+
+/** sherpa-onnx model folders (under the models folder) for each speech-to-text build. */
+export const STT_DIRS: Record<InterpretStt, string> = {
+  'parakeet-v3': 'sherpa-onnx-nemo-parakeet-tdt-0.6b-v3-int8',
+  'parakeet-ja': 'sherpa-onnx-nemo-parakeet-tdt_ctc-0.6b-ja-35000-int8',
+  dolphin: 'sherpa-onnx-dolphin-small-ctc-multi-lang-int8-2025-04-02',
+  whisper: 'sherpa-onnx-whisper-small',
+};
+
+/**
+ * What the native side loads for a language (Android, SidekickNativeModule interpretHeard):
+ * "main" (the usual English model), "parakeet" (a NeMo transducer), "nemo_ctc" (a NeMo CTC
+ * model), "dolphin" (a Dolphin CTC model) or "whisper" (told the language), with the folder.
+ */
+export function sttEngine(l: { code: string; stt: InterpretStt }): { kind: string; dir: string } {
+  if (l.code === 'en') return { kind: 'main', dir: '' };
+  const kind = {
+    'parakeet-v3': 'parakeet',
+    'parakeet-ja': 'nemo_ctc',
+    dolphin: 'dolphin',
+    whisper: 'whisper',
+  }[l.stt];
+  return { kind, dir: STT_DIRS[l.stt] };
+}
 
 export type InterpretLanguage = {
   /** ISO 639-1. */
@@ -35,8 +59,12 @@ const L = (code: string, name: string, own: string, tag: string, stt: InterpretS
 });
 
 /**
- * Languages the interpreter offers. Parakeet v3 (CC BY 4.0) hears the 25 European ones; the
- * others use Whisper small (MIT), downloaded the first time one of them is needed.
+ * Languages the interpreter offers. Parakeet v3 (CC BY 4.0) hears the 25 European ones,
+ * Parakeet TDT-CTC 0.6B ja (CC BY 4.0) Japanese, Dolphin small (Apache-2.0) Arabic, and Whisper
+ * small (MIT) the others; each is downloaded the first time one of its languages is needed.
+ * Japanese and Arabic moved off Whisper small on 28 Nov: as accurate or better on clean speech,
+ * fewer errors with room echo and noise, 4× (Japanese) and 9× (Arabic) faster on the laptop
+ * (docs/BENCH.md "Speech for Japanese and the other languages").
  */
 export const INTERPRET_LANGUAGES: InterpretLanguage[] = [
   L('en', 'English', 'English', 'en-US', 'parakeet-v3'),
@@ -64,10 +92,10 @@ export const INTERPRET_LANGUAGES: InterpretLanguage[] = [
   L('lv', 'Latvian', 'Latviešu', 'lv-LV', 'parakeet-v3'),
   L('lt', 'Lithuanian', 'Lietuvių', 'lt-LT', 'parakeet-v3'),
   L('mt', 'Maltese', 'Malti', 'mt-MT', 'parakeet-v3'),
-  L('ja', 'Japanese', '日本語', 'ja-JP', 'whisper'),
+  L('ja', 'Japanese', '日本語', 'ja-JP', 'parakeet-ja'),
   L('zh', 'Chinese', '中文', 'zh-CN', 'whisper'),
   L('ko', 'Korean', '한국어', 'ko-KR', 'whisper'),
-  L('ar', 'Arabic', 'العربية', 'ar-SA', 'whisper'),
+  L('ar', 'Arabic', 'العربية', 'ar-SA', 'dolphin'),
   L('tr', 'Turkish', 'Türkçe', 'tr-TR', 'whisper'),
   L('hi', 'Hindi', 'हिन्दी', 'hi-IN', 'whisper'),
   L('th', 'Thai', 'ไทย', 'th-TH', 'whisper'),

@@ -70,6 +70,10 @@ jest.mock('@/engine/speaker', () => ({
 }));
 jest.mock('@/memory/embed-idle', () => ({ embedWhenIdle: async () => {} }));
 jest.mock('@/memory/sources', () => ({ syncSourcesIfDue: async () => {} }));
+jest.mock('@/memory/gallery', () => ({
+  indexPhotosWhenIdle: async () => 0,
+  openOriginal: () => false,
+}));
 jest.mock('@/memory/store', () => ({
   capturePhoto: jest.fn(),
   ingestJournal: async () => 0,

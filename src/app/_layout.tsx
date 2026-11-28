@@ -5,6 +5,7 @@ import { Platform, Settings, StyleSheet, View } from 'react-native';
 
 import { errorDetailsFor } from '@/engine/error-details';
 import { AppLockGate } from '@/features/lock/AppLockGate';
+import { DeleteConfirmHost } from '@/features/settings/DeleteConfirmHost';
 import {
   AppText,
   Button,
@@ -83,6 +84,7 @@ export default function RootLayout() {
           <Stack.Screen name="note/[id]" options={{ title: 'Conversation notes' }} />
         </Stack>
         <DialogHost />
+        <DeleteConfirmHost />
       </AppLockGate>
     </ThemeProvider>
   );

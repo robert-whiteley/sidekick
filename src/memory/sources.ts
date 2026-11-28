@@ -10,6 +10,8 @@ import { mayGrowMemory } from '@/engine/storage-guard';
 import { readDeviceFile } from '@/files/device';
 import { readPdfPages } from './pdf-read';
 import { getDb } from './db';
+import { deleteOrigin, syncFolderImages } from './gallery';
+import { folderOrigin, isImageFile } from './gallery-logic';
 import {
   CALENDAR_AHEAD_MS,
   CALENDAR_PAST_MS,
@@ -163,10 +165,19 @@ export async function countKind(kind: SourceKind): Promise<number> {
 
 // --- Folders ---
 
+/**
+ * Where the system pickers open (Android hints; the user can still go anywhere). Android doesn't
+ * let apps pick the whole Download folder, so its files are picked one by one.
+ */
+export const PICK_START = {
+  documents: 'content://com.android.externalstorage.documents/document/primary%3ADocuments',
+  downloads: 'content://com.android.externalstorage.documents/document/primary%3ADownload',
+};
+
 /** Lets the user pick a folder (system picker; access is kept across restarts). */
-export async function pickFolder(): Promise<string | null> {
+export async function pickFolder(initialUri?: string): Promise<string | null> {
   try {
-    const dir = await Directory.pickDirectoryAsync();
+    const dir = await Directory.pickDirectoryAsync(isAndroid ? initialUri : undefined);
     const uris = getSettings().folderUris;
     if (!uris.includes(dir.uri)) updateSettings({ folderUris: [...uris, dir.uri] });
     await markRun('folders', null);
@@ -182,6 +193,112 @@ export async function removeFolder(uri: string) {
   updateSettings({ folderUris: getSettings().folderUris.filter((u) => u !== uri) });
   await (await db()).execute('DELETE FROM meta WHERE key = ?', [`pdf.empty.${uri}`]);
   for (const e of await existingUnder(folderKeyPrefix(uri))) await deleteMoment(e.id);
+  await deleteOrigin(folderOrigin(uri));
+}
+
+/**
+ * Folders and files off: everything read from them is deleted and the picks are forgotten (the
+ * files themselves are not touched). Shared-in files stay (they have their own delete).
+ */
+export async function stopFolders() {
+  const { folderUris } = getSettings();
+  updateSettings({ sourceFolders: false });
+  for (const uri of folderUris) await removeFolder(uri);
+  for (const e of await existingUnder(folderKeyPrefix(PICKED))) await deleteMoment(e.id);
+  updateSettings({ folderUris: [], fileUris: [] });
+  await markRun('folders', null);
+}
+
+/** Picked single files share one key space (no folder). */
+const PICKED = 'picked';
+
+/**
+ * Lets the user pick files (several at once). Android keeps access to them across restarts; the
+ * iPhone gives a copy, so it is read now and kept until removed (pick it again to update it).
+ */
+export async function pickFiles(initialUri?: string): Promise<number> {
+  try {
+    const r = await File.pickFileAsync({
+      multipleFiles: true,
+      initialUri: isAndroid ? initialUri : undefined,
+    });
+    if (r.canceled) return 0;
+    const picked = r.result.map((f) => f.uri);
+    const uris = getSettings().fileUris;
+    updateSettings({ fileUris: [...uris, ...picked.filter((u) => !uris.includes(u))] });
+    return await syncPickedFiles();
+  } catch (e) {
+    console.log(`[sources] file pick: ${String(e)}`);
+    return 0;
+  }
+}
+
+export async function removePickedFile(uri: string) {
+  updateSettings({ fileUris: getSettings().fileUris.filter((u) => u !== uri) });
+  for (const e of await existingUnder(fileKeyPrefix(PICKED, uri))) await deleteMoment(e.id);
+}
+
+/** A readable name for a picked file URI. */
+export const fileLabel = folderLabel;
+
+/**
+ * One file's text, whatever its type, or null when it isn't a type Sidekick reads: PDFs through
+ * the phone's PDF reader (and OCR), everything else through the one file reader (src/files:
+ * text, Office, sheets, e-books…). Picked files and folder files both read through it.
+ */
+export async function readAnyFile(
+  file: File,
+): Promise<{ text: string; complete: boolean; ocrPages: number } | null> {
+  const kind = indexableKind(file.name, file.size, isAndroid);
+  if (kind === 'pdf') return readPdf(file.uri);
+  if (kind) return { text: await documentText(file), complete: true, ocrPages: 0 };
+  return null;
+}
+
+async function syncPickedFiles(): Promise<number> {
+  const uris = getSettings().fileUris;
+  const existing = await existingUnder(folderKeyPrefix(PICKED));
+  const incoming: SourceItem[] = [];
+  for (const uri of uris) {
+    const prefix = fileKeyPrefix(PICKED, uri);
+    const old = existing.filter((e) => e.key.startsWith(prefix));
+    const file = new File(uri);
+    const keepOld = (at: number) =>
+      old.forEach((e) => incoming.push({ key: e.key, ver: e.ver!, at, text: '' }));
+    let exists = false;
+    try {
+      exists = file.exists;
+    } catch {
+      exists = false;
+    }
+    if (!exists) {
+      // iPhone copies can be cleared by the system: what was read stays. Android: it was deleted.
+      if (!isAndroid) keepOld(0);
+      continue;
+    }
+    const modified = file.modificationTime ?? 0;
+    if (
+      pdfUnchanged(
+        old.map((e) => e.ver),
+        modified,
+        ocrReady(),
+      )
+    ) {
+      keepOld(modified);
+      continue;
+    }
+    try {
+      const r = await readAnyFile(file);
+      if (!r) continue;
+      const ver = pdfVer(modified, r.complete);
+      incoming.push(
+        ...fileItems(PICKED, uri, file.name, modified, r.text, ver, PDF_LIMITS.maxChunks),
+      );
+    } catch (e) {
+      console.log(`[sources] can't read a picked file: ${String(e)}`);
+    }
+  }
+  return syncItems('file', folderKeyPrefix(PICKED), incoming);
 }
 
 /** A readable name for a picked folder URI. */
@@ -192,7 +309,7 @@ export function folderLabel(uri: string): string {
 
 type FoundFile = { file: File; path: string; kind: 'text' | 'pdf' | 'doc' };
 
-function walk(dir: Directory, path: string, depth: number, out: FoundFile[]) {
+function walk(dir: Directory, path: string, depth: number, out: FoundFile[], images: File[]) {
   if (depth > FILE_LIMITS.maxDepth || out.length >= FILE_LIMITS.maxFiles) return;
   let items: (Directory | File)[] = [];
   try {
@@ -205,7 +322,12 @@ function walk(dir: Directory, path: string, depth: number, out: FoundFile[]) {
     if (out.length >= FILE_LIMITS.maxFiles) return;
     const p = path ? `${path}/${item.name}` : item.name;
     if (item instanceof Directory) {
-      if (!item.name.startsWith('.')) walk(item, p, depth + 1, out);
+      if (!item.name.startsWith('.')) walk(item, p, depth + 1, out, images);
+      continue;
+    }
+    // Photos and screenshots in a picked folder: found by phone search (gallery.ts).
+    if (isImageFile(item.name)) {
+      if (images.length < FILE_LIMITS.maxFiles) images.push(item);
       continue;
     }
     // PDFs need the native PDF reader (Android).
@@ -269,7 +391,12 @@ async function saveEmptyPdfs(folderUri: string, map: Record<string, string>) {
 async function syncFolder(folderUri: string): Promise<number> {
   const root = new Directory(folderUri);
   const files: FoundFile[] = [];
-  walk(root, folderLabel(folderUri), 0, files);
+  const images: File[] = [];
+  walk(root, folderLabel(folderUri), 0, files, images);
+  await syncFolderImages(
+    folderUri,
+    images.map((f) => ({ uri: f.uri, name: f.name, modified: f.modificationTime ?? 0 })),
+  );
   const existing = await existingUnder(folderKeyPrefix(folderUri));
   const hasPdfs = files.some((f) => f.kind === 'pdf');
   const ocr = hasPdfs && ocrReady();
@@ -327,7 +454,7 @@ async function syncFolder(folderUri: string): Promise<number> {
       continue;
     }
     try {
-      const text = kind === 'doc' ? await documentText(file) : await file.text();
+      const text = (await readAnyFile(file))?.text ?? '';
       if (text) incoming.push(...fileItems(folderUri, file.uri, path, modified, text));
     } catch (e) {
       console.log(`[sources] can't read ${path}: ${String(e)}`);
@@ -339,6 +466,12 @@ async function syncFolder(folderUri: string): Promise<number> {
 
 export async function syncFolders(): Promise<number> {
   let n = 0;
+  if (getSettings().fileUris.length || (await existingUnder(folderKeyPrefix(PICKED))).length)
+    try {
+      n += await syncPickedFiles();
+    } catch (e) {
+      console.log(`[sources] picked files sync failed: ${String(e)}`);
+    }
   for (const uri of getSettings().folderUris) {
     try {
       n += await syncFolder(uri);
@@ -513,7 +646,11 @@ export async function syncSourcesIfDue(now = Date.now()): Promise<number> {
   } catch (e) {
     console.log(`[sources] notifications failed: ${String(e)}`);
   }
-  await run(s.sourceFolders && s.folderUris.length > 0, 'folders', syncFolders);
+  await run(
+    s.sourceFolders && !s.searchPaused && (s.folderUris.length > 0 || s.fileUris.length > 0),
+    'folders',
+    syncFolders,
+  );
   await run(s.sourceCalendar, 'calendar', () => syncCalendar(now));
   await run(s.sourceContacts, 'contacts', syncContacts);
   return n;
@@ -549,6 +686,7 @@ export async function deleteSource(
       return deleteKind('note');
     case 'folders':
       await deleteKind('file');
+      for (const uri of getSettings().folderUris) await deleteOrigin(folderOrigin(uri));
       return markRun('folders', null);
     case 'calendar':
       await deleteKind('event');

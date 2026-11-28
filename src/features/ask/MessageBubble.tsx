@@ -3,6 +3,7 @@ import { router } from 'expo-router';
 import { memo } from 'react';
 import { Share, StyleSheet, View } from 'react-native';
 
+import { openOriginal } from '@/memory/gallery';
 import { AppText, Markdown, radius, showDialog, space, Tappable } from '@/ui';
 
 import type { ChatMessage } from './chat-logic';
@@ -110,7 +111,11 @@ export const MessageBubble = memo(function MessageBubble({
       {!user && !m.pending && m.link ? (
         <Tappable
           feedback="dim"
-          onPress={() => router.push(m.link!.href as never)}
+          onPress={() => {
+            // A found photo or file opens in the phone's own app; else (or if it can't) the screen.
+            const l = m.link!;
+            if (!l.open || !openOriginal(l.open)) router.push(l.href as never);
+          }}
           style={[styles.linkButton, { borderColor: theme.border }]}
           accessibilityRole="button"
         >

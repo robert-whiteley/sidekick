@@ -172,11 +172,20 @@ export function partPrompt(question: string, label: string, i: number, n: number
   return `Part ${i + 1} of ${n} of ${label}. ${NOT_INSTRUCTIONS}\n${fence(part)}\n\nWrite brief notes from this part that help with: ${question.trim()}\nOnly what this part says. If nothing helps, write NONE.`;
 }
 
+/** The parts' notes that say something (a part with nothing on the question writes NONE). */
+export function usefulNotes(notes: string[]): { n: string; i: number }[] {
+  return notes.map((n, i) => ({ n: n.trim(), i })).filter((x) => x.n && !/^none\.?$/i.test(x.n));
+}
+
+/**
+ * When no part had anything on the question: said in code, as asking the model with no notes
+ * gave back a bare "NONE" (phone check, 28 Nov, a 6.8 MB text file).
+ */
+export const DOC_NOTHING_FOUND = 'I found nothing about that in it.';
+
 /** The answer from every part's notes. */
 export function combinePrompt(question: string, label: string, notes: string[]): string {
-  const kept = notes
-    .map((n, i) => ({ n: n.trim(), i }))
-    .filter((x) => x.n && !/^none\.?$/i.test(x.n));
+  const kept = usefulNotes(notes);
   const body = kept.length
     ? kept.map((x) => `Part ${x.i + 1}: ${x.n}`).join('\n')
     : '(no part had anything on this)';
@@ -296,4 +305,37 @@ export function recordingReadyLine(name: string, lines: TranscriptLine[], totalM
   const n = voiceCount(lines);
   const voices = n > 1 ? `, ${n} voices` : '';
   return `"${name}" is read (${clockOf(totalMs)}${voices}) and saved to your memory. Ask me about it.`;
+}
+
+/** Tab-separated lines a pasted block needs to be read as a table (header plus two rows). */
+const PASTED_TABLE_ROWS = 3;
+
+/**
+ * A table pasted into the question (cells copied from a spreadsheet or a web page arrive as
+ * tab-separated lines) and the question around it, so it is worked out on the cells like an
+ * attached spreadsheet: sums are exact, not added up by the model. Null without such a block.
+ */
+export function pastedTable(text: string): { table: string; question: string } | null {
+  const lines = text.split(/\r?\n/);
+  const isRow = (l: string) => l.includes('\t') && l.trim().length > 0;
+  let best: [number, number] | null = null;
+  for (let i = 0; i < lines.length;) {
+    let j = i;
+    while (j < lines.length && isRow(lines[j])) j++;
+    if (j - i >= PASTED_TABLE_ROWS && (!best || j - i > best[1] - best[0])) best = [i, j];
+    i = Math.max(j, i + 1);
+  }
+  if (!best) return null;
+  const [from, to] = best;
+  // Words typed before the paste on the same line ("Total per project: <cells>") are the
+  // question, not the first header: they end at the last ": ", "? " or ". " in the first cell.
+  const first = lines[from];
+  const cell = first.slice(0, first.indexOf('\t'));
+  const m = /^(.*[:?.])\s+(\S[^:?.]*)$/.exec(cell);
+  const header = m ? first.slice(m[1].length).trimStart() : first;
+  const question = [...lines.slice(0, from), m ? m[1] : '', ...lines.slice(to)]
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .join('\n');
+  return { table: [header, ...lines.slice(from + 1, to)].join('\n'), question };
 }

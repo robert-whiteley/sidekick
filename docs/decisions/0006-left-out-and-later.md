@@ -216,15 +216,32 @@ Read this before proposing any of these again. Each line says why.
   Opus-MT / Helsinki models (CC BY 4.0 weights but per-pair Marian builds and weaker than
   Bergamot), Google ML Kit translation (closed source, Google Play services), slimt (GPL-2.0),
   MADLAD-400 (too big for 4 GB phones).
-- Speech: European languages with Parakeet v3 (already in the app), the others with Whisper
-  small (MIT, 375 MB). Rejected: Moonshine non-English models (community licence with a revenue
-  cap), SenseVoice (FunASR model licence, attribution and use terms; only 5 languages), Whisper
-  base (twice the errors of small in every language measured), Whisper large / turbo (too big
-  and slow for a Pixel 5 CPU).
-- Japanese speech recognition is not verified: all three models (Whisper small / base,
-  SenseVoice) failed on the bench's generated Japanese voice (63–112% characters wrong), which
-  points at the made-up audio (Kokoro's Japanese voice) rather than the models; needs a real
-  speaker. Arabic and the other non-European languages: translation measured, hearing not.
+- Speech: European languages with Parakeet v3 (already in the app); Japanese with Parakeet
+  TDT-CTC 0.6B ja (CC BY 4.0, 656 MB); Arabic with Dolphin small (Apache-2.0, 250 MB); the
+  others with Whisper small (MIT, 375 MB).
+  - Rejected:
+    - Moonshine non-English models (community licence with registration and a revenue cap);
+    - SenseVoice / Paraformer (FunASR model licence: "for reference and learning purposes only");
+    - Whisper base (twice the errors of small in every language measured);
+    - Whisper large / turbo and kotoba-whisper (4.7 s a line on the laptop, over 2 GB; too slow
+      for a Pixel 5 CPU);
+    - ReazonSpeech k2 and Dolphin for Japanese (more errors than Parakeet ja on clean and room
+      speech).
+- Japanese and Arabic hearing (28 Nov, laptop, BENCH "Speech for Japanese"):
+  - The earlier "not verified" was the bench's audio: its Japanese went through espeak, which
+    reads kanji as Chinese. That audio was also what the phone was played.
+  - With real Japanese TTS and FLEURS read speech, Whisper small is fine in quiet but makes up
+    text in noise.
+  - Parakeet ja: FLEURS 10.5 / 11.1 / 14.6% characters wrong clean / room / babble, against
+    16.4 / 22.9 / 37.0 for Whisper small, and 4× faster.
+  - Dolphin small for Arabic: 28.4 / 37.5 / 59.1% words wrong against 31.3 / 46.1 / 62.3, and 9×
+    faster.
+  - Not yet on the phone. The other non-European languages: hearing not measured.
+- Parakeet v3 in babble (four voices at 10 dB) often writes English instead of the European
+  language spoken (German FLEURS 94% words wrong, Whisper small 60%). It can't be told the
+  language. Later: a model that takes the language (Canary-1b-v2 covers the same 25 languages,
+  CC BY 4.0, but is 1B parameters), or re-hearing a turn with Whisper small when the text
+  comes back in the wrong language.
 - The owner talking to Sidekick mid-conversation: decided by the model in the same reply as the
   translation (`SIDEKICK: NO / END / LANGUAGE: <language>` before `SAY:`), with no word list.
   Asked as "is the owner giving you, the interpreter, an instruction about the
@@ -270,9 +287,10 @@ Read this before proposing any of these again. Each line says why.
 - Speech model trade-off: v3 is worse in English (2.9% → 3.8% words wrong in quiet, 7.2% → 17.9%
   at 5 dB noise, laptop, 73 LibriSpeech clips), so English users keep v2. Auto-detecting the
   spoken language (one model for everyone) needs v3 or a language-ID model in front of v2.
-- No commercial-safe on-device speech model checked for: Chinese, Japanese, Korean, Arabic, Hindi
-  and other Indian languages, Turkish, Norwegian, Hebrew, Thai, Vietnamese, Indonesian. (The
-  interpreter uses Whisper small (MIT) for these; see "Interpreter".)
+- No commercial-safe on-device speech model checked for: Chinese, Korean, Hindi and other Indian
+  languages, Turkish, Norwegian, Hebrew, Thai, Vietnamese, Indonesian. The interpreter uses
+  Whisper small (MIT) for these, Parakeet ja for Japanese and Dolphin small for Arabic; see
+  "Interpreter".
 
 ## Break-it test leftovers (25 Nov, Pixel 5; details in docs/LIMITS.md)
 
@@ -652,3 +670,58 @@ usage." Accuracy wins over speed ("better to be slow than unreliable").
   phone stayed locked whenever this work had it. Thinking is switched on only if the data shows a
   clear win. iPhone: the bundled Swift LiteRT-LM has `ThinkingConfig`; `Llm.swift` doesn't pass
   it yet.
+
+## Phone search: photos, folders and files (built 27 Nov)
+
+Owner: Sidekick searches only what the user explicitly allowed: folders they picked, and photos
+only after they turn it on and grant the permission (all photos or only selected ones). Nothing is
+indexed by default; turning it off or removing a folder deletes its index.
+
+- **Built (both platforms):** Settings → Phone search. Photos: iPhone with the Photos permission
+  (full or limited library); Android from photo folders the user picks with the system folder
+  picker ("Add camera photos" opens DCIM/Camera, "Add screenshots" Pictures/Screenshots, or any
+  folder), which needs no permission. Found by name and date at once; read on the phone newest
+  first (fully while charging, a small measured budget on battery, at once for recent photos a
+  request asks about): OCR text,
+  place (offline list) and an image vector. Folders
+  and files: the system picker, one folder or file at a time (no all-files access). The
+  `find_on_phone` tool: the model decides when; it finds, picks and answers ("my latest invoice
+  from Acme, the cost"), with exact amounts listed from the text.
+- **Android:** the Download folder (and the storage root) can't be picked as a folder (Android
+  11+), so "Add files from Downloads" picks files there. Open hands the original to the phone's
+  own app.
+- **iPhone can't / doesn't:** no "Open in Photos" (iOS has no public way to open one photo in
+  the Photos app; the found photo is shown in the chat). iCloud-only photos (Optimize iPhone
+  Storage) are skipped, never downloaded. Picked files are copies (the document picker gives a
+  copy): they are read once and kept until removed; pick again to update. No PDFs yet on iPhone
+  (as for folders). Text files and photos work.
+- **Left out on Android: broad photo access** (`READ_MEDIA_IMAGES`, selected photos,
+  `ACCESS_MEDIA_LOCATION`, all still blocked in app.json). Play's Photo and video policy allows it
+  only for apps whose core is the gallery, and the owner wants store approval fast. Cost: photos
+  outside picked folders (e.g. from other apps' folders) are not found, and the user adds folders
+  by hand.
+- **Files:** picked files and folder files are all read through `readAnyFile`: PDFs by the
+  phone's PDF reader, everything else (text, Office, sheets, e-books…) by the one file reader in
+  `src/files/`.
+- **Later:** videos (a frame per clip), PDFs on iPhone (PDFKit), "Open" for files on iPhone
+  (Quick Look).
+
+## Settings by voice (27 Nov)
+
+- One catalog tool, `app_setting`, for every registry setting; the model picks the setting id from
+  the list (no word lists). `camera_setting` and `speech_speed` are kept as they were (benched).
+- Three risk levels (owner, 27 Nov): normal applies with Undo; critical needs Approve on a card that
+  arms after 1.5 s and expires after 2 minutes; deleting needs DELETE typed on a sheet, never voice
+  alone or a single tap. Rejected: a spoken "yes" for critical changes (anyone nearby, or a misheard
+  word, could say it) and asking before every change (too slow for "make it louder").
+- Phone search: photo or folder search off, removing a folder, file or photo folder, and
+  removing the photo index open the delete sheet (by voice and in Settings). "Read photos on
+  battery" and "Lowest battery for reading" (30% by default) are settings now, used by the photo
+  reading budget.
+- Turning Contacts off is critical, not a deletion: it removes only Sidekick's copy, which the next
+  sync brings back.
+- **iPhone:** settings the iPhone doesn't have (consent mode, Instructions only, pause places,
+  the Quiet hours switch, camera and device choices, tile, widget, default assistant, exact times,
+  routines, video and
+  audio keep periods, AI chip, Read messages aloud, Understand other languages) answer
+  "X isn't on iPhone." App lock asks Face ID or the passcode first, as on the screen.

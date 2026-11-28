@@ -156,6 +156,6 @@ no declaration needed for the same reason.
 
 ## Permission texts the user sees (`app.json`, iOS only)
 
-Camera, microphone, speech recognition, photo library (pick and save), calendars, contacts, Face ID,
+Camera, microphone, speech recognition, photo library (pick and save; read only after the user turns on Phone search, all or limited library), calendars, contacts, Face ID,
 location while using the app (place names) and Motion & Fitness (steps). No "always" location,
 reminders, Bluetooth or tracking prompts.

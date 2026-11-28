@@ -32,6 +32,20 @@ test('the first question starts a fresh chat, later ones continue it', () => {
   expect(c.keepHistory()).toBe(true);
 });
 
+test('a stopped answer: the next question starts a fresh chat that holds the part-answer', () => {
+  // LiteRT-LM fails every later turn of a chat whose pass was cancelled, so assistant.ts
+  // restarts the chat before recording the part-answer.
+  const c = new Conversation();
+  c.started(800);
+  turn(c, 'tips for a tortoise', 1000);
+  c.restart();
+  c.record('ten tips for Pebble', '1. Habitat: a large', 400, 2000);
+  expect(c.keepHistory()).toBe(false);
+  expect(chatSystem('BASE', c.state)).toMatch(
+    /User: ten tips for Pebble\nYou: 1\. Habitat: a large/,
+  );
+});
+
 test('a spoken follow-up is one said over or within the window after an answer', () => {
   const c = new Conversation();
   c.answered(1000);
@@ -94,6 +108,17 @@ test('a fresh chat starts from the summary and the last turns word for word', ()
   expect(sys).toContain('When is the next bus?');
   expect(sys).not.toContain('old answer');
   expect(chatSystem('BASE', { summary: '', turns: [] })).toBe('BASE');
+});
+
+test("the owner's own answer style comes after the conversation, last", () => {
+  const style = 'Call me Captain Nemo';
+  const turns = [{ q: 'When is the next bus?', a: 'At 10:15.', at: 1 }];
+  const sys = chatSystem('BASE', { summary: 'Talked about buses.', turns }, style);
+  expect(sys.endsWith(`\nHow the user wants you to answer: ${style}`)).toBe(true);
+  expect(sys.indexOf(style)).toBeGreaterThan(sys.indexOf('You: At 10:15.'));
+  expect(chatSystem('BASE', { summary: '', turns: [] }, style)).toBe(
+    `BASE\nHow the user wants you to answer: ${style}`,
+  );
 });
 
 function deps(reply: string | (() => string), over?: Partial<CompactDeps>) {

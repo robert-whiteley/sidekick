@@ -15,6 +15,7 @@ import { appendSeen, captureText } from './photo-text';
 import { OCR_FOUND, OCR_NO_TEXT, readPendingPhotoText, readTextOf } from './photo-ocr';
 import {
   embedDocument,
+  embedFitting,
   embedderChanged,
   embedQuery,
   ftsQuery,
@@ -944,12 +945,11 @@ async function embedPendingNow(
   );
   if (!r.rows.length) return photos;
   const t0 = Date.now();
-  const vecs = await SidekickNative.embed(
-    modelPath(EMBEDDER_FILE),
+  const vecs = await embedFitting(
+    (texts) => SidekickNative.embed(modelPath(EMBEDDER_FILE), texts, EMBED_DIMS),
     r.rows.map((x) =>
       embedDocument(x.place ? `${x.text as string} (in ${x.place as string})` : (x.text as string)),
     ),
-    EMBED_DIMS,
   );
   await db.transaction(async (tx) => {
     for (let i = 0; i < r.rows.length; i++) {
@@ -1217,6 +1217,15 @@ async function deleteMoments(where: string, params: (number | string)[]) {
 export const deleteMoment = (id: number) => deleteMoments('id = ?', [id]);
 export const deleteRange = (from: number, to: number) =>
   deleteMoments('at >= ? AND at < ?', [from, to]);
+/** How many memories are from [from, to) (for the delete confirmation). */
+export async function countMoments(from: number, to: number): Promise<number> {
+  const db = await getDb();
+  const r = await db.execute('SELECT COUNT(*) AS n FROM moments WHERE at >= ? AND at < ?', [
+    from,
+    to,
+  ]);
+  return (r.rows[0]?.n as number | undefined) ?? 0;
+}
 /** Everything one data source added (e.g. kind 'file'). */
 export const deleteKind = (kind: string) => deleteMoments('kind = ?', [kind]);
 
@@ -1243,6 +1252,9 @@ export async function deleteEverything() {
   await db.execute('DELETE FROM facts');
   await db.execute('DELETE FROM followups');
   await db.execute('DELETE FROM contacts');
+  // Phone search's photo index (the photos themselves are not touched).
+  await db.execute('DELETE FROM gallery_vec');
+  await db.execute('DELETE FROM gallery');
   liveTranscript.clear();
   await reclaimSpace({ force: true });
 }

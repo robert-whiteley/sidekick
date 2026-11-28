@@ -1,4 +1,5 @@
 import {
+  embedFitting,
   mentionedName,
   asksAboutSomethingSeen,
   asksAboutWhatIsInView,
@@ -101,4 +102,36 @@ test('"N minutes ago" windows grow with N and handle "a few"', () => {
   const few = timeWindow('what did I see a few minutes ago', now)!;
   expect(few.from).toBe(t - 4.5 * 60_000);
   expect(timeWindow('a couple of hours ago', now)!.to).toBe(t - 3600_000);
+});
+
+describe('embedFitting: a memory too long for the embedder', () => {
+  // Fake embedder: 1 token per character, at most 50; the vector is the text's length.
+  const tooLong = (n: number) =>
+    new Error(
+      `ComputeEmbedding failed: INVALID_ARGUMENT: Input sequence length (${n}) exceeds maximum supported signature length (50).`,
+    );
+  const embed = jest.fn(async (texts: string[]) => {
+    const long = texts.find((t) => t.length > 50);
+    if (long) throw tooLong(long.length);
+    return texts.map((t) => [t.length]);
+  });
+  beforeEach(() => embed.mockClear());
+
+  it('no longer fails the whole batch: the long one is shortened, the others are as they were', async () => {
+    const v = await embedFitting(embed, ['short', 'x'.repeat(200), 'also short']);
+    expect(v[0]).toEqual([5]);
+    expect(v[1][0]).toBeLessThanOrEqual(50);
+    expect(v[1][0]).toBeGreaterThan(30);
+    expect(v[2]).toEqual([10]);
+  });
+  it('a batch that fits is one call', async () => {
+    await embedFitting(embed, ['a', 'b']);
+    expect(embed).toHaveBeenCalledTimes(1);
+  });
+  it('other errors still fail', async () => {
+    const broken = async () => {
+      throw new Error('model not loaded');
+    };
+    await expect(embedFitting(broken, ['a'])).rejects.toThrow('model not loaded');
+  });
 });
