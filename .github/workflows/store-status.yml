@@ -7,6 +7,9 @@ name: Store status
 # Scheduled every 6 hours, but it only looks while a release run is under 14 days old. Fails
 # when Apple rejected the version, a TestFlight build is invalid or the newest release run failed.
 on:
+  # A branch named store-status/<anything> runs it too (to try a change before it is on main).
+  push:
+    branches: ['store-status/**']
   workflow_dispatch:
   schedule:
     - cron: '23 */6 * * *'
