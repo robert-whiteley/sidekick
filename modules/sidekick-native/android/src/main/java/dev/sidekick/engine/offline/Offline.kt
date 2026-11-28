@@ -22,7 +22,8 @@ import org.json.JSONObject
  * - a Wi-Fi routine while not on Wi-Fi → a one-time job that runs once on an unmetered network;
  * - either of the above, or offline/leave-Wi-Fi routines → a 15-minute check (WorkManager's
  *   minimum) that wakes JS only when the state changed.
- * While the process is alive a network callback reports changes at once.
+ * While the process is alive a network callback reports changes at once, including Sidekick's own
+ * network being unblocked (Data Saver, a firewall app) while the phone stayed online.
  * Each wake-up runs the JS task "SidekickRoutine" with {type:"network", online, wifi}.
  */
 object Offline {
@@ -113,16 +114,26 @@ object Offline {
     }
   }
 
-  /** Should JS be woken for [s]? Only when it changed since JS last saw it, or work is waiting. */
-  fun shouldWake(ctx: Context, s: State): Boolean {
+  /**
+   * Queued work and the phone online: wake JS when the state just changed or Sidekick's network
+   * was just unblocked, else at most every 15 min (network callbacks fire often on mobile data; a
+   * job that keeps failing must not loop the model).
+   */
+  fun pendingWake(changed: Boolean, unblocked: Boolean, now: Long, lastWake: Long): Boolean =
+    changed || unblocked || now - lastWake >= 15 * 60_000L
+
+  /**
+   * Should JS be woken for [s]? Only when it changed since JS last saw it, or work is waiting.
+   * [unblocked]: Sidekick's own network was blocked and no longer is, with the phone online all
+   * along (the queued research waited up to 15 min, phone check 28 Nov).
+   */
+  fun shouldWake(ctx: Context, s: State, unblocked: Boolean = false): Boolean {
     val c = config(ctx)
     val last = lastSent(ctx)
     if (c.optInt("pending", 0) > 0 && s.online) {
-      // Queued work: wake when the phone just came online, else at most every 15 min (network
-      // callbacks fire often on mobile data; a job that keeps failing must not loop the model).
       val now = System.currentTimeMillis()
       val lastWake = prefs(ctx).getLong("pendingWakeAt", 0L)
-      if (last != key(s) || now - lastWake >= 15 * 60_000L) {
+      if (pendingWake(last != key(s), unblocked, now, lastWake)) {
         prefs(ctx).edit().putLong("pendingWakeAt", now).apply()
         return true
       }
@@ -160,13 +171,22 @@ object Offline {
     try {
       cm.registerDefaultNetworkCallback(
         object : ConnectivityManager.NetworkCallback() {
+          // Sidekick's network was blocked (it starts unblocked: the first report is the state).
+          private var blocked = false
+
           override fun onCapabilitiesChanged(network: Network, caps: NetworkCapabilities) = changed()
 
           override fun onLost(network: Network) = changed()
 
-          private fun changed() {
+          override fun onBlockedStatusChanged(network: Network, isBlocked: Boolean) {
+            val unblocked = blocked && !isBlocked
+            blocked = isBlocked
+            if (unblocked) changed(unblocked = true)
+          }
+
+          private fun changed(unblocked: Boolean = false) {
             val s = state(ctx)
-            if (!shouldWake(ctx, s)) return
+            if (!shouldWake(ctx, s, unblocked)) return
             NetWorker.runNow(ctx, s)
           }
         }

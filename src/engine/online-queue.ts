@@ -439,6 +439,7 @@ export function startOnlineQueue(): () => void {
   /* eslint-disable @typescript-eslint/no-require-imports */
   const { onRoutinesChange } = require('./routines-store');
   const { getSettings, onSettingsChange } = require('./settings');
+  const { onServerReachedAgain } = require('@/web/lookup');
   /* eslint-enable @typescript-eslint/no-require-imports */
   // A page waits for Online to be switched on, not only for the internet.
   let wasOn: boolean = !!getSettings().webLookup;
@@ -452,7 +453,9 @@ export function startOnlineQueue(): () => void {
   const appState = AppState.addEventListener('change', (s) => {
     if (s === 'active') catchUp();
   });
-  const stops = [offSettings, offRoutines, () => appState.remove()];
+  // Sidekick's own network back while Android said online all along: no network change comes.
+  const offReached = onServerReachedAgain(catchUp);
+  const stops = [offSettings, offRoutines, () => appState.remove(), offReached];
   // The iPhone has no native network wake-up: its connection changes while Sidekick is open.
   if (Platform.OS === 'ios') stops.push(watchNetworkIos());
   stops.push(watchDirectionTaps());
