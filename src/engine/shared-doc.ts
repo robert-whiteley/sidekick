@@ -13,7 +13,7 @@ import * as Sharing from 'expo-sharing';
 
 import { readDeviceFile } from '@/files/device';
 import { extOf, fileType } from '@/files/kinds';
-import { type Sheet, sheetSummary, sheetText, toCsv } from '@/files/sheet';
+import { csvSheet, type Sheet, sheetSummary, sheetText, toCsv } from '@/files/sheet';
 import { DESCRIBE_PROMPT, parseDescription } from '@/memory/photo-text';
 import { addSharedFile, readPdf } from '@/memory/sources';
 import { clipText, type WebSource } from '@/web/lookup-logic';
@@ -515,6 +515,27 @@ export async function answerShared(
   if (!offRecord && a.kind !== 'selection' && !('waitingOnline' in r && r.waitingOnline))
     await rememberExchange(`${q} (about ${docLabel(a)})`, r.text).catch(() => {});
   return r;
+}
+
+/**
+ * A question with a table pasted into it (shared-doc-logic.ts pastedTable): answered like an
+ * attached spreadsheet, worked out exactly on the cells.
+ */
+export function answerPastedTable(
+  pasted: { table: string; question: string },
+  onText: (full: string) => void,
+  onStatus: (line: string) => void,
+  offRecord: boolean,
+): Promise<SharedAnswer> {
+  const sheet = csvSheet(pasted.table, 'Pasted table', false, '\t');
+  const a: Attachment = {
+    kind: 'sheet',
+    name: 'Pasted table',
+    at: Date.now(),
+    sheets: [sheet],
+    text: sheetText([sheet]),
+  };
+  return answerSheet(a, [sheet], pasted.question || 'Sum it up.', onText, onStatus, offRecord);
 }
 
 const remember = async (a: Attachment, q: string, text: string, offRecord: boolean) => {

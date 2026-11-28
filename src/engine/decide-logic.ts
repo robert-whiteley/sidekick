@@ -125,6 +125,21 @@ export function catalogSystem(tools: ToolSpec[] = DECIDE_TOOLS, lookup = true): 
   );
 }
 
+/**
+ * The sorter's prompt: the request, after the chat's last exchange when there was a recent one,
+ * so a reply such as "yes" to "I can look that up" is sorted by what it answers (the model reads
+ * it; the earlier exchange is clipped so the pass stays short).
+ */
+export function decidePrompt(question: string, previous?: { q: string; a: string }): string {
+  if (!previous) return `Request: ${question}`;
+  const clip = (t: string, n: number) => (t.length > n ? `${t.slice(0, n)}…` : t);
+  return (
+    `Earlier, for context only: I asked "${clip(previous.q, 200)}" and you replied ` +
+    `"${clip(previous.a, 240)}"
+Request: ${question}`
+  );
+}
+
 /** The sorter's one word → a decision. A tool name inside it ("stop_listening") counts. */
 export function parseClassify(text: string, tools: ToolSpec[] = DECIDE_TOOLS): Decision {
   const w = /[a-z_]+/i.exec(text.trim())?.[0]?.toLowerCase() ?? '';

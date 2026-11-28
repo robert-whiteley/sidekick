@@ -297,3 +297,36 @@ export function recordingReadyLine(name: string, lines: TranscriptLine[], totalM
   const voices = n > 1 ? `, ${n} voices` : '';
   return `"${name}" is read (${clockOf(totalMs)}${voices}) and saved to your memory. Ask me about it.`;
 }
+
+/** Tab-separated lines a pasted block needs to be read as a table (header plus two rows). */
+const PASTED_TABLE_ROWS = 3;
+
+/**
+ * A table pasted into the question (cells copied from a spreadsheet or a web page arrive as
+ * tab-separated lines) and the question around it, so it is worked out on the cells like an
+ * attached spreadsheet: sums are exact, not added up by the model. Null without such a block.
+ */
+export function pastedTable(text: string): { table: string; question: string } | null {
+  const lines = text.split(/\r?\n/);
+  const isRow = (l: string) => l.includes('\t') && l.trim().length > 0;
+  let best: [number, number] | null = null;
+  for (let i = 0; i < lines.length;) {
+    let j = i;
+    while (j < lines.length && isRow(lines[j])) j++;
+    if (j - i >= PASTED_TABLE_ROWS && (!best || j - i > best[1] - best[0])) best = [i, j];
+    i = Math.max(j, i + 1);
+  }
+  if (!best) return null;
+  const [from, to] = best;
+  // Words typed before the paste on the same line ("Total per project: <cells>") are the
+  // question, not the first header: they end at the last ": ", "? " or ". " in the first cell.
+  const first = lines[from];
+  const cell = first.slice(0, first.indexOf('\t'));
+  const m = /^(.*[:?.])\s+(\S[^:?.]*)$/.exec(cell);
+  const header = m ? first.slice(m[1].length).trimStart() : first;
+  const question = [...lines.slice(0, from), m ? m[1] : '', ...lines.slice(to)]
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .join('\n');
+  return { table: [header, ...lines.slice(from + 1, to)].join('\n'), question };
+}

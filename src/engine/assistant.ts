@@ -61,8 +61,8 @@ import { addFollowup, listFollowups } from '@/memory/followups';
 import { repeatLabel } from '@/memory/repeat-logic';
 import { personPromptContext } from '@/memory/people';
 import { queueOnline } from '@/engine/online-queue';
-import { answerAboutPage } from './shared-doc';
-import { firstUrl } from './shared-doc-logic';
+import { answerAboutPage, answerPastedTable } from './shared-doc';
+import { firstUrl, pastedTable } from './shared-doc-logic';
 import { askWithLookup, type WebSource } from '@/web/lookup';
 import { research } from '@/web/research';
 import { runPhotoEdit } from './photo-edit';
@@ -471,6 +471,14 @@ export async function answer(
     }
   }
 
+  // Cells pasted into the question (a bill, a list of figures): worked out exactly on them like
+  // an attached spreadsheet, not added up by the model.
+  const pasted = photoNow || opts?.routed ? null : pastedTable(question);
+  if (pasted) {
+    const r = await answerPastedTable(pasted, onText, status, offRecord);
+    return { text: r.text, usedPhoto: null, sources: [], ms: r.ms, ttftMs: 0 };
+  }
+
   // A link in the question ("summarise https://…"): that one page is read (Online on) and the
   // answer comes from it, with the page shown as the source; offline it waits (shared-doc.ts).
   const pageUrl = photoNow ? null : firstUrl(question);
@@ -501,7 +509,10 @@ export async function answer(
     const readBack = opts?.routine ? null : await answerReadBack(question).catch(() => null);
     if (readBack) return finishPlan(readBack);
     const draftOpen = !!drafts.latestOpen();
+    const chatNow = conversation();
+    const last = chatNow.state.turns.at(-1);
     const { decision, ms, reply } = await decideRequest(question, {
+      previous: last && chatNow.idleFor(Date.now()) < IDLE_COMPACT_MS ? last : undefined,
       draftOpen,
       photo: !!photoNow,
       pictures: pictureFilesReady(),
