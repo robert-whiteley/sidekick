@@ -51,7 +51,7 @@ const TEXT_PROMPT = 'In three sentences, explain why the sky is blue.';
 const PHOTO_PROMPT = 'What is in this photo? Answer in two sentences.';
 
 // Native setters other code may add; the speed run uses whichever exists at run time.
-// Chat-model settings the speed run compares (library defaults first).
+// Chat-model settings the speed run compares (the app's own first: 6 threads on Android).
 const LLM_TUNINGS: [string, LlmTuning][] = [
   ['default', {}],
   ['t2', { threads: 2 }],

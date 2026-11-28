@@ -172,11 +172,20 @@ export function partPrompt(question: string, label: string, i: number, n: number
   return `Part ${i + 1} of ${n} of ${label}. ${NOT_INSTRUCTIONS}\n${fence(part)}\n\nWrite brief notes from this part that help with: ${question.trim()}\nOnly what this part says. If nothing helps, write NONE.`;
 }
 
+/** The parts' notes that say something (a part with nothing on the question writes NONE). */
+export function usefulNotes(notes: string[]): { n: string; i: number }[] {
+  return notes.map((n, i) => ({ n: n.trim(), i })).filter((x) => x.n && !/^none\.?$/i.test(x.n));
+}
+
+/**
+ * When no part had anything on the question: said in code, as asking the model with no notes
+ * gave back a bare "NONE" (phone check, 28 Nov, a 6.8 MB text file).
+ */
+export const DOC_NOTHING_FOUND = 'I found nothing about that in it.';
+
 /** The answer from every part's notes. */
 export function combinePrompt(question: string, label: string, notes: string[]): string {
-  const kept = notes
-    .map((n, i) => ({ n: n.trim(), i }))
-    .filter((x) => x.n && !/^none\.?$/i.test(x.n));
+  const kept = usefulNotes(notes);
   const body = kept.length
     ? kept.map((x) => `Part ${x.i + 1}: ${x.n}`).join('\n')
     : '(no part had anything on this)';

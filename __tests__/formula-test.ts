@@ -92,6 +92,25 @@ test('add a column', () => {
   expect(() => addColumn(ctx, 'X', 'UNIQUE([Customer])')).toThrow(FormulaError);
 });
 
+test('a new column from a first-row formula is filled down, as in a spreadsheet', () => {
+  // "=B2*0.20" for VAT gave the first row's VAT in every row (phone check, 28 Nov).
+  expect(addColumn(ctx, 'VAT', '=F2*0.2').values).toEqual([0.02, 0.04, 0.9, 0.25, 0.4, 2.598]);
+  // $ keeps a row; ranges stay put (a share of the total).
+  expect(addColumn(ctx, 'x', 'E2*$F$2').values).toEqual([0.2, 0.1, 0.3, 0.5, 0.4, 0.1]);
+  expect(addColumn(ctx, 'Share', 'E2/SUM(E2:E7)').values.map((v) => Number(v).toFixed(3))).toEqual([
+    '0.125',
+    '0.063',
+    '0.188',
+    '0.313',
+    '0.250',
+    '0.063',
+  ]);
+  // [F2]: no column has that name, so it is the cell F2 (the model wrote "=[B2]*0.20").
+  expect(addColumn(ctx, 'VAT', '=[F2]*0.2').values).toEqual([0.02, 0.04, 0.9, 0.25, 0.4, 2.598]);
+  // A constant is the same in every row.
+  expect(addColumn(ctx, 'One', '1').values).toEqual([1, 1, 1, 1, 1, 1]);
+});
+
 test('plain errors for mistakes', () => {
   expect(() => parseFormula('SUM([Qty]')).toThrow(FormulaError);
   expect(() => runFormula('SUM([Nope])', ctx)).toThrow(/Nope/);
@@ -108,4 +127,17 @@ test('plain errors for mistakes', () => {
   } finally {
     FORMULA_LIMITS.steps = steps;
   }
+});
+
+test('a sheet name with a hyphen or a space works without quotes (a shared file-name.csv)', () => {
+  // The model wrote "sk-test-runs!B2:B5" for a shared sk-test-runs.csv (phone check, 28 Nov).
+  const runs = csvSheet('Date,Distance km\n2026-11-02,5.2\n2026-11-23,10.1', 'my-runs', false);
+  const two = [runs, csvSheet('A\n1\n2', 'Old data', false)];
+  const r = (f: string) => resultText(runFormula(f, { sheets: two, sheet: 0, now }));
+  expect(r('MAX(my-runs!B2:B3)')).toBe('10.1');
+  expect(r('=MAX(MY-RUNS![Distance km])')).toBe('10.1');
+  expect(r('SUM(Old data!A2:A3)')).toBe('3');
+  expect(r("SUM('Old data'!A2:A3)")).toBe('3');
+  // A minus between names is still a minus when no sheet has that name.
+  expect(run('[Qty]-[Qty]')).not.toBe('');
 });

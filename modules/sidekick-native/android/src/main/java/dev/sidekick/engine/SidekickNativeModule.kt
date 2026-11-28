@@ -605,7 +605,7 @@ class SidekickNativeModule : Module() {
 
     // Speed knobs for the bench; see LlmTuning for when each takes effect.
     Function("llmSetTuning") { t: LlmTuningRecord ->
-      llm.tuning = LlmTuning(t.threads, t.speculative, t.visualTokenBudget ?: DEFAULT_VISUAL_TOKENS, t.maxTokens, t.maxImageEdge ?: ModelImage.DEFAULT_MAX_EDGE)
+      llm.tuning = LlmTuning(t.threads ?: DEFAULT_CPU_THREADS, t.speculative, t.visualTokenBudget ?: DEFAULT_VISUAL_TOKENS, t.maxTokens, t.maxImageEdge ?: ModelImage.DEFAULT_MAX_EDGE)
       llm.resetBase()
     }
 

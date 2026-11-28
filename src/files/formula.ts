@@ -102,9 +102,17 @@ const OPS = [
   '}',
 ];
 
-function tokenize(src: string): Tok[] {
+/**
+ * [sheets]: the workbook's sheet names. One written without quotes before "!" is read even when
+ * it has characters a bare name can't ("sk-test-runs!B2:B5" for a shared sk-test-runs.csv: the
+ * model wrote that, and it failed as "sk is not a column").
+ */
+function tokenize(src: string, sheets: string[] = []): Tok[] {
   const out: Tok[] = [];
   let i = 0;
+  const named = sheets
+    .filter((n) => n && !/^[A-Za-z_][A-Za-z0-9_.]*$/.test(n))
+    .sort((x, y) => y.length - x.length);
   const s = src.trim().replace(/^=/, '').replace(/[“”]/g, '"').replace(/[‘’]/g, "'");
   while (i < s.length) {
     const c = s[i];
@@ -146,6 +154,14 @@ function tokenize(src: string): Tok[] {
       i = end + 2;
       continue;
     }
+    const sheet = named.find(
+      (n) => s[i + n.length] === '!' && s.slice(i, i + n.length).toLowerCase() === n.toLowerCase(),
+    );
+    if (sheet) {
+      out.push({ t: 'sheet', v: sheet });
+      i += sheet.length + 1;
+      continue;
+    }
     const num = /^(\d+(\.\d*)?|\.\d+)([eE][-+]?\d+)?/.exec(s.slice(i));
     if (num && !/[A-Za-z_]/.test(s[i + num[0].length] ?? '')) {
       out.push({ t: 'num', v: Number(num[0]) });
@@ -175,7 +191,7 @@ type Node =
   | { k: 'lit'; v: Scalar }
   | { k: 'name'; name: string; sheet?: string }
   | { k: 'col'; name: string; sheet?: string }
-  | { k: 'cell'; col: number; row: number; sheet?: string }
+  | { k: 'cell'; col: number; row: number; sheet?: string; rowFixed?: boolean }
   | { k: 'range'; c1: number; c2: number; r1: number | null; r2: number | null; sheet?: string }
   | { k: 'call'; name: string; args: Node[] }
   | { k: 'un'; op: string; a: Node }
@@ -339,7 +355,13 @@ class Parser {
       throw new FormulaError(`"${id}:${other}" is not a range (use C:C or A2:C10)`);
     }
     if (cell)
-      return { k: 'cell', col: colIndex(cell[1]), row: Number(cell[2]) - 1, name: id } as Node;
+      return {
+        k: 'cell',
+        col: colIndex(cell[1]),
+        row: Number(cell[2]) - 1,
+        name: id,
+        rowFixed: /\$\d/.test(id),
+      } as Node;
     return { k: 'name', name: id };
   }
   arrayLit(): Node {
@@ -363,9 +385,9 @@ class Parser {
   }
 }
 
-export function parseFormula(src: string): Node {
+export function parseFormula(src: string, sheets: string[] = []): Node {
   if (src.length > FORMULA_LIMITS.length) throw new FormulaError('the formula is too long');
-  const toks = tokenize(src);
+  const toks = tokenize(src, sheets);
   if (!toks.length) throw new FormulaError('the formula is empty');
   return new Parser(toks).parse();
 }
@@ -2070,7 +2092,55 @@ export type FormulaResult = { value: Value; formula: string };
 
 /** Works out [formula] on [ctx]'s sheets. Throws FormulaError with a plain reason. */
 export function runFormula(formula: string, ctx: FormulaContext): Value {
-  const tree = parseFormula(formula);
+  return evaluateTree(parseFor(formula, ctx), ctx);
+}
+
+/** [formula] parsed for [ctx]'s workbook. */
+function parseFor(formula: string, ctx: FormulaContext): Node {
+  return cellsInBrackets(
+    parseFormula(
+      formula,
+      ctx.sheets.map((x) => x.name),
+    ),
+    ctx,
+  );
+}
+
+/**
+ * "[B2]" where no column has that name: the cell B2 (the model wrote "=[B2]*0.20" for a VAT
+ * column, phone check 28 Nov). A real column of that name still wins.
+ */
+function cellsInBrackets(n: Node, ctx: FormulaContext): Node {
+  switch (n.k) {
+    case 'col': {
+      const cell = CELL.exec(n.name);
+      if (!cell) return n;
+      const i = n.sheet
+        ? ctx.sheets.findIndex((x) => x.name.toLowerCase() === n.sheet!.toLowerCase())
+        : ctx.sheet;
+      if (i < 0 || findColumn(tableOf(ctx.sheets[i]), n.name) >= 0) return n;
+      return {
+        k: 'cell',
+        col: colIndex(cell[1]),
+        row: Number(cell[2]) - 1,
+        sheet: n.sheet,
+        rowFixed: /\$\d/.test(n.name),
+      };
+    }
+    case 'call':
+      return { ...n, args: n.args.map((a) => cellsInBrackets(a, ctx)) };
+    case 'un':
+      return { ...n, a: cellsInBrackets(n.a, ctx) };
+    case 'bin':
+      return { ...n, a: cellsInBrackets(n.a, ctx), b: cellsInBrackets(n.b, ctx) };
+    case 'array':
+      return { ...n, rows: n.rows.map((r) => r.map((x) => cellsInBrackets(x, ctx))) };
+    default:
+      return n;
+  }
+}
+
+function evaluateTree(tree: Node, ctx: FormulaContext): Value {
   const env: Env = {
     ctx,
     tables: new Map(),
@@ -2123,6 +2193,45 @@ export function resultError(v: Value): string | null {
   return `${s.code}${s.why ? `: ${s.why}` : ''}`;
 }
 
+/** A single cell with no $ before its row (B2, $B2): it moves with the row when filled down. */
+function hasMovingCell(n: Node): boolean {
+  switch (n.k) {
+    case 'cell':
+      return !n.rowFixed;
+    case 'call':
+      return n.args.some(hasMovingCell);
+    case 'un':
+      return hasMovingCell(n.a);
+    case 'bin':
+      return hasMovingCell(n.a) || hasMovingCell(n.b);
+    case 'array':
+      return n.rows.some((r) => r.some(hasMovingCell));
+    default:
+      return false;
+  }
+}
+
+/**
+ * [n] for the row [d] below: single cells move, ranges stay (they are totals and lookups, like
+ * SUM(B2:B5), which a model rarely writes with $).
+ */
+function fillDown(n: Node, d: number): Node {
+  switch (n.k) {
+    case 'cell':
+      return n.rowFixed ? n : { ...n, row: n.row + d };
+    case 'call':
+      return { ...n, args: n.args.map((a) => fillDown(a, d)) };
+    case 'un':
+      return { ...n, a: fillDown(n.a, d) };
+    case 'bin':
+      return { ...n, a: fillDown(n.a, d), b: fillDown(n.b, d) };
+    case 'array':
+      return { ...n, rows: n.rows.map((r) => r.map((x) => fillDown(x, d))) };
+    default:
+      return n;
+  }
+}
+
 /**
  * The sheet with a new column [name] holding the formula's result: one value per data row (or
  * the same value in every row). Throws FormulaError when the result doesn't fit.
@@ -2132,12 +2241,21 @@ export function addColumn(
   name: string,
   formula: string,
 ): { sheet: Sheet; col: number; values: Scalar[] } {
-  const v = runFormula(formula, ctx);
+  const tree = parseFor(formula, ctx);
+  const v = evaluateTree(tree, ctx);
   const sheet = ctx.sheets[ctx.sheet];
   const t = tableOf(sheet);
   const n = sheet.rows.length - t.first;
   let values: Scalar[];
-  if (v instanceof Arr) {
+  const one = !(v instanceof Arr) || (v.rows === 1 && v.cols === 1);
+  if (one && hasMovingCell(tree)) {
+    // "=B2*0.2" is written for the first row and filled down, as in a spreadsheet: it gave the
+    // first row's VAT in every row (phone check, 28 Nov).
+    values = Array.from({ length: n }, (_, i) => {
+      const r = i ? evaluateTree(fillDown(tree, i), ctx) : v;
+      return r instanceof Arr ? r.at(0, 0) : (r as Scalar);
+    });
+  } else if (v instanceof Arr) {
     if (v.cols !== 1 || (v.rows !== n && v.rows !== 1))
       throw new FormulaError(
         `a new column needs one value per row (${n} rows), and this gives ${v.rows} × ${v.cols}`,

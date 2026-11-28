@@ -1,10 +1,13 @@
 import { exchangeToMessages } from '@/features/ask/chat-logic';
-import { pictureAllowed } from '@/engine/picture';
+import { makePicture, pictureAllowed } from '@/engine/picture';
+import SidekickNative from '../modules/sidekick-native';
 import { brushDots, fitRect, toPhoto } from '@/features/erase/erase-logic';
 import { ERASE_FILE, PICTURE_FILES, UPSCALE_FILE } from '@/engine/models';
 import { editCall, editModel, editReply, upscaleRefusal } from '@/engine/photo-edit-logic';
 import { NOT_IN_ROUTINES, validateCall } from '@/engine/tools-logic';
 import {
+  PICTURE_BLOCKED,
+  PICTURE_STOPPED,
   pictureCheckAllows,
   pictureCheckPrompt,
   pictureOffer,
@@ -41,11 +44,47 @@ describe('content rule: the model judges what Google Play requires (no word list
 });
 
 const mockAsk = jest.fn();
+let mockStopped = false;
 jest.mock('../modules/sidekick-native', () => ({ __esModule: true, default: {} }));
 jest.mock('@/engine/llm', () => ({
   askLlm: (...a: unknown[]) => mockAsk(...a),
+  answerStopped: () => mockStopped,
   unloadLlm: jest.fn(),
 }));
+jest.mock('@/engine/downloads', () => ({
+  downloadFile: jest.fn(),
+  isDownloaded: () => true,
+  modelPath: (f: { name?: string }) => `/m/${f.name ?? 'x'}`,
+  wifiOnlyDownloads: () => true,
+}));
+
+describe('makePicture and Stop', () => {
+  const native = SidekickNative as unknown as Record<string, unknown>;
+  beforeEach(() => {
+    native.pictureMake = jest.fn();
+    native.pictureSupported = () => true;
+    mockStopped = false;
+  });
+  afterEach(() => {
+    delete native.pictureMake;
+    delete native.pictureSupported;
+  });
+  test('Stop during the check is a stop, not a blocked picture', async () => {
+    // A stopped check has no reply, which on its own reads as refused.
+    mockAsk.mockImplementationOnce(async () => {
+      mockStopped = true;
+      return { text: '' };
+    });
+    const r = await makePicture('draw a lighthouse at sunset', 'a lighthouse at sunset', () => {});
+    expect(r.text).toBe(PICTURE_STOPPED);
+    expect(native.pictureMake).not.toHaveBeenCalled();
+  });
+  test('a refused check without a stop is still blocked', async () => {
+    mockAsk.mockResolvedValueOnce({ text: 'yes' });
+    const r = await makePicture('draw it', 'something', () => {});
+    expect(r.text).toBe(PICTURE_BLOCKED);
+  });
+});
 
 describe('pictureAllowed asks the model (mocked)', () => {
   test.each([

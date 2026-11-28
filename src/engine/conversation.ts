@@ -5,6 +5,8 @@
  * holds that summary plus the last turns word for word. Pure logic; tested.
  */
 
+import { withAnswerStyle } from './prompts';
+
 /** How long after Sidekick stops talking a new question still counts as a spoken follow-up (Turns.kt). */
 export const FOLLOW_UP_MS = 8000;
 /** No question for this long: the older turns are compacted. */
@@ -97,16 +99,18 @@ export function isNaturalEnd(text: string): boolean {
 export type CompactReason = 'size' | 'idle' | 'end';
 
 /** The model's system prompt for a fresh chat: the usual one plus what came before. */
-export function chatSystem(base: string, state: ChatState): string {
+export function chatSystem(base: string, state: ChatState, style?: string): string {
   const recent = state.turns.slice(-KEEP_VERBATIM);
-  if (!state.summary && !recent.length) return base;
+  if (!state.summary && !recent.length) return withAnswerStyle(base, style);
   let s = `${base}\n\nThis is one continuing conversation with the user.`;
   if (state.summary) s += `\nEarlier in it (summary): ${state.summary}`;
   if (recent.length) {
     s += '\nThe last exchanges, word for word:';
     for (const t of recent) s += `\nUser: ${t.q}\nYou: ${t.a}`;
   }
-  return s;
+  // The owner's "How Sidekick answers" goes last: before the exchanges, the model copied its own
+  // earlier answers instead (a name was used in 1 of 6 answers, 4 of 6 when last; Gemma 4 E2B).
+  return withAnswerStyle(s, style);
 }
 
 export const SUMMARY_SYSTEM =
@@ -294,6 +298,7 @@ export async function compact(
   conv: Conversation,
   deps: CompactDeps,
   base: string,
+  style?: string,
 ): Promise<boolean> {
   if (conv.compacting) return false;
   conv.compacting = true;
@@ -309,7 +314,7 @@ export async function compact(
     }
     conv.compacted(summary, older.length);
     deps.save(conv.state);
-    deps.prepare?.(chatSystem(base, conv.state));
+    deps.prepare?.(chatSystem(base, conv.state, style));
     return true;
   } catch (e) {
     console.log(`[chat] compaction failed: ${String(e)}`);

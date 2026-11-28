@@ -535,8 +535,11 @@ Edit / Try again, "How Sidekick answers", formatted answers, private facts kept 
   - "How Sidekick answers" = "Call me Captain Nemo and use metric units": two answers in
     kilometres and minutes, but neither used the name. The same prompt on the laptop (no chat
     history, no memory notes) used it in 3 of 4; on the phone the chat restarts from its
-    summary and last turns and had 4 memory notes in each prompt. Not solved; the box was emptied
-    again afterwards.
+    summary and last turns and had 4 memory notes in each prompt. The box was emptied again
+    afterwards. **Fixed on the laptop (27 Nov):** the owner's text sat before the conversation in
+    the chat's instructions, and with 4 earlier exchanges in there the model copied its own
+    earlier answers: the name in 1 of 6 answers. With the text last, after the exchanges: 4 of 6
+    (no history: 3 of 4). Not yet checked on the phone.
   - `run=facts`: **fixed, the owner's private facts were kept.** The model suggested all 5 private
     owner facts (a diagnosis, a vote, a debt, a mosque, a boyfriend) as facts to remember, because only the person-fact
     path had a privacy check. Owner suggestions now go through the same check
@@ -634,6 +637,15 @@ fun fact", "at 5pm give me a summary", "every Monday at 8 tell me the weather") 
 off the camera" to phone settings, "tell me when you see a bus" to routine, talk about the alarm
 or the weather on Mars as a tool, and "turn the volume down" fills `{"volume": "down"}`.
 
+**The call line (laptop, 27 Nov, same Gemma file, 211 cases: the 198 above plus 13 on talking to
+someone in another language and on phoning):** "I need to talk to a shop assistant who speaks
+Japanese" went to **call** ("phone someone"), and the call tool then asked Android for contacts
+access. Now "ring someone on the phone (a phone call)": all 13 extra cases right (the shop
+assistant now goes to translate), 188/211 overall against 189 before (the other misses moved
+between alarm, reminder and event). Also tried: saying in the call line that another language is
+translate (13/13 extras, but more misses elsewhere), and a longer translate line (188/211).
+Not yet checked on the phone.
+
 ### Thinking
 
 Gemma 4's thinking mode (`thinkingBudget` per turn: off, a token budget, or -1 for no limit) is
@@ -729,7 +741,10 @@ peak memory. Decision and details in [ADR 10](decisions/0010-litert-lm-0.20.md).
   throughout (3.31 / 3.86 GB) because the speech and memory-search models from the end of run 2
   were still loaded, not because of the runtime. 6 threads beat the library default on every
   measure in all three runs (load 6.7 s, text first word 1.45 s, photo 2.85 s); 2 threads were
-  slowest. Fewer image tokens (70) halve the photo's first word (1.8 s). The "spec" variant
+  slowest. **The app now uses 6 threads on Android** (`DEFAULT_CPU_THREADS`, at most the phone's
+  cores). Peak app memory in the 4- and 6-thread passes was the same (3.02 / 3.04 GB in run 2,
+  3.84 / 3.85 GB in run 3). Heat was not measured per setting: a check on the phone is still due.
+  iPhone keeps the library default (not measured). Fewer image tokens (70) halve the photo's first word (1.8 s). The "spec" variant
   (speculative decoding) fails on 0.20.0 with `INVALID_ARGUMENT: Visual token budget`; the app
   does not use it. Speech: first file 10.3 s (model load), then 1.6–1.8 s for 7.4 s of audio;
   voiceprint 0.55 s; memory search load 1.7 s, 255 ms per item.
