@@ -86,7 +86,11 @@ home() {
 }
 
 # ---------- the app's log ----------
-answers() { grep -acE '\[ask\] (text|photo|stopped|failed)' "$LOGS/app.log" 2>/dev/null || echo 0; }
+answers() {
+  local n
+  n=$(grep -acE '\[ask\] (text|photo|stopped|failed)' "$LOGS/app.log" 2>/dev/null)
+  echo "${n:-0}"
+}
 # wait_answers <count> [<seconds>]: until that many answers have finished since the run began.
 wait_answers() {
   local end=$((SECONDS + ${2:-$SLOW}))
