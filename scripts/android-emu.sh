@@ -143,7 +143,7 @@ share() {
 
 # ---------- flows ----------
 FLOWS=(first_run interpreter_closed pasted_table file_types recording_play settings_by_voice
-  offline_queue folder_search send_queue delete_confirm)
+  web_no offline_queue folder_search send_queue delete_confirm screens decide)
 
 flow_first_run() {
   A shell monkey -p "$PKG" -c android.intent.category.LAUNCHER 1 >/dev/null 2>&1
@@ -229,6 +229,26 @@ flow_settings_by_voice() {
   wait_for 'Done: turn on online lookup|is now on' 60
 }
 
+flow_web_no() {
+  # With Online off, each answer is followed by the short WEB/NO check (does this need the web?);
+  # it must finish and log its result for every question.
+  tap '^Online: .*Tap to go offline' || return 1
+  wait_for '^Offline' 30 || return 1
+  local q fail=0 n
+  for q in 'Who won the 2026 Tour de France?' 'What is 17 times 23?' 'What did I do yesterday?'; do
+    n=$(grep -ac 'offline answer' "$LOGS/app.log")
+    ask "$q" || { fail=1; continue; }
+    local end=$((SECONDS + 120))
+    until [ "$(grep -ac 'offline answer' "$LOGS/app.log")" -gt "$n" ]; do
+      [ $SECONDS -ge $end ] && { note "no WEB/NO result after: $q"; fail=1; break; }
+      sleep 3
+    done
+  done
+  keyboard_down
+  tap '^Offline' && wait_for '^Online: ' 30 || fail=1
+  return $fail
+}
+
 flow_offline_queue() {
   # Airplane mode, as on a phone: the app goes by the system's network state.
   A shell cmd connectivity airplane-mode enable
@@ -298,6 +318,45 @@ flow_delete_confirm() {
   keyboard_down
   tap '^Delete$' || return 1
   wait_gone 'Type DELETE to confirm' 60
+}
+
+flow_screens() {
+  # Every settings and app page, opened by link: a screenshot and the text of each; fails when a
+  # page doesn't open in Sidekick or shows nothing.
+  local p fail=0
+  for p in settings settings/assistant settings/features settings/models settings/phone-search \
+    settings/pictures settings/privacy settings/routines settings/camera settings/advanced \
+    settings/connections about storage memory whats-new; do
+    A shell "am start -a android.intent.action.VIEW -d 'sidekick://$p'" >/dev/null
+    sleep 4
+    local name=screen-${p//\//-}
+    shot "$name"
+    texts >"$LOGS/$name.txt" 2>/dev/null
+    if ! A shell dumpsys window | grep -a 'mCurrentFocus' | grep -q "$PKG" ||
+      [ "$(grep -c . "$LOGS/$name.txt")" -lt 3 ]; then
+      note "page $p did not open"
+      fail=1
+    fi
+  done
+  home
+  return $fail
+}
+
+flow_decide() {
+  # The decide bench (every routing item in src/engine/decide-bench.ts) with the app's prompt:
+  # each item's result goes to decide.jsonl and the score to results.txt. Fails only when the
+  # bench doesn't finish; the score is for reading, as on a phone.
+  local n
+  n=$(grep -ac '\[bench\] decide done' "$LOGS/app.log")
+  bench 'run=decide&variant=app'
+  local end=$((SECONDS + 7000))
+  until [ "$(grep -ac '\[bench\] decide done' "$LOGS/app.log")" -gt "$n" ]; do
+    logged 'decide failed' && { note 'the decide bench failed'; return 1; }
+    [ $SECONDS -ge $end ] && { note 'the decide bench did not finish'; return 1; }
+    sleep 20
+  done
+  grep -ao '\[decide\] {.*' "$LOGS/app.log" | cut -c10- >"$LOGS/decide.jsonl"
+  grep -ao '\[decide\] summary .*' "$LOGS/app.log" | tail -1 | tee -a "$LOGS/results.txt"
 }
 
 # ---------- commands ----------
