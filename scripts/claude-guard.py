@@ -287,14 +287,14 @@ def check_phone_shell(w):
 
 
 def check_command(cmd, cwd, roots):
-    check_written(redirect_targets(cmd), cwd)
+    check_written(redirect_targets(cmd), cwd, cmd)
     todo = segments(cmd)
     while todo:
         w = todo.pop(0)
         todo.extend(inner_shells(w))
         if prog(w) in ('bash', 'sh', 'zsh', 'dash') and '-c' in w and w.index('-c') + 1 < len(w):
-            check_written(redirect_targets(w[w.index('-c') + 1]), cwd)
-        check_written(write_targets(cmd, w), cwd)
+            check_written(redirect_targets(w[w.index('-c') + 1]), cwd, cmd)
+        check_written(write_targets(cmd, w), cwd, cmd)
         p = prog(w)
         if p in ('bash', 'sh', 'zsh', 'dash', 'source', '.') and len(w) > 1 and not w[1].startswith('-'):
             todo.append(w[1:])  # bash scripts/release.sh ...
@@ -327,22 +327,26 @@ def project_root_of(path):
     return None
 
 
-NOTE_FIX = ('make it a check script, a test or a hook that runs silently instead; if it truly '
-            'cannot be one, tell the owner why and let them decide')
+NOTE_FIX = 'make it a check script, a test or a hook that runs silently instead'
+REASON = re.compile(r'not a script because:[ \t]*\S.{8,}', re.I)
 
 
 def claude_home():
     return os.path.realpath(os.path.expanduser(os.environ.get('CLAUDE_CONFIG_DIR') or '~/.claude'))
 
 
-def check_instruction_file(path):
-    """Notes Claude would load in later sessions (rule files, Claude's memory): never written by Claude."""
+def check_instruction_file(path, text=''):
+    """Notes Claude would load in later sessions. In the repo: never. Claude's own memory and
+    instruction files: only with a line saying why it can't be a script (Claude checks itself)."""
     path = os.path.realpath(path)
     home = claude_home()
     if path.startswith(home + '/'):
         rel = os.path.relpath(path, home)
-        if re.match(r'^projects/[^/]+/memory/', rel) or rel in RULE_FILES or rel.startswith('rules/'):
-            ask(f"Writes Claude's own notes ({rel}): {NOTE_FIX}.")
+        notes = re.match(r'^projects/[^/]+/memory/', rel) or rel in RULE_FILES or rel.startswith('rules/')
+        if notes and not REASON.search(text or ''):
+            deny(f"A note for later sessions ({rel}): first check whether it can be a silent script, "
+                 f"test or hook, and if so {NOTE_FIX}. If it truly can't, put a line "
+                 "'Not a script because: <reason>' in what you write.")
         return
     if not project_root_of(path):
         return  # outside the app (e.g. the owner's own files)
@@ -379,17 +383,17 @@ def redirect_targets(cmd):
     return out
 
 
-def check_written(targets, cwd):
+def check_written(targets, cwd, text=''):
     for t in targets:
         if any(c in t for c in '$`'):
             continue  # variables: can't tell statically
-        check_instruction_file(os.path.join(cwd, os.path.expanduser(t)))
+        check_instruction_file(os.path.join(cwd, os.path.expanduser(t)), text)
 
 
-def check_edit(path):
+def check_edit(path, text=''):
     if not path:
         return
-    check_instruction_file(path)
+    check_instruction_file(path, text)
     root = project_root_of(path)
     if not root:
         return
@@ -416,7 +420,9 @@ def main():
                 roots.append(os.path.realpath(top))
             check_command(inp.get('command', ''), cwd, roots)
         elif tool in ('Write', 'Edit', 'MultiEdit', 'NotebookEdit'):
-            check_edit(inp.get('file_path') or inp.get('notebook_path') or '')
+            text = inp.get('content') or inp.get('new_string') or inp.get('new_source') or ''
+            text += ''.join(e.get('new_string', '') for e in inp.get('edits') or [] if isinstance(e, dict))
+            check_edit(inp.get('file_path') or inp.get('notebook_path') or '', text)
     except Verdict as v:
         if v.kind == 'deny':
             print('Blocked: ' + v.reason, file=sys.stderr)
