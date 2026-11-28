@@ -327,7 +327,8 @@ class SidekickNativeModule : Module() {
     Function("interpretListen") { _: String -> MicLoop.startPtt(context, partials = false) }
 
     // Ends it and transcribes with the side's model: "main" (the usual speech-to-text, for the
-    // owner's English), "parakeet" (v3 folder) or "whisper" (folder + language).
+    // owner's English), "parakeet" (v3 folder), "nemo_ctc" (Parakeet ja folder), "dolphin"
+    // (Dolphin folder) or "whisper" (folder + language).
     AsyncFunction("interpretHeard") { kind: String, dir: String, language: String ->
       val audio = MicLoop.stopPtt()
       if (audio.size < SAMPLE_RATE / 4) return@AsyncFunction ""

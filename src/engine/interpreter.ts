@@ -18,6 +18,8 @@ import {
   type InterpretTurn,
   parseTurnReply,
   partialTranslation,
+  STT_DIRS,
+  sttEngine,
   TURN_MAX_TOKENS,
   turnPrompt,
 } from './interpreter-logic';
@@ -35,14 +37,15 @@ import { getSettings, updateSettings } from './settings';
  * Sidekick instead (stop, change language). The screen is src/features/interpreter.
  *
  * Speech-to-text, Android: the owner's English uses the usual model; the other person's language
- * uses Parakeet v3 (25 European languages) or Whisper small (the others), each downloaded the
- * first time it is needed. iPhone: Apple's on-device speech in that language.
+ * uses Parakeet v3 (25 European languages), Parakeet ja (Japanese), Dolphin small (Arabic) or
+ * Whisper small (the others), each downloaded the first time it is needed. iPhone: Apple's
+ * on-device speech in that language.
  */
 
 /** Whisper small (MIT), the int8 files of the sherpa-onnx export, pinned to a commit. */
 const WHISPER =
   'https://huggingface.co/csukuangfj/sherpa-onnx-whisper-small/resolve/8f3c18b358db4d1f2fc1eae49d75cd20989e4309';
-export const WHISPER_DIR = 'sherpa-onnx-whisper-small';
+export const WHISPER_DIR = STT_DIRS.whisper;
 export const WHISPER_FILES: ModelFile[] = [
   {
     name: `${WHISPER_DIR}/small-encoder.int8.onnx`,
@@ -64,12 +67,55 @@ export const WHISPER_FILES: ModelFile[] = [
   },
 ];
 
-const PARAKEET_V3_DIR = 'sherpa-onnx-nemo-parakeet-tdt-0.6b-v3-int8';
+/**
+ * Parakeet TDT-CTC 0.6B ja (NVIDIA, CC BY 4.0; trained on ReazonSpeech), the int8 CTC export
+ * by sherpa-onnx, pinned to a commit. Japanese only.
+ */
+const PARAKEET_JA =
+  'https://huggingface.co/csukuangfj/sherpa-onnx-nemo-parakeet-tdt_ctc-0.6b-ja-35000-int8/resolve/bef18eb066808c90bd0f5df5be685767b0732de8';
+export const PARAKEET_JA_FILES: ModelFile[] = [
+  {
+    name: `${STT_DIRS['parakeet-ja']}/model.int8.onnx`,
+    url: `${PARAKEET_JA}/model.int8.onnx`,
+    sha256: '3addd00ef5bd1742078389e540b77394e4a508bdf2f4c9ad1b4a76d93e76598e',
+    bytes: 655542604,
+  },
+  {
+    name: `${STT_DIRS['parakeet-ja']}/tokens.txt`,
+    url: `${PARAKEET_JA}/tokens.txt`,
+    sha256: '732f64c53909f2620c713f4106b487d92e6f54a6915b3cd3d1dbd32f9f4f392a',
+    bytes: 28557,
+  },
+];
+
+/**
+ * Dolphin small (DataoceanAI, Apache-2.0), the int8 CTC export by sherpa-onnx, pinned to a
+ * commit. Used for Arabic (it also covers other Asian languages, not measured yet).
+ */
+const DOLPHIN =
+  'https://huggingface.co/csukuangfj/sherpa-onnx-dolphin-small-ctc-multi-lang-int8-2025-04-02/resolve/c8b6689509acfcd744c04e5e169164f9ac4cae32';
+export const DOLPHIN_FILES: ModelFile[] = [
+  {
+    name: `${STT_DIRS.dolphin}/model.int8.onnx`,
+    url: `${DOLPHIN}/model.int8.onnx`,
+    sha256: 'c1afcb9265de0ebd853eb8f570b371f399a6f9b2b9af9a3cb17c2e509171e697',
+    bytes: 249658954,
+  },
+  {
+    name: `${STT_DIRS.dolphin}/tokens.txt`,
+    url: `${DOLPHIN}/tokens.txt`,
+    sha256: 'c3788261a51df1899ea4b210b552cd42139204de72c0ad60f6cebb199078872e',
+    bytes: 504662,
+  },
+];
 
 /** Files the other person's language needs on this phone (none on iPhone). */
 export function sttFilesFor(l: InterpretLanguage): ModelFile[] {
   if (Platform.OS !== 'android' || l.code === 'en') return [];
-  return l.stt === 'whisper' ? WHISPER_FILES : [MODEL_FILES.speechToTextMulti];
+  if (l.stt === 'whisper') return WHISPER_FILES;
+  if (l.stt === 'parakeet-ja') return PARAKEET_JA_FILES;
+  if (l.stt === 'dolphin') return DOLPHIN_FILES;
+  return [MODEL_FILES.speechToTextMulti];
 }
 
 export const sttBytes = (l: InterpretLanguage) => sttFilesFor(l).reduce((n, f) => n + f.bytes, 0);
@@ -271,13 +317,7 @@ export async function finishTurn() {
   const from = langOf(side);
   let heard = '';
   try {
-    const kind =
-      Platform.OS !== 'android' || from.code === 'en'
-        ? 'main'
-        : from.stt === 'whisper'
-          ? 'whisper'
-          : 'parakeet';
-    const dir = kind === 'whisper' ? WHISPER_DIR : kind === 'parakeet' ? PARAKEET_V3_DIR : '';
+    const { kind, dir } = Platform.OS !== 'android' ? { kind: 'main', dir: '' } : sttEngine(from);
     heard = ((await SidekickNative.interpretHeard?.(kind, dir, from.code)) ?? '').trim();
   } catch (e) {
     set({

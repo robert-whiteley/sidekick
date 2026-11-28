@@ -216,15 +216,32 @@ Read this before proposing any of these again. Each line says why.
   Opus-MT / Helsinki models (CC BY 4.0 weights but per-pair Marian builds and weaker than
   Bergamot), Google ML Kit translation (closed source, Google Play services), slimt (GPL-2.0),
   MADLAD-400 (too big for 4 GB phones).
-- Speech: European languages with Parakeet v3 (already in the app), the others with Whisper
-  small (MIT, 375 MB). Rejected: Moonshine non-English models (community licence with a revenue
-  cap), SenseVoice (FunASR model licence, attribution and use terms; only 5 languages), Whisper
-  base (twice the errors of small in every language measured), Whisper large / turbo (too big
-  and slow for a Pixel 5 CPU).
-- Japanese speech recognition is not verified: all three models (Whisper small / base,
-  SenseVoice) failed on the bench's generated Japanese voice (63–112% characters wrong), which
-  points at the made-up audio (Kokoro's Japanese voice) rather than the models; needs a real
-  speaker. Arabic and the other non-European languages: translation measured, hearing not.
+- Speech: European languages with Parakeet v3 (already in the app); Japanese with Parakeet
+  TDT-CTC 0.6B ja (CC BY 4.0, 656 MB); Arabic with Dolphin small (Apache-2.0, 250 MB); the
+  others with Whisper small (MIT, 375 MB).
+  - Rejected:
+    - Moonshine non-English models (community licence with registration and a revenue cap);
+    - SenseVoice / Paraformer (FunASR model licence: "for reference and learning purposes only");
+    - Whisper base (twice the errors of small in every language measured);
+    - Whisper large / turbo and kotoba-whisper (4.7 s a line on the laptop, over 2 GB; too slow
+      for a Pixel 5 CPU);
+    - ReazonSpeech k2 and Dolphin for Japanese (more errors than Parakeet ja on clean and room
+      speech).
+- Japanese and Arabic hearing (28 Nov, laptop, BENCH "Speech for Japanese"):
+  - The earlier "not verified" was the bench's audio: its Japanese went through espeak, which
+    reads kanji as Chinese. That audio was also what the phone was played.
+  - With real Japanese TTS and FLEURS read speech, Whisper small is fine in quiet but makes up
+    text in noise.
+  - Parakeet ja: FLEURS 10.5 / 11.1 / 14.6% characters wrong clean / room / babble, against
+    16.4 / 22.9 / 37.0 for Whisper small, and 4× faster.
+  - Dolphin small for Arabic: 28.4 / 37.5 / 59.1% words wrong against 31.3 / 46.1 / 62.3, and 9×
+    faster.
+  - Not yet on the phone. The other non-European languages: hearing not measured.
+- Parakeet v3 in babble (four voices at 10 dB) often writes English instead of the European
+  language spoken (German FLEURS 94% words wrong, Whisper small 60%). It can't be told the
+  language. Later: a model that takes the language (Canary-1b-v2 covers the same 25 languages,
+  CC BY 4.0, but is 1B parameters), or re-hearing a turn with Whisper small when the text
+  comes back in the wrong language.
 - The owner talking to Sidekick mid-conversation: decided by the model in the same reply as the
   translation (`SIDEKICK: NO / END / LANGUAGE: <language>` before `SAY:`), with no word list.
   Asked as "is the owner giving you, the interpreter, an instruction about the
@@ -270,9 +287,10 @@ Read this before proposing any of these again. Each line says why.
 - Speech model trade-off: v3 is worse in English (2.9% → 3.8% words wrong in quiet, 7.2% → 17.9%
   at 5 dB noise, laptop, 73 LibriSpeech clips), so English users keep v2. Auto-detecting the
   spoken language (one model for everyone) needs v3 or a language-ID model in front of v2.
-- No commercial-safe on-device speech model checked for: Chinese, Japanese, Korean, Arabic, Hindi
-  and other Indian languages, Turkish, Norwegian, Hebrew, Thai, Vietnamese, Indonesian. (The
-  interpreter uses Whisper small (MIT) for these; see "Interpreter".)
+- No commercial-safe on-device speech model checked for: Chinese, Korean, Hindi and other Indian
+  languages, Turkish, Norwegian, Hebrew, Thai, Vietnamese, Indonesian. The interpreter uses
+  Whisper small (MIT) for these, Parakeet ja for Japanese and Dolphin small for Arabic; see
+  "Interpreter".
 
 ## Break-it test leftovers (25 Nov, Pixel 5; details in docs/LIMITS.md)
 
