@@ -7,6 +7,7 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
+import android.os.Build
 import android.provider.AlarmClock
 import androidx.core.content.ContextCompat
 
@@ -56,6 +57,16 @@ object Intents {
       .putExtra(AlarmClock.EXTRA_SKIP_UI, true)
     if (label.isNotBlank()) i.putExtra(AlarmClock.EXTRA_MESSAGE, label)
     return start(ctx, activity, i)
+  }
+
+  /**
+   * "Cancel the timer": Android has no intent to cancel a running timer, only to dismiss ringing
+   * ones (API 28+, a no-op when none rings), so the Clock's timers are opened after it.
+   */
+  fun cancelTimer(ctx: Context, activity: Activity?): Boolean {
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P)
+      start(ctx, activity, Intent(AlarmClock.ACTION_DISMISS_TIMER))
+    return start(ctx, activity, Intent(AlarmClock.ACTION_SHOW_TIMERS))
   }
 
   fun call(ctx: Context, activity: Activity?, number: String, direct: Boolean): Boolean {

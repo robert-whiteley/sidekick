@@ -44,9 +44,9 @@ describe('the retry after a refused call', () => {
     expect(requiredExample(toolByName('phone_setting')!)).toBe('{"setting": "torch"}');
     expect(requiredExample(toolByName('message')!)).toMatch(/^\{"to": "\.\.\.", "\w+": /);
   });
-  it('says what the media choices mean, so "skip" is next', () => {
+  it('offers skip for the next song ("Skip this song" got {"none": true} with next)', () => {
     expect(fillPrompt('skip this song', new Date(2026, 10, 28), toolByName('media')!)).toContain(
-      'next skips to the next track',
+      'skip goes to the next song',
     );
   });
 });

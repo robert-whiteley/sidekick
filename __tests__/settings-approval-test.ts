@@ -212,6 +212,14 @@ describe('normal changes', () => {
     expect(said).toMatch(/^Privacy settings: /);
     expect(said).toMatch(/Online lookup: off/);
   });
+
+  it('a group of settings says each one, and asks which to change', async () => {
+    const said = await appSettingTool({ do: 'get', setting: 'keep_periods' });
+    expect(said.split('; ').length).toBeGreaterThan(1);
+    expect(await appSettingTool({ do: 'set', setting: 'keep_periods', value: '30' })).toMatch(
+      /^Which one\? /,
+    );
+  });
 });
 
 it('on iPhone, Android-only settings say so', async () => {

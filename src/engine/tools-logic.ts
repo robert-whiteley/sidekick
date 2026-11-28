@@ -11,7 +11,7 @@
  * read-back, and the same prompt works on every backend and on the iPhone.
  */
 
-import { SETTING_IDS, SETTING_OPS } from './settings-registry';
+import { SETTING_GROUPS, SETTING_IDS, SETTING_OPS } from './settings-registry';
 
 export type ArgType = 'string' | 'number' | 'boolean' | 'datetime';
 
@@ -109,16 +109,22 @@ export const PICTURE_TOOL: ToolSpec = {
 export const SHEET_TOOL: ToolSpec = {
   name: 'query_sheet',
   desc:
-    'work out the answer from the attached spreadsheet with one Excel formula: totals, ' +
-    'averages, counts, with conditions, per group, percentages, date differences, lookups, ' +
-    'ranking, running totals, lists of matching rows; or a new column. Not for reading or ' +
-    'summarising its text',
+    'work out the answer from the attached spreadsheet: one result for each team, month or ' +
+    'other group with group_by; anything else with one Excel formula (totals, averages, ' +
+    'counts, with conditions, percentages, date differences, lookups, ranking, running totals, ' +
+    'lists of matching rows, or a new column). Not for reading or summarising its text',
   kind: 'info',
   args: {
-    formula: req(
-      'one Excel formula; columns by header in brackets like [Amount], or letters like C:C; ' +
-        "other sheets 'Name'!A:C",
+    formula: s(
+      'one Excel formula, when not group_by; columns by header in brackets like [Amount], or ' +
+        "letters like C:C; other sheets 'Name'!A:C",
     ),
+    group_by: s(
+      'the column whose values each get a result (per team, by month, which team most), ' +
+        'worked out with aggregate and of',
+    ),
+    aggregate: oneOf(['sum', 'count', 'average', 'max', 'min']),
+    of: s('with group_by: the column to add up, average or compare'),
     label: s('what the result is, a few words'),
     new_column: s('name of a new column the formula fills, one value per row, if asked to add one'),
   },
@@ -284,8 +290,9 @@ export const TOOLS: ToolSpec[] = [
     desc: 'a countdown that rings after some minutes',
     kind: 'action',
     args: {
-      minutes: num(0.1, 1440, true, 'may be a fraction, e.g. 1.5 for 90 seconds'),
+      minutes: num(0.1, 1440, false, 'may be a fraction, e.g. 1.5 for 90 seconds'),
       label: s(),
+      do: { ...oneOf(['set', 'cancel']), desc: 'cancel stops or cancels the timer' },
     },
   },
   {
@@ -323,12 +330,12 @@ export const TOOLS: ToolSpec[] = [
   },
   {
     name: 'media',
-    desc: 'control what is playing, or say what it is',
+    desc: 'control what is playing (play, pause, skip a song, go back, stop), or say what it is',
     kind: 'action',
     args: {
       command: {
-        ...oneOf(['play', 'pause', 'next', 'previous', 'stop', 'what'], true),
-        desc: 'next skips to the next track; what says what is playing',
+        ...oneOf(['play', 'pause', 'skip', 'previous', 'stop', 'what'], true),
+        desc: 'skip goes to the next song; what says what is playing',
       },
     },
   },
@@ -461,7 +468,7 @@ export const TOOLS: ToolSpec[] = [
       do: oneOf([...SETTING_OPS]),
       setting: {
         type: 'string',
-        values: [...SETTING_IDS, 'all'],
+        values: [...SETTING_IDS, ...Object.keys(SETTING_GROUPS), 'all'],
         required: true,
         desc: 'the setting meant; for list, any setting of that part',
       },
@@ -881,6 +888,9 @@ export function validateCall(call: ToolCall, tools: ToolSpec[] = TOOLS): Validat
     }
     out[name] = v;
   }
+  // A timer needs its length, unless it is being cancelled.
+  if (call.tool === 'timer' && out.do !== 'cancel' && out.minutes === undefined)
+    return { ok: false, error: 'minutes missing' };
   // A message to the user themselves is a mix-up ("tell me a fact"): answer instead.
   if (
     (call.tool === 'message' || call.tool === 'email' || call.tool === 'call') &&

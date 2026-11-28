@@ -14,7 +14,7 @@
  *   and Google Tasks sync runs (when switched on).
  * Nothing is sent to anyone without a Send tap or "send it" on a visible draft.
  */
-import { PermissionsAndroid } from 'react-native';
+import { PermissionsAndroid, Platform } from 'react-native';
 import { parseWhen } from '@/memory/followup-logic';
 import { onFollowupsChange } from '@/memory/followups';
 import * as outbox from '@/memory/outbox';
@@ -200,6 +200,12 @@ function notOnPhone(): PlannedAction {
   return { kind: 'reply', text: "That isn't possible on this phone yet." };
 }
 
+/** What iPhone doesn't let an app do, said plainly, with where to do it instead. */
+function notOnIphone(what: string, instead: string): PlannedAction {
+  if (Platform.OS !== 'ios') return notOnPhone();
+  return { kind: 'reply', text: `iPhone doesn't let apps ${what}. ${instead}` };
+}
+
 const pad = (n: number) => String(n).padStart(2, '0');
 
 /** Runs actions that send nothing to anyone (alarms, media, maps) and drafts the rest. */
@@ -253,6 +259,19 @@ async function fromIntent(intent: Intent, now: Date): Promise<PlannedAction | nu
         text: ok ? `Timer set for ${len}.` : 'Your phone has no timer app I can use.',
       };
     }
+    case 'cancelTimer': {
+      if (!native?.cancelTimer)
+        return notOnIphone('stop Clock timers', 'Stop it in the Clock app.');
+      if (!isOn('alarms', 'set')) return off('Alarms and timers');
+      const ok = native.cancelTimer();
+      return {
+        kind: 'reply',
+        text: ok
+          ? 'Any ringing timer is stopped. Android doesn’t let apps cancel a timer that is still ' +
+            'counting down, so your timers are open: cancel it there.'
+          : 'Your phone has no timer app I can use.',
+      };
+    }
     case 'navigate': {
       if (!native) return notOnPhone();
       if (!isOn('maps', 'navigate')) return off('Directions');
@@ -263,7 +282,7 @@ async function fromIntent(intent: Intent, now: Date): Promise<PlannedAction | nu
       };
     }
     case 'media': {
-      if (!native) return notOnPhone();
+      if (!native) return notOnIphone('control music playing in other apps', 'Use Control Center.');
       if (!isOn('media', 'control')) return off('Media control');
       if (!native.notificationAccess()) return needNotificationAccess('control music');
       const ok = native.mediaCommand(intent.cmd);

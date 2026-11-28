@@ -8,6 +8,7 @@
  */
 import {
   addColumn,
+  findColumn,
   FormulaError,
   type FormulaContext,
   resultError,
@@ -16,7 +17,14 @@ import {
   splitFormulas,
   splitTop,
 } from '@/files/formula';
-import { formatValue, type Sheet, sheetSummary } from '@/files/sheet';
+import {
+  columnValues,
+  formatValue,
+  onlyNumberColumn,
+  type Sheet,
+  sheetSummary,
+  tableOf,
+} from '@/files/sheet';
 import {
   fillPrompt,
   parseFillReply,
@@ -79,6 +87,80 @@ export function conditionalTerms(formula: string): string[] | null {
   return terms.length > 1 && terms.every((t) => CONDITIONAL.test(t) && oneCall(t)) ? terms : null;
 }
 
+/** Aggregate → [over all rows, with conditions]. */
+const AGGREGATES: Record<string, [string, string]> = {
+  sum: ['SUM', 'SUMIFS'],
+  count: ['COUNTA', 'COUNTIFS'],
+  average: ['AVERAGE', 'AVERAGEIFS'],
+  max: ['MAX', 'MAXIFS'],
+  min: ['MIN', 'MINIFS'],
+};
+
+const words = (s: string) => ` ${s.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, ' ')} `;
+
+/** What [question] asks of column [group]: a result for each of its values, for the values it names, or over all rows. */
+export type GroupAsk = { each: true } | { values: string[] } | null;
+
+/**
+ * Reads [question] for column [group]: the values of it the question names ("team Red", "Red
+ * and Blue"), else each value when it names the column ("each team", "per team"), else none
+ * (over all rows). The model gave group_by for "the total cost" and "the most expensive item"
+ * too (laptop, 28 Nov), so the question decides, not the reply.
+ */
+export function groupAsked(question: string, sheet: Sheet, group: string): GroupAsk {
+  const t = tableOf(sheet);
+  const c = findColumn(t, group.trim().replace(/^\[|\]$/g, ''));
+  if (c < 0) return { each: true }; // an unknown column is refused, with its reason, when worked out
+  const q = words(question);
+  const seen = new Set<string>();
+  const values: string[] = [];
+  for (const v of columnValues(t, c)) {
+    const text = formatValue(v);
+    const w = words(text);
+    if (!w.trim() || seen.has(w)) continue;
+    seen.add(w);
+    if (q.includes(w)) values.push(text);
+  }
+  if (values.length) return { values };
+  const header = words(t.headers[c] || group).trim();
+  return header && (q.includes(` ${header} `) || q.includes(` ${header}s `))
+    ? { each: true }
+    : null;
+}
+
+/**
+ * The formula for [aggregate] of column [of] by column [group], as [asked]: one result for each
+ * value, largest first (smallest first for min) so "which team spent the most" is the top line;
+ * one for each named value; or one over all rows. The model only names the columns and the
+ * aggregate: it wrote per-group formulas wrongly (SUMIF+SUMIF+SUMIF, a grand total; GROUPBY with
+ * COUNT inside; one team's average). [numbers] is the sheet's only column of numbers, meant
+ * when "of" is left out ("how much did each team spend").
+ */
+export function groupedFormula(
+  group: string,
+  aggregate: string,
+  of: string,
+  asked: GroupAsk,
+  numbers: string | null = null,
+): string {
+  const col = (c: string) => `[${c.trim().replace(/^\[|\]$/g, '')}]`;
+  const name = aggregate.trim().toLowerCase();
+  const over = of.trim() || (name === 'count' ? '' : (numbers ?? ''));
+  const [all, ifs] = AGGREGATES[name] ?? AGGREGATES[over ? 'sum' : 'count'];
+  if (!over && all !== 'COUNTA')
+    throw new FormulaError(`say in "of" which column to ${name || 'sum'} for each ${group}`);
+  const g = col(group);
+  const values = over ? col(over) : g;
+  if (asked && 'values' in asked) {
+    const cond = (v: string) => `${g},"${v.replace(/"/g, '""')}"`;
+    return asked.values
+      .map((v) => (all === 'COUNTA' ? `=${ifs}(${cond(v)})` : `=${ifs}(${values},${cond(v)})`))
+      .join('; ');
+  }
+  if (asked) return `=SORT(GROUPBY(${g},${values},${all}),2,${all === 'MIN' ? 1 : -1})`;
+  return `=${all}(${values})`;
+}
+
 /** The answer text: what it is, the result, and the formula used. */
 export function sheetAnswerText(result: string, formula: string, label?: string): string {
   const multi = result.includes('\n');
@@ -107,10 +189,24 @@ export async function answerSheetQuestion(
     if (!v || !v.ok) {
       last = { error: v && !v.ok ? v.error : 'no formula in the reply' };
     } else {
-      const formula = String(v.args.formula);
       const label = typeof v.args.label === 'string' ? v.args.label : undefined;
       const column = typeof v.args.new_column === 'string' ? v.args.new_column : undefined;
+      const group = typeof v.args.group_by === 'string' ? v.args.group_by.trim() : '';
+      let formula = typeof v.args.formula === 'string' ? v.args.formula : '';
       try {
+        if (group && !column) {
+          const asked = groupAsked(question, sheets[sheet], group);
+          // The model's formula is kept unless one result for each value is asked, or it gave none.
+          if ((asked && 'each' in asked) || !formula.trim())
+            formula = groupedFormula(
+              group,
+              String(v.args.aggregate ?? ''),
+              String(v.args.of ?? ''),
+              asked,
+              onlyNumberColumn(sheets[sheet]),
+            );
+        }
+        if (!formula.trim()) throw new FormulaError('formula missing');
         if (column) {
           const r = addColumn(ctx, column, formula);
           const changed = sheets.map((s, i) => (i === sheet ? r.sheet : s));

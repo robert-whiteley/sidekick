@@ -3,7 +3,13 @@
  * worked out in code, a broken one is asked for again with the reason, and a new column comes
  * back as a changed sheet. The model is a stub here.
  */
-import { answerSheetQuestion, conditionalTerms, sheetTool } from '@/engine/sheet-query';
+import {
+  answerSheetQuestion,
+  conditionalTerms,
+  groupAsked,
+  groupedFormula,
+  sheetTool,
+} from '@/engine/sheet-query';
 import { csvSheet, toCsv } from '@/files/sheet';
 
 const sheets = [
@@ -115,4 +121,56 @@ test('text in single quotes is read as text, not a sheet name', async () => {
   const r = await answerSheetQuestion('How much did Ann spend?', sheets, 0, ask);
   expect(r).toMatchObject({ kind: 'answer', formula: "=SUMIFS(C:C, B:B, 'Ann')" });
   expect(r.kind === 'answer' && r.text).toMatch(/^15\.1\n/);
+});
+
+// One result per group is worked out in code from the columns and the aggregate the model names:
+// it wrote SUMIF+SUMIF+SUMIF (a grand total), GROUPBY with COUNT inside, or one group's average.
+const teams = [
+  csvSheet(
+    'Team,Item,Cost\nRed,Paint,12.40\nBlue,Brushes,8.75\nRed,Rollers,15.10\nGreen,Tape,3.99\nBlue,Paint,24.60',
+    'Costs',
+    false,
+  ),
+];
+
+test('a result for each group: from group_by, aggregate and of, largest first', async () => {
+  const { ask } = stub('{"group_by": "Team", "aggregate": "sum", "of": "Cost"}');
+  const r = await answerSheetQuestion('Which team spent the most?', teams, 0, ask);
+  expect(r).toMatchObject({ kind: 'answer', formula: '=SORT(GROUPBY([Team],[Cost],SUM),2,-1)' });
+  expect(r.kind === 'answer' && r.text).toMatch(/Blue: 33\.35\nRed: 27\.5\nGreen: 3\.99/);
+});
+
+test('the column to add up defaults to the only one of numbers; count needs none', () => {
+  const each = { each: true } as const;
+  expect(groupedFormula('Team', 'sum', '', each, 'Cost')).toBe(
+    '=SORT(GROUPBY([Team],[Cost],SUM),2,-1)',
+  );
+  expect(groupedFormula('Team', 'count', '', each, 'Cost')).toBe(
+    '=SORT(GROUPBY([Team],[Team],COUNTA),2,-1)',
+  );
+  expect(groupedFormula('Team', 'min', 'Cost', each)).toBe('=SORT(GROUPBY([Team],[Cost],MIN),2,1)');
+  expect(() => groupedFormula('Team', 'average', '', each, null)).toThrow(/say in "of"/);
+});
+
+test('the question decides: each group, the groups it names, or all rows', () => {
+  const sheet = teams[0];
+  expect(groupAsked('What is the total cost per team?', sheet, 'Team')).toEqual({ each: true });
+  expect(groupAsked('Count the items for each team', sheet, 'Team')).toEqual({ each: true });
+  expect(groupAsked('How much did team Red spend?', sheet, 'Team')).toEqual({ values: ['Red'] });
+  expect(groupAsked('The total for Red and for Blue?', sheet, 'Team')).toEqual({
+    values: ['Red', 'Blue'],
+  });
+  expect(groupAsked('What is the total cost?', sheet, 'Team')).toBeNull();
+  expect(groupedFormula('Team', 'sum', 'Cost', { values: ['Red', 'Blue'] })).toBe(
+    '=SUMIFS([Cost],[Team],"Red"); =SUMIFS([Cost],[Team],"Blue")',
+  );
+  expect(groupedFormula('Team', 'count', '', { values: ['Red'] })).toBe('=COUNTIFS([Team],"Red")');
+  expect(groupedFormula('Team', 'max', 'Cost', null)).toBe('=MAX([Cost])');
+});
+
+test('group_by on a question about all rows: the total, not one per group', async () => {
+  const { ask } = stub('{"group_by": "Team", "aggregate": "sum", "of": "Cost"}');
+  const r = await answerSheetQuestion('What is the total cost?', teams, 0, ask);
+  expect(r).toMatchObject({ kind: 'answer', formula: '=SUM([Cost])' });
+  expect(r.kind === 'answer' && r.text).toMatch(/^64\.84\n/);
 });

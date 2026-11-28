@@ -9,6 +9,7 @@ import {
   catalogSystem,
   decidePrompt,
   DECIDE_TOOLS,
+  NOT_WITH_FILE,
   parseClassify,
   type Decision,
 } from './decide-logic';
@@ -33,13 +34,13 @@ export async function decideRequest(
   } = {},
 ): Promise<{ decision: Decision; ms: number; reply: string }> {
   const t0 = Date.now();
-  // With a file attached, a question about a document is about that file: searching the phone's
-  // other files isn't offered (the emulator flows found "What is the total?" sent there).
+  // With a file attached, a question about a document is about that file: tools that read the
+  // camera, the phone or a typed sum aren't offered (NOT_WITH_FILE).
   const tools = DECIDE_TOOLS.filter(
     (t) =>
       (t.name !== 'draft' || opts.draftOpen) &&
       (t.name !== 'edit_photo' || opts.photo) &&
-      (t.name !== 'find_on_phone' || !opts.file),
+      !(opts.file && NOT_WITH_FILE.has(t.name)),
   );
   const { text } = await askLlm(
     decidePrompt(question, opts.previous, opts.photo, opts.file),

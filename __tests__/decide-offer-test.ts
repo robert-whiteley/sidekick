@@ -59,3 +59,16 @@ test('with a file attached, the phone search is not offered: the question is abo
   expect(withFile).not.toMatch(/^find_on_phone: /m);
   expect(withFile).toMatch(/^app_setting: /m);
 });
+
+// The emulator flows: "What is in this file?" and CSV, slides and ZIP questions went to scan, an
+// Excel total to calculate.
+test('with a file attached, tools reading the camera, the phone or a typed sum are not offered', async () => {
+  const withFile = await systemFor({ file: true });
+  for (const t of ['scan', 'camera', 'watch', 'calculate', 'convert', 'clipboard', 'recap'])
+    expect(withFile).not.toMatch(new RegExp(`^${t}: `, 'm'));
+  for (const t of ['app_setting', 'message', 'alarm', 'timer', 'translate'])
+    expect(withFile).toMatch(new RegExp(`^${t}: `, 'm'));
+  const plain = await systemFor({});
+  expect(plain).toMatch(/^scan: /m);
+  expect(plain).toMatch(/^calculate: /m);
+});

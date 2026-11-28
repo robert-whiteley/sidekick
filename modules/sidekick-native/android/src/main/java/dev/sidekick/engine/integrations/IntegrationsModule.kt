@@ -20,6 +20,7 @@ class IntegrationsModule : Module() {
     Function("isInstalled") { pkg: String -> Intents.isInstalled(context, pkg) }
     Function("setAlarm") { hour: Int, minute: Int, label: String -> Intents.setAlarm(context, activity, hour, minute, label) }
     Function("setTimer") { seconds: Int, label: String -> Intents.setTimer(context, activity, seconds, label) }
+    Function("cancelTimer") { Intents.cancelTimer(context, activity) }
     Function("call") { number: String, direct: Boolean -> Intents.call(context, activity, number, direct) }
     Function("navigate") { destination: String, mode: String -> Intents.navigate(context, activity, destination, mode) }
     Function("openMessage") { app: String, number: String?, text: String ->

@@ -42,6 +42,8 @@ type IntegrationsNative = {
   isInstalled(pkg: string): boolean;
   setAlarm(hour: number, minute: number, label: string): boolean;
   setTimer(seconds: number, label: string): boolean;
+  /** Stops ringing timers and opens the Clock's timers (no app can cancel a running one). */
+  cancelTimer?(): boolean;
   call(number: string, direct: boolean): boolean;
   navigate(destination: string, mode: 'driving' | 'walking' | 'transit' | 'cycling'): boolean;
   openMessage(app: OpenMessageApp, number: string | null, text: string): boolean;

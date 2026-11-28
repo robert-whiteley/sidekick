@@ -1217,6 +1217,15 @@ export const settingById = (id: string) => REGISTRY.find((d) => d.id === id);
 /** The ids, for the app_setting tool's schema. */
 export const SETTING_IDS: string[] = REGISTRY.map((d) => d.id);
 
+/**
+ * Names for several settings at once, as the app_setting line says them: asked "what is the keep
+ * period for recordings?", the model wrote {"setting": "keep_periods"} (laptop, 28 Nov), which
+ * was no id. Said or listed together; a change asks which one.
+ */
+export const SETTING_GROUPS: Record<string, string[]> = {
+  keep_periods: REGISTRY.filter((d) => d.id.startsWith('keep_')).map((d) => d.id),
+};
+
 // --- Reading, parsing and saying values ---
 
 const norm = (v: unknown) =>

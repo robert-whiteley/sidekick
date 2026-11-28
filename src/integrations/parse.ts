@@ -12,6 +12,8 @@ export type Intent =
   | { type: 'call'; name: string }
   | { type: 'alarm'; hour: number; minute: number; label: string }
   | { type: 'timer'; seconds: number; label: string }
+  /** "Cancel the timer": Android stops a ringing one and opens the timers to cancel a running one. */
+  | { type: 'cancelTimer' }
   | { type: 'navigate'; destination: string; mode: 'driving' | 'walking' | 'transit' | 'cycling' }
   | { type: 'media'; cmd: MediaCommand }
   | { type: 'nowPlaying' }

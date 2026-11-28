@@ -189,6 +189,15 @@ function columnKind(values: Scalar[]): ColKind {
         : 'text';
 }
 
+/** The header (or letter) of [sheet]'s one column of numbers, or null when it has none or several. */
+export function onlyNumberColumn(sheet: Sheet): string | null {
+  const t = tableOf(sheet);
+  const cols = Array.from({ length: t.width }, (_, c) => c).filter(
+    (c) => columnKind(columnValues(t, c)) === 'numbers',
+  );
+  return cols.length === 1 ? t.headers[cols[0]] || colName(cols[0]) : null;
+}
+
 /** One line about a column: its kind and range, or its few different values. */
 export function describeColumn(t: Table, c: number): string {
   const values = columnValues(t, c);

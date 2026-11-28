@@ -16,6 +16,7 @@ import {
   type RegistryCtx,
   settingById,
   settingOp,
+  SETTING_GROUPS,
   SETTING_IDS,
   switchSettingId,
 } from '@/engine/settings-registry';
@@ -191,7 +192,14 @@ describe('every setting is in the registry', () => {
 
   it('the app_setting tool offers every setting by id', () => {
     const tool = TOOLS.find((t) => t.name === 'app_setting')!;
-    expect(tool.args.setting.values).toEqual([...SETTING_IDS, 'all']);
+    expect(tool.args.setting.values).toEqual([...SETTING_IDS, 'keep_periods', 'all']);
+    // The line says "keep periods": the model wrote it as the setting (laptop, 28 Nov).
+    expect(SETTING_GROUPS.keep_periods).toEqual([
+      'keep_memories',
+      'keep_video',
+      'keep_audio',
+      'keep_stills',
+    ]);
     expect(validateCall({ tool: 'app_setting', args: { setting: 'web lookup' } }).ok).toBe(false);
     expect(
       validateCall({ tool: 'app_setting', args: { do: 'on', setting: 'online_lookup' } }),
