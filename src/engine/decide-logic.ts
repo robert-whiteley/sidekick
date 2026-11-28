@@ -128,8 +128,53 @@ export function catalogSystem(tools: ToolSpec[] = DECIDE_TOOLS, lookup = true): 
     'Or the phone tool that does what I ask (only when I want the phone to do that now):\n' +
     tools.map((t) => `${t.name}: ${t.desc}`).join('\n') +
     '\nPick a tool only when I want the phone to do that now; talking about a thing is answer. ' +
-    'Asking you to text, call or email me myself is answer (you reply here).'
+    'Asking you to text, call or email me myself is answer (you reply here).' +
+    examplesFor(tools, lookup)
   );
+}
+
+/**
+ * Worked examples after the catalog (made up, not bench lines). With the tool lines alone a
+ * fifth of the bench sat at the edge, so each new line flipped others; examples of the near
+ * pairs (alarm or reminder, camera or its settings, talking about a tool or using it, my own
+ * life or the web) settle them. Measured on the laptop and the emulator: docs/BENCH.md
+ * ("Sorter examples"). Read once with the catalog (the prefix cache), so a request costs the same.
+ */
+export const DECIDE_EXAMPLES: [string, string][] = [
+  ['Ring at 5:45 tomorrow so I wake up', 'alarm'],
+  ['Remind me to call the bank at 3', 'reminder'],
+  ['At 8 tonight read me the headlines', 'routine'],
+  ['Switch the camera on', 'camera'],
+  ['Use the back camera and lower the frame rate', 'camera_setting'],
+  ["Don't listen in for a while", 'listening'],
+  ['Let me know when a dog comes into view', 'watch'],
+  ['Repeat that please', 'repeat'],
+  ['Play back what Tom said in the meeting', 'play_recording'],
+  ['Get me a taxi to the station', 'ride'],
+  ['Text me a short poem', 'answer'],
+  ['How does a timer app work?', 'answer'],
+  ['Explain how vaccines work', 'answer'],
+  ['How do I work out the area of a circle?', 'answer'],
+  ["What's 15% of 80?", 'calculate'],
+  ['What is the price of gold right now?', 'lookup'],
+  ["What's in the news about AI today?", 'news'],
+  ['When does my insurance renew?', 'memory'],
+  ['Email me a list of fun facts', 'answer'],
+  ['My timer went off late yesterday', 'answer'],
+  ['What does the word reminder mean?', 'answer'],
+  ['In ten minutes tell me a joke', 'routine'],
+  ['Who wrote Hamlet?', 'answer'],
+];
+
+/** The examples whose reply is in this catalog (a tool left out drops its examples). */
+function examplesFor(tools: ToolSpec[], lookup: boolean): string {
+  const ok = (a: string) =>
+    a === 'answer' ||
+    a === 'memory' ||
+    ((a === 'lookup' || a === 'news') && lookup) ||
+    tools.some((t) => t.name === a);
+  const lines = DECIDE_EXAMPLES.filter(([, a]) => ok(a)).map(([q, a]) => `Request: ${q}\n${a}`);
+  return lines.length ? `\nExamples:\n${lines.join('\n')}` : '';
 }
 
 /**
