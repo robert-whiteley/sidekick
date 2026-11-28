@@ -688,6 +688,13 @@ export async function answer(
     onText(text);
   }
   lastQuestion = question;
+  // Stopped part-way: LiteRT-LM fails every later turn of a chat whose answer was cancelled
+  // ("Task cancelled" at once, phone check 28 Nov). The part-answer is kept below, and the next
+  // question starts a fresh chat from the summary and the kept turns, this one included.
+  if (answerStopped() && reachedModel) {
+    if (offRecord) offRecordStarted = false;
+    else conv.restart();
+  }
 
   // Off the record: nothing is kept, and the main conversation never hears of it.
   let momentId: number | undefined;

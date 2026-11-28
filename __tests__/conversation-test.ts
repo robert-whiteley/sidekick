@@ -32,6 +32,20 @@ test('the first question starts a fresh chat, later ones continue it', () => {
   expect(c.keepHistory()).toBe(true);
 });
 
+test('a stopped answer: the next question starts a fresh chat that holds the part-answer', () => {
+  // LiteRT-LM fails every later turn of a chat whose pass was cancelled, so assistant.ts
+  // restarts the chat before recording the part-answer.
+  const c = new Conversation();
+  c.started(800);
+  turn(c, 'tips for a tortoise', 1000);
+  c.restart();
+  c.record('ten tips for Pebble', '1. Habitat: a large', 400, 2000);
+  expect(c.keepHistory()).toBe(false);
+  expect(chatSystem('BASE', c.state)).toMatch(
+    /User: ten tips for Pebble\nYou: 1\. Habitat: a large/,
+  );
+});
+
 test('a spoken follow-up is one said over or within the window after an answer', () => {
   const c = new Conversation();
   c.answered(1000);
